@@ -460,6 +460,7 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
     motivoActualizacion:rec.motivoActualizacion||"",
     adjuntosResolucion:rec.adjuntosResolucion||[],
     reclamoPadre:rec.reclamoPadre||"",
+    reclamosHijos:rec.reclamosHijos||[],
   });
   const [saveErr,setSaveErr] = useState("");
   const [sending,setSending] = useState(false);
@@ -579,8 +580,9 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
                     h('label',{style:{display:"block",fontSize:10,fontWeight:600,color:"#374151",marginBottom:4,textTransform:"uppercase"}},"Motivo del cambio *"),
                     h('textarea',{value:f.motivoActualizacion,onChange:e=>set("motivoActualizacion",e.target.value),rows:2,placeholder:"Explicá el motivo del cambio de fechas...",style:{...aS(),resize:"vertical"}}))))
               : h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}},
-                  h('div',null,h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Inicio esperado *"),h('input',{type:"date",value:f.fechaInicioEsperado,onChange:e=>set("fechaInicioEsperado",e.target.value),style:aS()})),
-                  h('div',null,h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Cierre esperado *"),h('input',{type:"date",value:f.fechaCierre,onChange:e=>set("fechaCierre",e.target.value),style:aS()}))),
+                  h('div',null,h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Inicio esperado *"),h('input',{type:"date",value:f.fechaInicioEsperado,onChange:e=>set("fechaInicioEsperado",e.target.value),min:new Date().toISOString().split("T")[0],style:aS()})),
+                  h('div',null,h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Cierre esperado *"),h('input',{type:"date",value:f.fechaCierre,onChange:e=>set("fechaCierre",e.target.value),min:new Date().toISOString().split("T")[0],style:aS()}))),
+          f.fechaInicioEsperado && f.fechaCierre && (new Date(f.fechaCierre)-new Date(f.fechaInicioEsperado))/86400000 > 30 && h('div',{style:{background:"#fff7ed",border:"1.5px solid #fed7aa",borderRadius:8,padding:"8px 12px",marginBottom:8,fontSize:12,color:"#92400e"}},"⚠️ Esta tarea tiene más de 30 días de duración. Asegurate de que sea necesario."),
           h('div',{style:{marginBottom:14}},h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Presupuesto ($)"),h('input',{value:f.presupuesto,onChange:e=>set("presupuesto",e.target.value),placeholder:"0",type:"number",style:aS()})),
           h('div',{style:{marginBottom:14}},h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Detalle del presupuesto"),h('textarea',{value:f.presupuestoDetalle,onChange:e=>set("presupuestoDetalle",e.target.value),rows:2,placeholder:"Conceptos...",style:{...aS(),resize:"vertical"}})),
           h('div',{style:{marginBottom:18}},h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Comentario interno"),h('textarea',{value:f.nuevoComentario,onChange:e=>set("nuevoComentario",e.target.value),rows:3,placeholder:"Novedad, observación o avance...",style:{...aS(),resize:"vertical"}}))),
@@ -601,15 +603,39 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
           !rec.ejecutorRechazado && rec.ejecutorConfirmado && h('div',{style:{background:"#f0fdf4",border:"1.5px solid #bbf7d0",borderRadius:10,padding:12,fontSize:13,color:"#15803d",fontWeight:600,marginBottom:12}},"✅ Confirmó el "+fdt(rec.fechaConfirmacion)),
           // Consolidación
           h('div',{style:{marginTop:12,background:"#f8fafc",borderRadius:10,padding:12}},
-            h('div',{style:{fontSize:12,fontWeight:700,color:"#374151",marginBottom:8}},"🔗 Consolidar reclamos"),
-            h('div',{style:{fontSize:12,color:"#64748b",marginBottom:8}},"Para consolidar este reclamo con otro, ingresá el número del reclamo padre:"),
-            h('input',{value:f.reclamoPadre||"",onChange:e=>set("reclamoPadre",e.target.value),placeholder:"Ej: R-123456",style:{...aS(),fontSize:13}}))),
+            h('div',{style:{fontSize:12,fontWeight:700,color:"#374151",marginBottom:4}},"🔗 Consolidar con otros reclamos"),
+            h('div',{style:{fontSize:12,color:"#64748b",marginBottom:10}},"Agregá los números de reclamos que resuelve esta misma tarea:"),
+            h('div',{style:{display:"flex",flexDirection:"column",gap:6}},
+              ...(f.reclamosHijos||[]).map((num,i)=>h('div',{key:i,style:{display:"flex",alignItems:"center",gap:8,background:"white",borderRadius:8,padding:"6px 10px",border:"1px solid #e2e8f0"}},
+                h('span',{style:{fontFamily:"monospace",fontSize:13,fontWeight:600,color:"#8b5cf6",flex:1}},num),
+                h('button',{onClick:()=>set("reclamosHijos",(f.reclamosHijos||[]).filter((_,idx)=>idx!==i)),style:{background:"none",border:"none",cursor:"pointer",color:"#ef4444",fontSize:16}},"✕"))),
+              h('div',{style:{display:"flex",gap:6,marginTop:4}},
+                h('input',{id:"inputHijo",placeholder:"Ej: R-123456",style:{flex:1,padding:"7px 10px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:13,outline:"none"},
+                  onKeyDown:e=>{if(e.key==="Enter"){const v=e.target.value.trim().toUpperCase();if(v&&!(f.reclamosHijos||[]).includes(v)){set("reclamosHijos",[...(f.reclamosHijos||[]),v]);e.target.value="";}}}}),
+                h('button',{onClick:()=>{const inp=document.getElementById("inputHijo");const v=(inp?.value||"").trim().toUpperCase();if(v&&!(f.reclamosHijos||[]).includes(v)){set("reclamosHijos",[...(f.reclamosHijos||[]),v]);if(inp)inp.value="";}},
+                  style:{padding:"7px 14px",background:"#8b5cf6",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:700}},"+")))),
+            (f.reclamosHijos||[]).length > 0 && h('div',{style:{marginTop:8,fontSize:11,color:"#8b5cf6"}},
+              "Al guardar, este reclamo consolida "+(f.reclamosHijos.length+1)+" reclamos en total."))),
 
         // TAB RESOLUCIÓN
         tab==="resolucion" && h('div',null,
-          h('div',{style:{marginBottom:14}},h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"¿Qué se hizo?"),h('textarea',{value:f.descripcionResolucion,onChange:e=>set("descripcionResolucion",e.target.value),rows:5,placeholder:"Describí las acciones realizadas...",style:{...aS(),resize:"vertical"}})),
-          h('div',{style:{marginBottom:14}},h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Link de evidencia"),h('input',{value:f.evidenciaUrl,onChange:e=>set("evidenciaUrl",e.target.value),placeholder:"https://...",style:aS()})),
-          f.estadoAvance==="completada" && h('button',{onClick:notifResolucion,disabled:sending,style:{width:"100%",padding:"12px",background:"linear-gradient(135deg,#22c55e,#15803d)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700,marginBottom:12}},sending?"Enviando...":"📧 Notificar resolución a directivos")),
+          f.estadoAvance==="completada" && !f.descripcionResolucion && h('div',{style:{background:"#fef2f2",border:"1.5px solid #fecaca",borderRadius:8,padding:"10px 14px",marginBottom:12,fontSize:13,color:"#dc2626"}},"⚠️ Para marcar como completada debés describir qué se hizo."),
+          h('div',{style:{marginBottom:14}},
+            h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:f.estadoAvance==="completada"&&!f.descripcionResolucion?"#dc2626":"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},f.estadoAvance==="completada"?"¿Qué se hizo? *":"¿Qué se hizo?"),
+            h('textarea',{value:f.descripcionResolucion,onChange:e=>set("descripcionResolucion",e.target.value),rows:5,placeholder:"Describí las acciones realizadas...",style:{...aS(),border:f.estadoAvance==="completada"&&!f.descripcionResolucion?"2px solid #ef4444":undefined,resize:"vertical"}})),
+          h('div',{style:{marginBottom:14}},
+            h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Fotos / videos de la resolución (recomendado)"),
+            h('div',{style:{fontSize:11,color:"#94a3b8",marginBottom:8}},"Se enviarán al usuario cuando se notifique la resolución."),
+            h('input',{ref:fileRef,type:"file",accept:"image/*,video/*",multiple:true,style:{display:"none"},
+              onChange:e=>{Array.from(e.target.files).forEach(file=>{const r=new FileReader();r.onload=ev=>setF(p=>({...p,adjuntosResolucion:[...p.adjuntosResolucion,{nombre:file.name,tipo:file.type,data:ev.target.result}]}));r.readAsDataURL(file);});e.target.value="";}}),
+            h('div',{style:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:f.adjuntosResolucion.length?8:0}},
+              ...f.adjuntosResolucion.map((a,i)=>h('div',{key:i,style:{display:"flex",alignItems:"center",gap:6,background:"#f1f5f9",borderRadius:8,padding:"5px 10px",fontSize:12}},
+                h('span',null,a.tipo?.startsWith("video")?"🎥":"📷"),
+                a.url ? h('a',{href:a.url,target:"_blank",style:{color:"#374151",maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:12}},a.nombre)
+                      : h('span',{style:{maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},a.nombre),
+                h('button',{onClick:()=>setF(p=>({...p,adjuntosResolucion:p.adjuntosResolucion.filter((_,idx)=>idx!==i)})),style:{background:"none",border:"none",cursor:"pointer",color:"#ef4444",fontSize:14,padding:0}},"✕")))),
+            h('button',{onClick:()=>fileRef.current.click(),style:{padding:"8px 16px",borderRadius:8,border:"1.5px dashed #e2e8f0",background:"transparent",color:"#64748b",cursor:"pointer",fontSize:13}},"📎 Adjuntar foto / video")),
+          f.estadoAvance==="completada" && h('button',{onClick:()=>{if(!f.descripcionResolucion.trim()){setSaveErr("Completá la descripción de resolución antes de notificar.");return;}notifResolucion();},disabled:sending,style:{width:"100%",padding:"12px",background:"linear-gradient(135deg,#22c55e,#15803d)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700,marginBottom:12}},sending?"Enviando...":"📧 Notificar resolución al usuario")),
 
         // TAB HISTORIAL
         tab==="historial" && h('div',null,
@@ -630,7 +656,7 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
         saveErr && h('div',{style:{background:"#fef2f2",border:"1.5px solid #fecaca",borderRadius:8,padding:"10px 14px",marginBottom:10,fontSize:13,color:"#dc2626"}},saveErr),
         h('div',{style:{display:"flex",gap:10,marginTop:4}},
           h('button',{onClick:onClose,style:{flex:1,padding:"12px",background:"#f1f5f9",color:"#64748b",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:600}},"Cancelar"),
-          h('button',{onClick:save,disabled:sending,style:{flex:2,padding:"12px",background:sending?"#94a3b8":"linear-gradient(135deg,#0f172a,#1e3a5f)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700}},sending?"Guardando...":"Guardar ✓")))));
+          h('button',{onClick:save,disabled:sending,style:{flex:2,padding:"12px",background:sending?"#94a3b8":"linear-gradient(135deg,#0f172a,#1e3a5f)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700}},sending?"Guardando...":"Guardar ✓"))));
 }
 
 // ── PANEL CONFIG ───────────────────────────────────────────────────────────
@@ -664,10 +690,10 @@ function PanelConfig({onClose, onSaveEjecutores}) {
           h('div',{style:{fontSize:13,fontWeight:600,color:"#1e293b"}},e.nombre),
           h('div',{style:{fontSize:12,color:"#64748b"}},e.mail)),
         h('button',{onClick:()=>onRemove(i),style:{background:"none",border:"none",cursor:"pointer",color:"#ef4444",fontSize:16}},"✕"))),
-      h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr auto",gap:6,marginTop:8}},
-        h('input',{value:n.nombre,onChange:e=>setNuevos(p=>({...p,[nuevoKey]:{...p[nuevoKey],nombre:e.target.value}})),placeholder:"Nombre",style:{...iS(),fontSize:12}}),
-        h('input',{value:n.mail,onChange:e=>setNuevos(p=>({...p,[nuevoKey]:{...p[nuevoKey],mail:e.target.value}})),placeholder:"Email",type:"email",style:{...iS(),fontSize:12}}),
-        h('button',{onClick:addItem,style:{padding:"8px 12px",background:"#0f172a",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:600}},"+"))
+      h('div',{style:{display:"flex",flexDirection:"column",gap:6,marginTop:8}},
+        h('input',{value:n.nombre,onChange:e=>setNuevos(p=>({...p,[nuevoKey]:{...p[nuevoKey],nombre:e.target.value}})),placeholder:"Nombre completo",style:{...iS(),fontSize:13}}),
+        h('input',{value:n.mail,onChange:e=>setNuevos(p=>({...p,[nuevoKey]:{...p[nuevoKey],mail:e.target.value}})),placeholder:"Email",type:"email",style:{...iS(),fontSize:13}}),
+        h('button',{onClick:addItem,style:{padding:"9px 14px",background:"#0f172a",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:600,width:"100%"}},"+ Agregar"))
     );
   };
 
@@ -1015,8 +1041,10 @@ function CalificarView({recId, recs, setRecs, loaded}) {
 function App() {
   // Detect URL params immediately so seguimiento works without login
   const _params = new URLSearchParams(window.location.search);
-  const _segParam = _params.get("seguimiento");
-  const _initView = _segParam ? "seguimiento_"+_segParam
+  const _segParam  = _params.get("seguimiento");
+  const _calParam  = _params.get("calificar");
+  const _initView  = _segParam  ? "seguimiento_"+_segParam
+    : _calParam   ? "calificar_"+_calParam
     : _params.get("confirmar") ? "loading"
     : _params.get("rechazar")  ? "loading"
     : _params.get("reabrir")   ? "loading"
@@ -1243,3 +1271,4 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
+
