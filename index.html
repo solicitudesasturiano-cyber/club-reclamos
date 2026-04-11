@@ -152,14 +152,25 @@ const CATS = {
 
 const PRIS = [{id:"urgente",label:"Urgente",color:"#ef4444",dias:1},{id:"alta",label:"Alta",color:"#f97316",dias:3},{id:"media",label:"Media",color:"#eab308",dias:7},{id:"baja",label:"Baja",color:"#22c55e",dias:14}];
 
-const ESTADOS = [{id:"no_iniciada",label:"No iniciada",color:"#6b7280"},{id:"iniciada",label:"Iniciada",color:"#3b82f6"},{id:"postergada",label:"Postergada",color:"#f97316"},{id:"suspendida",label:"Suspendida",color:"#ef4444"},{id:"demorada",label:"Demorada",color:"#dc2626"},{id:"completada",label:"Completada",color:"#22c55e"},{id:"consolidada",label:"Consolidada",color:"#8b5cf6"}];
+const ESTADOS = [
+  {id:"bajo_analisis", label:"Bajo Análisis", color:"#0ea5e9"},
+  {id:"no_iniciada",   label:"No iniciada",   color:"#6b7280"},
+  {id:"iniciada",      label:"Iniciada",       color:"#3b82f6"},
+  {id:"postergada",    label:"Postergada",     color:"#f97316"},
+  {id:"suspendida",    label:"Suspendida",     color:"#ef4444"},
+  {id:"sin_resolucion",label:"Sin resolución temporaria", color:"#be185d"},
+  {id:"vinculado_proyecto", label:"Vinculado a proyecto", color:"#7c3aed"},
+  {id:"demorada",      label:"Demorada",       color:"#dc2626"},
+  {id:"completada",    label:"Completada",     color:"#22c55e"},
+  {id:"consolidada",   label:"Consolidada",    color:"#8b5cf6"},
+];
 
 // ── HELPERS ────────────────────────────────────────────────────────────────
 const fd  = iso => iso ? new Date(iso).toLocaleDateString("es-AR",{day:"2-digit",month:"2-digit",year:"numeric"}) : "—";
 const fdt = iso => iso ? new Date(iso).toLocaleString("es-AR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}) : "—";
 
 function getTiming(r) {
-  if (["completada","consolidada"].includes(r.estadoAvance)) return null;
+  if (["completada","consolidada","sin_resolucion","vinculado_proyecto"].includes(r.estadoAvance)) return null;
   if (!r.fechaCierre) return null;
   const d = (new Date(r.fechaCierre) - new Date()) / 86400000;
   if (d < 0)  return {label:"Vencido",    color:"#ef4444", bg:"#fef2f2"};
@@ -258,6 +269,53 @@ async function sendEmail({to, cc, subject, body}) {
   } catch(e) { console.error("Email error:", e); return {sent:false}; }
 }
 
+// ── DUPLICATE DETECTION ──────────────────────────────────────────────────────
+async function detectarDuplicados(nuevoRec, todosRecs) {
+  // First filter by same sector + cat + sub
+  const candidatos = todosRecs.filter(r =>
+    r.id !== nuevoRec.id &&
+    r.sector === nuevoRec.sector &&
+    r.cat === nuevoRec.cat &&
+    !["completada","consolidada"].includes(r.estadoAvance)
+  );
+  if (candidatos.length === 0) return [];
+
+  // Use AI to compare descriptions
+  try {
+    const prompt = `Analizá si el nuevo reclamo es similar a alguno de los existentes.
+
+NUEVO RECLAMO:
+- Sector: ${nuevoRec.sector}
+- Tipo: ${nuevoRec.cat} / ${nuevoRec.sub}
+- Descripción: "${nuevoRec.desc}"
+
+RECLAMOS EXISTENTES:
+${candidatos.map((r,i)=>`${i+1}. [${r.numero}] ${r.sub} - "${r.desc}"`).join("\n")}
+
+Respondé SOLO con JSON válido, sin texto adicional:
+{"similares": [{"numero": "R-XXXXX", "similitud": "alta|media", "razon": "breve explicación en español"}]}
+Si no hay similares, respondé: {"similares": []}`;
+
+    const resp = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 300,
+        messages: [{role:"user", content: prompt}]
+      })
+    });
+    const data = await resp.json();
+    const text = (data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("");
+    const parsed = JSON.parse(text.replace(/```json|```/g,"").trim());
+    return parsed.similares || [];
+  } catch(e) {
+    console.error("Duplicate detection error:", e);
+    // Fallback: return candidatos as potentially similar
+    return candidatos.slice(0,3).map(r=>({numero:r.numero, similitud:"media", razon:"Mismo sector y categoría"}));
+  }
+}
+
 // ── REACT HELPERS ──────────────────────────────────────────────────────────
 const {createElement:h, useState, useEffect, useRef, Fragment} = React;
 
@@ -286,7 +344,7 @@ function FormularioSocio({onSubmit, reclamos}) {
     const sec = k==="sector"?v : (extra.sector||f.sector);
     const cat = k==="cat"?v:f.cat;
     if (sec&&cat) {
-      const d=reclamos.find(r=>r.sector===sec&&r.cat===cat&&!["completada","consolidada"].includes(r.estadoAvance));
+      const d=reclamos.find(r=>r.sector===sec&&r.cat===cat&&!["completada","consolidada","sin_resolucion","vinculado_proyecto"].includes(r.estadoAvance));
       setDup(d||null);
     }
   };
@@ -310,7 +368,7 @@ function FormularioSocio({onSubmit, reclamos}) {
     const catConf=CATS[f.cat], pri=PRIS.find(p=>p.id===f.pri);
     const dC=new Date(); dC.setDate(dC.getDate()+(pri?.dias||7));
     const rec = {...f, numero:n, id:Date.now(), createdAt:new Date().toISOString(),
-      estadoAvance:"no_iniciada", fechaCierre:dC.toISOString().split("T")[0],
+      estadoAvance:"bajo_analisis", fechaCierre:dC.toISOString().split("T")[0],
       responsableArea:catConf?.resp||{nombre:"",mail:""},
       comentarios:[], descripcionResolucion:"", presupuesto:"", presupuestoDetalle:"",
       ejecutorMail:"", ejecutorNombre:"", ejecutorConfirmado:false, ejecutorRechazado:false,
@@ -448,7 +506,7 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
   const [tab,setTab] = useState("gestion");
   const yaFueAsignado = !!(rec.ejecutorMailOriginal || rec.fechaInicioOriginal);
   const [f,setF] = useState({
-    estadoAvance:rec.estadoAvance||"no_iniciada", criticidad:rec.criticidad||"",
+    estadoAvance:rec.estadoAvance||"bajo_analisis", criticidad:rec.criticidad||"",
     fechaInicioEsperado:rec.fechaInicioEsperado||"", fechaCierre:rec.fechaCierre||"",
     ejecutorMail:rec.ejecutorMail||"", ejecutorNombre:rec.ejecutorNombre||"",
     presupuesto:rec.presupuesto||"", presupuestoDetalle:rec.presupuestoDetalle||"",
@@ -461,6 +519,8 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
     adjuntosResolucion:rec.adjuntosResolucion||[],
     reclamoPadre:rec.reclamoPadre||"",
     reclamosHijos:rec.reclamosHijos||[],
+    proyectoVinculadoId:rec.proyectoVinculadoId||null,
+    proyectoTitulo:rec.proyectoTitulo||"",
   });
   const [saveErr,setSaveErr] = useState("");
   const [sending,setSending] = useState(false);
@@ -596,6 +656,26 @@ Resolución: ${descripcion||"—"}`});
             h('div',null,h('div',{style:{fontSize:10,color:"#94a3b8",fontWeight:600,marginBottom:2}},"INGRESO"),fd(rec.createdAt))),
           h('div',null,h('div',{style:{fontSize:10,color:"#94a3b8",fontWeight:600,marginBottom:3}},"DESCRIPCIÓN"),h('div',{style:{color:"#475569",lineHeight:1.5}},rec.desc)),
           rec.responsableArea?.nombre && h('div',{style:{marginTop:8,fontSize:12,color:"#64748b"}},"👔 "+rec.responsableArea.nombre),
+          rec.posiblesDuplicados?.length > 0 && h('div',{style:{marginTop:8,background:"#fef9c3",border:"1.5px solid #fde047",borderRadius:8,padding:"8px 12px"}},
+            h('div',{style:{fontSize:12,fontWeight:700,color:"#854d0e",marginBottom:4}},"🔍 Posibles reclamos similares detectados"),
+            ...rec.posiblesDuplicados.map((d,i)=>h('div',{key:i,style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}},
+              h('span',{style:{fontSize:12,color:"#713f12"}},(d.similitud==="alta"?"⚠️ ":"💡 ")+"["+d.numero+"] "+d.razon),
+              h('div',{style:{display:"flex",gap:6}},
+                h('button',{onClick:async()=>{
+                    if(confirm("¿Consolidar este reclamo con "+d.numero+"?")) {
+                      const updated={...rec,reclamosHijos:[...(rec.reclamosHijos||[]),d.numero],posiblesDuplicados:rec.posiblesDuplicados.filter(x=>x.numero!==d.numero)};
+                      await onSave(updated);
+                      // Notify user
+                      const cfg=getMailConfig();
+                      if(rec.email) await sendEmail({to:rec.email,subject:`[Club] Reclamos consolidados — ${rec.numero}`,body:`Hola ${rec.nombre},\n\nTu reclamo ${rec.numero} fue consolidado con el reclamo ${d.numero} que aborda el mismo problema en ${rec.sector}.\n\nSe gestionarán juntos y recibirás novedades cuando avance.\n\n— Equipo de Intendencia`});
+                    }
+                  },
+                  style:{padding:"3px 10px",background:"#854d0e",color:"white",border:"none",borderRadius:6,cursor:"pointer",fontSize:11,fontWeight:600}},"Sí, consolidar"),
+                h('button',{onClick:()=>{
+                    const updated={...rec,posiblesDuplicados:rec.posiblesDuplicados.filter(x=>x.numero!==d.numero),duplicadosIgnorados:[...(rec.duplicadosIgnorados||[]),d.numero]};
+                    onSave(updated);
+                  },
+                  style:{padding:"3px 10px",background:"#f1f5f9",color:"#64748b",border:"none",borderRadius:6,cursor:"pointer",fontSize:11}},"No")))),
           rec.ejecutorRechazado ? h('div',{style:{marginTop:4,fontSize:12,color:"#dc2626",fontWeight:600}},"❌ Rechazada — acción requerida")
           : rec.ejecutorConfirmado ? h('div',{style:{marginTop:4,fontSize:12,color:"#22c55e",fontWeight:600}},"✅ Confirmada: "+rec.ejecutorNombre+" — "+fdt(rec.fechaConfirmacion))
           : rec.ejecutorMail ? h('div',{style:{marginTop:4,fontSize:12,color:"#1d4ed8",fontWeight:600}},"⏳ Esperando confirmación: "+rec.ejecutorNombre)
@@ -664,6 +744,22 @@ Resolución: ${descripcion||"—"}`});
                   style:{padding:"7px 14px",background:"#8b5cf6",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:700}},"+")))),
             (f.reclamosHijos||[]).length > 0 && h('div',{style:{marginTop:8,fontSize:11,color:"#8b5cf6"}},
               "Al guardar, este reclamo consolida "+(f.reclamosHijos.length+1)+" reclamos en total."))),
+          // Vincular a proyecto
+          h('div',{style:{marginTop:12,background:"#f5f3ff",borderRadius:10,padding:12,border:"1.5px solid #ddd6fe"}},
+            h('div',{style:{fontSize:12,fontWeight:700,color:"#5b21b6",marginBottom:4}},"🏗️ Vincular a proyecto"),
+            h('div',{style:{fontSize:12,color:"#6d28d9",marginBottom:8}},"Si este reclamo forma parte de una obra o proyecto, vinculalo acá:"),
+            h('div',null,
+              h('select',{value:f.proyectoVinculadoId||"",onChange:e=>{
+                const pId=Number(e.target.value);
+                const proyectos=ls.get("proyectos")||[];
+                const p=proyectos.find(x=>x.id===pId);
+                set("proyectoVinculadoId",pId||null);
+                set("proyectoTitulo",p?.titulo||"");
+                if(pId) set("estadoAvance","vinculado_proyecto");
+              },style:{width:"100%",padding:"9px 12px",borderRadius:8,border:"1.5px solid #ddd6fe",fontSize:13,outline:"none",background:"white"}},
+                h('option',{value:""},"— Sin vincular —"),
+                ...(ls.get("proyectos")||[]).map(p=>h('option',{key:p.id,value:p.id},p.titulo))),
+              f.proyectoTitulo && h('div',{style:{marginTop:6,fontSize:12,color:"#5b21b6",fontWeight:600}},"✅ Vinculado a: "+f.proyectoTitulo)))),
 
         // TAB RESOLUCIÓN
         tab==="resolucion" && h('div',null,
@@ -844,6 +940,220 @@ function Kanban({recs, onEdit}) {
 }
 
 // ── PANEL ADMIN ────────────────────────────────────────────────────────────
+// ── PROYECTOS ──────────────────────────────────────────────────────────────
+function ModalProyecto({proyecto, onClose, onSave, ejecutores, recs}) {
+  const nuevo = !proyecto?.id;
+  const [f,setF] = useState(proyecto || {
+    id: Date.now(), titulo:"", descripcion:"", objetivo:"", sector:"",
+    presupuesto:"", fechaInicio:"", fechaFin:"", estado:"planificacion",
+    directivos:[], empleados:[], avances:[], reclamosVinculados:[], alertas:[],
+    proximosPasos:"", createdAt: new Date().toISOString()
+  });
+  const [nuevoAvance,setNuevoAvance] = useState("");
+  const [nuevaAlerta,setNuevaAlerta] = useState("");
+  const [tab,setTab] = useState("info");
+  const set=(k,v)=>setF(p=>({...p,[k]:v}));
+  const aS=()=>({width:"100%",padding:"10px 14px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:14,outline:"none",boxSizing:"border-box"});
+
+  const ESTADOS_PROJ = [
+    {id:"planificacion",label:"Planificación",color:"#0ea5e9"},
+    {id:"en_curso",label:"En curso",color:"#3b82f6"},
+    {id:"pausado",label:"Pausado",color:"#f97316"},
+    {id:"completado",label:"Completado",color:"#22c55e"},
+    {id:"cancelado",label:"Cancelado",color:"#ef4444"},
+  ];
+
+  const addAvance=()=>{if(!nuevoAvance.trim())return;set("avances",[...(f.avances||[]),{texto:nuevoAvance.trim(),fecha:new Date().toISOString()}]);setNuevoAvance("");};
+  const addAlerta=()=>{if(!nuevaAlerta.trim())return;set("alertas",[...(f.alertas||[]),{texto:nuevaAlerta.trim(),fecha:new Date().toISOString()}]);setNuevaAlerta("");};
+
+  const save=async()=>{
+    await onSave(f);
+    // Notify linked reclamo users of project updates if existing project
+    if(!nuevo && f.reclamosVinculados?.length>0){
+      const appUrl=window.location.href.split("?")[0];
+      for(const num of f.reclamosVinculados){
+        const rec=recs.find(r=>r.numero===num);
+        if(rec?.email){
+          await sendEmail({to:rec.email,
+            subject:`[Club] 📋 Actualización del proyecto — ${f.titulo}`,
+            body:`Hola ${rec.nombre},\n\nTu reclamo ${rec.numero} está vinculado al proyecto "${f.titulo}" que tiene novedades.\n\n${f.avances?.slice(-1)[0]?"Último avance: "+f.avances.slice(-1)[0].texto+"\n\n":""}${f.proximosPasos?"Próximos pasos: "+f.proximosPasos+"\n\n":""}Fecha estimada de finalización: ${fd(f.fechaFin)||"Por definir"}\n\nPodés seguir el estado de tu reclamo:\n${appUrl}?seguimiento=${rec.numero}\n\n— Equipo de Intendencia`});
+        }
+      }
+    }
+    onClose();
+  };
+
+  const tabStyle=t=>({padding:"9px 14px",border:"none",background:tab===t?"#0f172a":"transparent",color:tab===t?"white":"#64748b",cursor:"pointer",fontSize:13,fontWeight:tab===t?700:500,borderRadius:8});
+  const estProj=ESTADOS_PROJ.find(e=>e.id===f.estado);
+
+  return h('div',{style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1500,padding:20,overflowY:"auto"}},
+    h('div',{style:{background:"white",borderRadius:20,width:"100%",maxWidth:620,maxHeight:"93vh",overflowY:"auto"}},
+      h('div',{style:{background:"linear-gradient(135deg,#7c3aed,#5b21b6)",padding:"18px 24px",borderRadius:"20px 20px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center"}},
+        h('div',null,
+          h('div',{style:{fontSize:11,color:"#ddd6fe",letterSpacing:2,textTransform:"uppercase"}},nuevo?"Nuevo proyecto":"Editar proyecto"),
+          h('div',{style:{color:"white",fontSize:18,fontWeight:700,fontFamily:"'Playfair Display',serif"}},f.titulo||"Sin título")),
+        h('div',{style:{display:"flex",gap:8,alignItems:"center"}},
+          estProj && h('span',{style:{padding:"3px 10px",borderRadius:20,fontSize:12,fontWeight:600,color:estProj.color,background:"rgba(255,255,255,0.2)"}},"● "+estProj.label),
+          h('button',{onClick:onClose,style:{background:"none",border:"none",color:"rgba(255,255,255,0.7)",fontSize:22,cursor:"pointer"}},"✕"))),
+      h('div',{style:{display:"flex",gap:4,padding:"10px 16px 0",borderBottom:"1px solid #e2e8f0"}},
+        ...[["info","📋 Info"],["avances","📈 Avances"],["personas","👥 Personas"],["reclamos","🔗 Reclamos"]].map(([id,lbl])=>
+          h('button',{key:id,onClick:()=>setTab(id),style:tabStyle(id)},lbl))),
+      h('div',{style:{padding:"18px 22px"}},
+
+        // TAB INFO
+        tab==="info" && h('div',null,
+          h('div',{style:{marginBottom:12}},h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Título *"),h('input',{value:f.titulo,onChange:e=>set("titulo",e.target.value),placeholder:"Nombre del proyecto",style:aS()})),
+          h('div',{style:{marginBottom:12}},h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Descripción"),h('textarea',{value:f.descripcion,onChange:e=>set("descripcion",e.target.value),rows:3,placeholder:"Describí en qué consiste el proyecto...",style:{...aS(),resize:"vertical"}})),
+          h('div',{style:{marginBottom:12}},h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Objetivo"),h('textarea',{value:f.objetivo,onChange:e=>set("objetivo",e.target.value),rows:2,placeholder:"¿Qué se busca lograr?",style:{...aS(),resize:"vertical"}})),
+          h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}},
+            h('div',null,h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Sector"),
+              h('select',{value:f.sector,onChange:e=>set("sector",e.target.value),style:aS()},
+                h('option',{value:""},"Seleccioná..."),
+                ...SECTORES_TODOS.map(s=>h('option',{key:s,value:s},s)))),
+            h('div',null,h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Presupuesto estimado ($)"),h('input',{value:f.presupuesto,onChange:e=>set("presupuesto",e.target.value),type:"number",placeholder:"0",style:aS()}))),
+          h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}},
+            h('div',null,h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Fecha inicio estimada"),h('input',{value:f.fechaInicio,onChange:e=>set("fechaInicio",e.target.value),type:"date",min:new Date().toISOString().split("T")[0],style:aS()})),
+            h('div',null,h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Fecha fin estimada"),h('input',{value:f.fechaFin,onChange:e=>set("fechaFin",e.target.value),type:"date",style:aS()}))),
+          h('div',{style:{marginBottom:12}},h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Estado"),
+            h('div',{style:{display:"flex",gap:6,flexWrap:"wrap"}},
+              ...ESTADOS_PROJ.map(e=>h('button',{key:e.id,onClick:()=>set("estado",e.id),
+                style:{padding:"6px 12px",borderRadius:8,border:f.estado===e.id?`2px solid ${e.color}`:"2px solid #e2e8f0",background:f.estado===e.id?e.color+"18":"white",color:f.estado===e.id?e.color:"#64748b",cursor:"pointer",fontSize:12,fontWeight:600}},e.label)))),
+          h('div',{style:{marginBottom:4}},h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Próximos pasos"),h('textarea',{value:f.proximosPasos,onChange:e=>set("proximosPasos",e.target.value),rows:2,placeholder:"¿Qué viene después?",style:{...aS(),resize:"vertical"}}))),
+
+        // TAB AVANCES
+        tab==="avances" && h('div',null,
+          h('div',{style:{marginBottom:16}},
+            h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},"Agregar avance"),
+            h('div',{style:{display:"flex",gap:8}},
+              h('input',{value:nuevoAvance,onChange:e=>setNuevoAvance(e.target.value),onKeyDown:e=>e.key==="Enter"&&addAvance(),placeholder:"Describí el avance...",style:{...aS(),flex:1}}),
+              h('button',{onClick:addAvance,style:{padding:"9px 16px",background:"#7c3aed",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontWeight:600}},"+ Agregar"))),
+          h('div',{style:{marginBottom:16}},
+            h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},"Agregar alerta"),
+            h('div',{style:{display:"flex",gap:8}},
+              h('input',{value:nuevaAlerta,onChange:e=>setNuevaAlerta(e.target.value),onKeyDown:e=>e.key==="Enter"&&addAlerta(),placeholder:"Ej: Lleva 6 meses esperar los equipos...",style:{...aS(),flex:1}}),
+              h('button',{onClick:addAlerta,style:{padding:"9px 16px",background:"#f97316",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontWeight:600}},"⚠️ Alerta"))),
+          h('div',{style:{display:"flex",flexDirection:"column",gap:8}},
+            ...[...(f.avances||[])].reverse().map((a,i)=>h('div',{key:i,style:{background:"#f0fdf4",borderLeft:"3px solid #22c55e",borderRadius:"0 8px 8px 0",padding:"10px 12px"}},
+              h('div',{style:{display:"flex",justifyContent:"space-between",marginBottom:2}},
+                h('span',{style:{fontSize:11,fontWeight:600,color:"#15803d"}},"📈 Avance"),
+                h('span',{style:{fontSize:11,color:"#94a3b8"}},fdt(a.fecha))),
+              h('div',{style:{fontSize:13,color:"#166534"}},a.texto))),
+            ...[...(f.alertas||[])].reverse().map((a,i)=>h('div',{key:"al"+i,style:{background:"#fff7ed",borderLeft:"3px solid #f97316",borderRadius:"0 8px 8px 0",padding:"10px 12px"}},
+              h('div',{style:{display:"flex",justifyContent:"space-between",marginBottom:2}},
+                h('span',{style:{fontSize:11,fontWeight:600,color:"#c2410c"}},"⚠️ Alerta"),
+                h('span',{style:{fontSize:11,color:"#94a3b8"}},fdt(a.fecha))),
+              h('div',{style:{fontSize:13,color:"#9a3412"}},a.texto))))),
+
+        // TAB PERSONAS
+        tab==="personas" && h('div',null,
+          h('div',{style:{marginBottom:16}},
+            h('div',{style:{fontSize:13,fontWeight:600,color:"#374151",marginBottom:8}},"🎖️ Directivos involucrados"),
+            h('div',{style:{display:"flex",flexDirection:"column",gap:6}},
+              ...(f.directivos||[]).map((p,i)=>h('div',{key:i,style:{display:"flex",justifyContent:"space-between",alignItems:"center",background:"#f8fafc",borderRadius:8,padding:"8px 12px",fontSize:13}},
+                h('span',null,p),
+                h('button',{onClick:()=>set("directivos",(f.directivos).filter((_,idx)=>idx!==i)),style:{background:"none",border:"none",cursor:"pointer",color:"#ef4444"}},"✕"))),
+              h('select',{onChange:e=>{if(e.target.value)set("directivos",[...(f.directivos||[]),e.target.value]);e.target.value="";},style:{...aS(),marginTop:4}},
+                h('option',{value:""},"+ Agregar directivo..."),
+                ...(getMailConfig().directivosIntendencia||[]).concat(getMailConfig().directivosAdmin||[]).map(d=>h('option',{key:d.mail,value:d.nombre+" ("+d.mail+")"},d.nombre))))),
+          h('div',null,
+            h('div',{style:{fontSize:13,fontWeight:600,color:"#374151",marginBottom:8}},"👷 Empleados / ejecutores involucrados"),
+            h('div',{style:{display:"flex",flexDirection:"column",gap:6}},
+              ...(f.empleados||[]).map((p,i)=>h('div',{key:i,style:{display:"flex",justifyContent:"space-between",alignItems:"center",background:"#f8fafc",borderRadius:8,padding:"8px 12px",fontSize:13}},
+                h('span',null,p),
+                h('button',{onClick:()=>set("empleados",(f.empleados).filter((_,idx)=>idx!==i)),style:{background:"none",border:"none",cursor:"pointer",color:"#ef4444"}},"✕"))),
+              h('select',{onChange:e=>{if(e.target.value)set("empleados",[...(f.empleados||[]),e.target.value]);e.target.value="";},style:{...aS(),marginTop:4}},
+                h('option',{value:""},"+ Agregar empleado..."),
+                ...(ejecutores||[]).map(e=>h('option',{key:e.mail,value:e.nombre+" ("+e.mail+")"},e.nombre)))))),
+
+        // TAB RECLAMOS
+        tab==="reclamos" && h('div',null,
+          h('div',{style:{fontSize:13,color:"#64748b",marginBottom:12}},"Reclamos vinculados a este proyecto. Cuando el proyecto avanza, los usuarios reciben notificaciones."),
+          h('div',{style:{display:"flex",flexDirection:"column",gap:8,marginBottom:12}},
+            ...(f.reclamosVinculados||[]).map((num,i)=>{
+              const r=recs.find(x=>x.numero===num);
+              return h('div',{key:i,style:{display:"flex",justifyContent:"space-between",alignItems:"center",background:"#f8fafc",borderRadius:8,padding:"8px 12px"}},
+                h('div',null,
+                  h('div',{style:{fontFamily:"monospace",fontSize:12,fontWeight:700,color:"#7c3aed"}},num),
+                  r && h('div',{style:{fontSize:12,color:"#64748b"}},r.sector+" — "+r.desc?.slice(0,50))),
+                h('button',{onClick:()=>set("reclamosVinculados",(f.reclamosVinculados||[]).filter((_,idx)=>idx!==i)),style:{background:"none",border:"none",cursor:"pointer",color:"#ef4444",fontSize:14}},"✕"));
+            })),
+          h('div',{style:{display:"flex",gap:8}},
+            h('input',{id:"inputRecProj",placeholder:"Número de reclamo (Ej: R-123456)",style:{...aS(),flex:1}}),
+            h('button',{onClick:()=>{const inp=document.getElementById("inputRecProj");const v=(inp?.value||"").trim().toUpperCase();if(v&&!(f.reclamosVinculados||[]).includes(v)){set("reclamosVinculados",[...(f.reclamosVinculados||[]),v]);if(inp)inp.value="";}},
+              style:{padding:"9px 16px",background:"#7c3aed",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontWeight:600}},"+ Vincular"))),
+
+        h('div',{style:{display:"flex",gap:10,marginTop:20}},
+          h('button',{onClick:onClose,style:{flex:1,padding:"12px",background:"#f1f5f9",color:"#64748b",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:600}},"Cancelar"),
+          h('button',{onClick:save,style:{flex:2,padding:"12px",background:"linear-gradient(135deg,#7c3aed,#5b21b6)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700}},"Guardar proyecto ✓")))));
+}
+
+function ProyectosTab({recs, onUpdate, ejecutores}) {
+  const [proyectos,setProyectos] = useState([]);
+  const [modal,setModal] = useState(null);
+  const [filtroEstado,setFiltroEstado] = useState("");
+
+  useEffect(()=>{
+    const saved=ls.get("proyectos");
+    if(saved) setProyectos(saved);
+  },[]);
+
+  const saveProyecto=async(p)=>{
+    const lista=proyectos.find(x=>x.id===p.id)?proyectos.map(x=>x.id===p.id?p:x):[p,...proyectos];
+    setProyectos(lista);
+    ls.set("proyectos",lista);
+    // Update linked reclamos state
+    for(const num of (p.reclamosVinculados||[])){
+      const rec=recs.find(r=>r.numero===num);
+      if(rec && rec.estadoAvance!=="vinculado_proyecto"){
+        await onUpdate({...rec,estadoAvance:"vinculado_proyecto",proyectoVinculado:p.id,proyectoTitulo:p.titulo},rec);
+      }
+    }
+  };
+
+  const ESTADOS_PROJ=[
+    {id:"planificacion",label:"Planificación",color:"#0ea5e9"},
+    {id:"en_curso",label:"En curso",color:"#3b82f6"},
+    {id:"pausado",label:"Pausado",color:"#f97316"},
+    {id:"completado",label:"Completado",color:"#22c55e"},
+    {id:"cancelado",label:"Cancelado",color:"#ef4444"},
+  ];
+
+  const filtrados=proyectos.filter(p=>!filtroEstado||p.estado===filtroEstado);
+
+  return h('div',{style:{padding:"16px 24px 40px"}},
+    h('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}},
+      h('div',{style:{display:"flex",gap:8}},
+        h('select',{value:filtroEstado,onChange:e=>setFiltroEstado(e.target.value),style:{padding:"7px 12px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:13,outline:"none"}},
+          h('option',{value:""},"Todos los estados"),
+          ...ESTADOS_PROJ.map(e=>h('option',{key:e.id,value:e.id},e.label))),
+        h('span',{style:{alignSelf:"center",fontSize:13,color:"#94a3b8"}},filtrados.length+" proyectos")),
+      h('button',{onClick:()=>setModal({}),style:{padding:"9px 18px",background:"linear-gradient(135deg,#7c3aed,#5b21b6)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:13,fontWeight:700}},"+ Nuevo proyecto")),
+    filtrados.length===0 && h('div',{style:{textAlign:"center",padding:"60px 0",color:"#94a3b8"}},
+      h('div',{style:{fontSize:40,marginBottom:12}},"📋"),
+      h('div',{style:{fontSize:16,fontWeight:600,marginBottom:8}},"No hay proyectos"),
+      h('div',{style:{fontSize:14}},"Creá el primero con el botón de arriba.")),
+    h('div',{style:{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:14}},
+      ...filtrados.map(p=>{
+        const est=ESTADOS_PROJ.find(e=>e.id===p.estado);
+        const diasRestantes=p.fechaFin?(new Date(p.fechaFin)-new Date())/86400000:null;
+        const vencido=diasRestantes!==null&&diasRestantes<0&&p.estado!=="completado";
+        return h('div',{key:p.id,style:{background:"white",borderRadius:14,padding:"18px 20px",boxShadow:"0 2px 8px rgba(0,0,0,0.07)",borderTop:`4px solid ${est?.color||"#e2e8f0"}`,cursor:"pointer"},onClick:()=>setModal(p)},
+          h('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}},
+            h('div',{style:{fontSize:15,fontWeight:700,color:"#0f172a",lineHeight:1.3,flex:1}},p.titulo||"Sin título"),
+            h('span',{style:{padding:"2px 8px",borderRadius:20,fontSize:11,fontWeight:600,color:est?.color,background:est?.color+"22",whiteSpace:"nowrap",marginLeft:8}},est?.label)),
+          p.sector && h('div',{style:{fontSize:12,color:"#64748b",marginBottom:6}},"📍 "+p.sector),
+          p.descripcion && h('div',{style:{fontSize:13,color:"#475569",lineHeight:1.5,marginBottom:10,overflow:"hidden",textOverflow:"ellipsis",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}},p.descripcion),
+          h('div',{style:{display:"flex",gap:12,marginBottom:8,fontSize:12,color:"#64748b"}},
+            p.fechaInicio && h('span',null,"🗓 Inicio: "+fd(p.fechaInicio)),
+            p.fechaFin && h('span',{style:{color:vencido?"#ef4444":"inherit",fontWeight:vencido?700:400}},vencido?"⚠️ Vencido: "+fd(p.fechaFin):"🏁 Fin: "+fd(p.fechaFin))),
+          h('div',{style:{display:"flex",gap:8,fontSize:12}},
+            p.reclamosVinculados?.length>0 && h('span',{style:{background:"#f3f4f6",borderRadius:6,padding:"2px 8px",color:"#374151"}},"🔗 "+p.reclamosVinculados.length+" reclamos"),
+            p.presupuesto && h('span',{style:{background:"#f3f4f6",borderRadius:6,padding:"2px 8px",color:"#374151"}},"💰 $"+Number(p.presupuesto).toLocaleString("es-AR")),
+            p.alertas?.length>0 && h('span',{style:{background:"#fff7ed",borderRadius:6,padding:"2px 8px",color:"#c2410c",fontWeight:600}},"⚠️ "+p.alertas.length+" alertas")));
+      })),
+    modal!==null && h(ModalProyecto,{proyecto:modal.id?modal:null,onClose:()=>setModal(null),onSave:saveProyecto,ejecutores,recs}));
+}
+
 function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
   // Auto-refresh every 30 seconds
   useEffect(()=>{
@@ -867,9 +1177,9 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
 
   const stats={
     total:recs.length,
-    noIniciadas:recs.filter(r=>r.estadoAvance==="no_iniciada").length,
+    noIniciadas:recs.filter(r=>r.estadoAvance==="bajo_analisis").length,
     enCurso:recs.filter(r=>r.estadoAvance==="iniciada").length,
-    demoradas:recs.filter(r=>r.estadoAvance==="demorada"||(!["completada","consolidada"].includes(r.estadoAvance)&&r.fechaCierre&&new Date(r.fechaCierre)<new Date())).length,
+    demoradas:recs.filter(r=>r.estadoAvance==="demorada"||(!["completada","consolidada","sin_resolucion","vinculado_proyecto"].includes(r.estadoAvance)&&r.fechaCierre&&new Date(r.fechaCierre)<new Date())).length,
     completadas:recs.filter(r=>r.estadoAvance==="completada").length,
   };
 
@@ -885,7 +1195,7 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
     setChecking(true);
     const ahora=new Date();
     const por=recs.filter(r=>{
-      if(["completada","consolidada"].includes(r.estadoAvance)) return false;
+      if(["completada","consolidada","sin_resolucion","vinculado_proyecto"].includes(r.estadoAvance)) return false;
       if(!r.fechaCierre) return false;
       const d=(new Date(r.fechaCierre)-ahora)/86400000;
       return d>=0&&d<5;
@@ -914,14 +1224,18 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
         h('button',{onClick:()=>setShowCfg(true),style:{padding:"8px 14px",background:"rgba(255,255,255,0.1)",color:"white",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600}},"⚙️ Configuración"),
         h('button',{onClick:()=>{const d=prompt("Simular cuántos días transcurridos (ej: 4):");if(d&&!isNaN(d))testAlerts(Number(d));},style:{padding:"8px 14px",background:"rgba(255,255,255,0.1)",color:"white",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600}},"🧪 Test"),
         h('button',{onClick:checkAlerts,disabled:checking,style:{padding:"8px 14px",background:checking?"#475569":"#f97316",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600}},checking?"Verificando...":"⚠️ Revisar alertas"))),
-    // Stats
-    h('div',{style:{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:12,padding:"18px 24px 0"}},
-      ...[{l:"Total",v:stats.total,c:"#0f172a"},{l:"No iniciadas",v:stats.noIniciadas,c:"#6b7280"},{l:"En curso",v:stats.enCurso,c:"#3b82f6"},{l:"Demoradas",v:stats.demoradas,c:"#ef4444"},{l:"Completadas",v:stats.completadas,c:"#22c55e"}].map(s=>
+    // Main tabs: Reclamos | Proyectos
+    h('div',{style:{display:"flex",gap:4,padding:"0 24px",background:"#0f172a",borderBottom:"2px solid rgba(255,255,255,0.1)"}},
+      ...[["reclamos","📋 Reclamos"],["proyectos","🏗️ Proyectos"]].map(([id,lbl])=>
+        h('button',{key:id,onClick:()=>setMainTab(id),
+          style:{padding:"10px 18px",border:"none",background:"none",cursor:"pointer",fontSize:13,fontWeight:mainTab===id?700:500,
+            color:mainTab===id?"white":"rgba(255,255,255,0.5)",borderBottom:mainTab===id?"2px solid #3b82f6":"2px solid transparent",marginBottom:-2}},lbl))),
+    mainTab==="reclamos" && h('div',{style:{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:12,padding:"18px 24px 0"}},
+      ...[{l:"Total",v:stats.total,c:"#0f172a"},{l:"Bajo Análisis",v:stats.noIniciadas,c:"#6b7280"},{l:"En curso",v:stats.enCurso,c:"#3b82f6"},{l:"Demoradas",v:stats.demoradas,c:"#ef4444"},{l:"Completadas",v:stats.completadas,c:"#22c55e"}].map(s=>
         h('div',{key:s.l,style:{background:"white",borderRadius:12,padding:16,boxShadow:"0 1px 4px rgba(0,0,0,0.08)",borderTop:`3px solid ${s.c}`}},
           h('div',{style:{fontSize:26,fontWeight:800,color:s.c}},s.v),
           h('div',{style:{fontSize:12,color:"#64748b",fontWeight:500}},s.l)))),
-    // Filtros
-    h('div',{style:{display:"flex",gap:10,padding:"14px 24px 8px",flexWrap:"wrap",alignItems:"center"}},
+    mainTab==="reclamos" && h('div',{style:{display:"flex",gap:10,padding:"14px 24px 8px",flexWrap:"wrap",alignItems:"center"}},
       h('input',{value:filtros.q,onChange:e=>sf("q",e.target.value),placeholder:"🔍 Buscar...",style:{...aS(),minWidth:160}}),
       h('select',{value:filtros.estado,onChange:e=>sf("estado",e.target.value),style:aS()},
         h('option',{value:""},"Todos los estados"),
@@ -937,7 +1251,7 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
         ...[["lista","☰ Lista"],["kanban","⬜ Kanban"]].map(([id,lbl])=>
           h('button',{key:id,onClick:()=>setView(id),style:{padding:"7px 14px",borderRadius:8,border:"1.5px solid #e2e8f0",background:view===id?"#0f172a":"white",color:view===id?"white":"#64748b",cursor:"pointer",fontSize:12,fontWeight:600}},lbl)))),
     // Lista
-    view==="lista" && h('div',{style:{padding:"0 24px 24px",overflowX:"auto"}},
+    mainTab==="reclamos" && view==="lista" && h('div',{style:{padding:"0 24px 24px",overflowX:"auto"}},
       h('table',{style:{width:"100%",borderCollapse:"separate",borderSpacing:"0 5px"}},
         h('thead',null,h('tr',null,...["Nº","Fecha","Sector","Tipo","Detalle","Criticidad socio→int","Estado","Ejecutor","Status","Cierre","Timing",""].map(hd=>
           h('th',{key:hd,style:{textAlign:"left",padding:"8px 10px",fontSize:11,color:"#94a3b8",fontWeight:600,letterSpacing:0.5,textTransform:"uppercase"}},hd)))),
@@ -980,7 +1294,8 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
               h('td',{style:{padding:"11px 10px",borderRadius:"0 10px 10px 0"}},
                 h('button',{onClick:()=>setModal(r),style:{padding:"5px 12px",background:"#0f172a",color:"white",border:"none",borderRadius:7,cursor:"pointer",fontSize:12,fontWeight:600}},"Gestionar")));
           })))),
-    view==="kanban" && h(Kanban,{recs:filtrados,onEdit:setModal}),
+    mainTab==="reclamos" && view==="kanban" && h(Kanban,{recs:filtrados,onEdit:setModal}),
+    mainTab==="proyectos" && h(ProyectosTab,{recs,onUpdate,ejecutores}),
     modal && h(EditModal,{rec:modal,onClose:()=>setModal(null),onSave:async u=>{await onUpdate(u,modal);setModal(null);},ejecutores}),
     showCfg && h(PanelConfig,{onClose:()=>setShowCfg(false),onSaveEjecutores:ejs=>{setEjecutores(ejs);setShowCfg(false);}}));
 }
@@ -1206,11 +1521,29 @@ function App() {
     sbGetAll().then(lista=>setRecs(lista));
   },[view, loaded]);
 
-  const add = async rec => { setRecs(prev=>[rec,...prev]); await sbUpsert(rec); };
+  const add = async rec => {
+    // Run duplicate detection
+    const duplicados = await detectarDuplicados(rec, recs);
+    const recConDups = duplicados.length > 0 ? {...rec, posiblesDuplicados: duplicados} : rec;
+    setRecs(prev=>[recConDups,...prev]);
+    await sbUpsert(recConDups);
+  };
   const upd = async (rec, prevRec) => {
     setRecs(prev=>prev.map(r=>r.id===rec.id?rec:r));
     await sbUpsert(rec);
     const appUrl = window.location.href.split("?")[0];
+    // Notify user when linked to a project
+    if(rec.email && prevRec && rec.proyectoVinculadoId && rec.proyectoVinculadoId!==prevRec.proyectoVinculadoId) {
+      await sendEmail({to:rec.email,
+        subject:`[Club] Tu reclamo fue vinculado a un proyecto — ${rec.numero}`,
+        body:`Hola ${rec.nombre},\n\nTu reclamo ${rec.numero} (${rec.sector}) fue vinculado al proyecto "${rec.proyectoTitulo}".\n\nEsto significa que el problema que reportaste será resuelto como parte de una obra o proyecto mayor. Recibirás actualizaciones a medida que el proyecto avance.\n\nPodés seguir el estado de tu reclamo:\n${appUrl}?seguimiento=${rec.numero}\n\n— Equipo de Intendencia`});
+    }
+    // Notify user when fecha cierre confirmed changes
+    if(rec.email && prevRec && rec.fechaCierreConfirmada && prevRec.fechaCierreConfirmada && rec.fechaCierreConfirmada!==prevRec.fechaCierreConfirmada) {
+      await sendEmail({to:rec.email,
+        subject:`[Club] 📅 Actualización de fecha — ${rec.numero}`,
+        body:`Hola ${rec.nombre},\n\nTe informamos que la fecha estimada de resolución de tu reclamo ${rec.numero} (${rec.sector}) fue actualizada.\n\nNueva fecha estimada: ${fd(rec.fechaCierreConfirmada)}\n${rec.motivoActualizacion?"Motivo: "+rec.motivoActualizacion+"\n":""}\nPodés seguir el estado en:\n${appUrl}?seguimiento=${rec.numero}\n\n— Equipo de Intendencia`});
+    }
     const seguimientoUrl = appUrl+"?seguimiento="+rec.numero;
     // Notificar al usuario cuando intendencia confirma fecha de resolución por primera vez
     if(rec.email && rec.fechaCierreConfirmada && prevRec && !prevRec.fechaCierreConfirmada){
@@ -1322,6 +1655,10 @@ Te avisaremos cuando esté resuelto.
           h('div',{style:{marginBottom:16}},
             h('div',{style:{fontSize:11,color:"#94a3b8",fontWeight:600,marginBottom:4,textTransform:"uppercase"}},"Descripción"),
             h('div',{style:{fontSize:14,color:"#475569",lineHeight:1.6}},rec.desc)),
+          rec.estadoAvance==="vinculado_proyecto" && rec.proyectoTitulo && h('div',{style:{background:"#f5f3ff",border:"1.5px solid #ddd6fe",borderRadius:12,padding:"14px 16px",marginBottom:16}},
+            h('div',{style:{fontSize:11,color:"#5b21b6",fontWeight:700,marginBottom:6,textTransform:"uppercase"}},"🏗️ Vinculado a proyecto"),
+            h('div',{style:{fontSize:14,fontWeight:600,color:"#4c1d95",marginBottom:4}},rec.proyectoTitulo),
+            h('div',{style:{fontSize:13,color:"#6d28d9",lineHeight:1.5}},"Tu reclamo será resuelto como parte de este proyecto. Recibirás actualizaciones a medida que avance.")),
           rec.adjuntos && rec.adjuntos.filter(a=>a.url).length>0 && h('div',{style:{marginBottom:16}},
             h('div',{style:{fontSize:11,color:"#94a3b8",fontWeight:600,marginBottom:8,textTransform:"uppercase"}},"Fotos adjuntas"),
             h('div',{style:{display:"flex",gap:8,flexWrap:"wrap"}},
