@@ -391,7 +391,7 @@ function FormularioSocio({onSubmit, reclamos}) {
     const dC=new Date(); dC.setDate(dC.getDate()+(pri?.dias||7));
     const rec = {...f, numero:n, id:Date.now(), createdAt:new Date().toISOString(),
       estadoAvance:"bajo_analisis", fechaCierre:dC.toISOString().split("T")[0],
-      responsableArea:catConf?.resp||{nombre:"",mail:""},
+      responsableArea:{nombre:"",mail:""},
       comentarios:[], descripcionResolucion:"", presupuesto:"", presupuestoDetalle:"",
       ejecutorMail:"", ejecutorNombre:"", ejecutorConfirmado:false, ejecutorRechazado:false,
       evidenciaUrl:"", adjuntosResolucion:[]};
@@ -583,7 +583,8 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
     const fechaAsignacion = (f.ejecutorMail && f.ejecutorMail!==rec.ejecutorMail) ? new Date().toISOString() : rec.fechaAsignacion;
     if(f.ejecutorMail && f.ejecutorMail!==rec.ejecutorMail){
       const appUrl=window.location.href.split("?")[0];
-      const cc=[NOTIFY_EMAIL,rec.responsableArea?.mail].filter(e=>e&&e!==f.ejecutorMail);
+      const catRespMails=(getCatCfg(rec.cat).responsables||[]).map(x=>x.mail);
+    const cc=[...catRespMails].filter(e=>e&&e!==f.ejecutorMail);
       await sendEmail({to:f.ejecutorMail,cc,
         subject:`[Club] Tarea asignada — ${rec.numero}: ${rec.sector}`,
   body:(()=>{
@@ -657,7 +658,9 @@ Resolución: ${descripcion||"—"}`});
   const notifResolucion = async () => {
     setSending(true);
     const appUrl=window.location.href.split("?")[0];
-    await sendEmail({to:[rec.responsableArea?.mail,NOTIFY_EMAIL].filter(Boolean),
+    const _respM=getResponsableMail(rec.cat);
+    const _dirMs=getDirectivos(rec.cat).map(d=>d.mail);
+    await sendEmail({to:[_respM,..._dirMs].filter(Boolean),
       subject:`[Club] ✅ Tarea completada — ${rec.numero}: ${rec.sector}`,
       body:`Tarea completada.\n\nNúmero: ${rec.numero}\nSector: ${rec.sector}\nEjecutor: ${rec.ejecutorNombre||"—"}\nDescripción: ${f.descripcionResolucion||"—"}\nCosto: ${f.presupuesto?"$"+Number(f.presupuesto).toLocaleString("es-AR"):"—"}\n${f.evidenciaUrl?"Evidencia: "+f.evidenciaUrl:""}`});
     setSending(false); alert("✅ Notificación enviada.");
@@ -912,9 +915,20 @@ function PanelConfig({onClose, onSaveEjecutores}) {
     setCfg({...defaultCfg,...(ls.get("config")||{})});
   },[]);
 
-  const save = () => {
+  const save = async () => {
     ls.set("ejecutores",ejs); ls.set("config",cfg);
     if(onSaveEjecutores) onSaveEjecutores(ejs);
+    // Sync config to Apps Script for automatic escalation
+    const scriptUrl = cfg.scriptUrl || SCRIPT_URL;
+    if(scriptUrl) {
+      try {
+        await fetch(scriptUrl, {
+          method:"POST",
+          headers:{"Content-Type":"text/plain"},
+          body: JSON.stringify({type:"syncConfig", config:cfg})
+        });
+      } catch(e) { console.log("Config sync warning:", e); }
+    }
     setSaved(true); setTimeout(()=>{setSaved(false);onClose();},1500);
   };
 
@@ -1284,11 +1298,7 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
   };
 
   const testAlerts = async (diasSimulados) => {
-    // Runs checkAlerts but with simulated days passed
-    const originalDiasDesde = window._diasDesdeOverride;
-    window._diasDesdeOverride = diasSimulados;
-    await checkAlerts();
-    window._diasDesdeOverride = null;
+    await checkAlerts(diasSimulados);
   };
 
   const checkAlerts = async () => {
@@ -1304,7 +1314,7 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
       for(const r of por){
         const d=(new Date(r.fechaCierre)-ahora)/86400000;
         const dias=d<1?"menos de 1 día":d<2?"1 día":"5 días";
-        const dest=[r.ejecutorMail,r.responsableArea?.mail,NOTIFY_EMAIL].filter(Boolean);
+        const dest=[r.ejecutorMail].filter(Boolean);
         if(dest.length) await sendEmail({to:dest,subject:`[Club] ⚠️ Recordatorio — ${r.numero} vence en ${dias}`,body:`Recordatorio: ${r.numero} · ${r.sector}\nVence: ${fd(r.fechaCierre)}\nEjecutor: ${r.ejecutorNombre||"—"}`});
       }
       alert("✅ Alertas enviadas para "+por.length+" tarea(s).");
@@ -1312,6 +1322,11 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
     setChecking(false);
   };
 
+  const formatTiempoJS = (dias) => {
+    if(dias < 1/24) return Math.round(dias*1440)+" minutos";
+    if(dias < 1)    return Math.round(dias*24)+" horas";
+    return Math.round(dias)+" días";
+  };
   const aS = () => ({padding:"8px 12px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:13,outline:"none"});
 
   return h('div',{style:{minHeight:"100vh",background:"#f8fafc"}},
@@ -1636,7 +1651,9 @@ function App() {
             fechaConfirmacion:new Date().toISOString(),
             comentarios:[...(r.comentarios||[]),{texto:"Ejecutor confirmó responsabilidad.",fecha:new Date().toISOString(),autor:"Sistema"}]};
           await sbUpsert(updated);
-          await sendEmail({to:[r.responsableArea?.mail,NOTIFY_EMAIL].filter(Boolean),
+          const _cf=getCatCfg(r.cat);
+          const _cfDest=[...(_cf.responsables||[]).map(x=>x.mail),...(_cf.directivos||[]).map(x=>x.mail)].filter(Boolean);
+          if(_cfDest.length) await sendEmail({to:_cfDest,
             subject:`[Club] ✅ Ejecutor confirmó — ${r.numero}: ${r.sector}`,
             body:`${r.ejecutorNombre} confirmó que asume la tarea ${r.numero} (${r.sector}).`});
         }
@@ -1745,7 +1762,9 @@ Te avisaremos cuando esté resuelto.
     await sbUpsert(updated);
     ls.set("pendingRechazar",null);
     setRecs(prev=>prev.map(r=>String(r.id)===String(id)?updated:r));
-    await sendEmail({to:[rec.responsableArea?.mail,NOTIFY_EMAIL].filter(Boolean),
+    const _rj=getCatCfg(rec.cat);
+    const _rjDest=[...(_rj.responsables||[]).map(x=>x.mail),...(_rj.directivos||[]).map(x=>x.mail)].filter(Boolean);
+    await sendEmail({to:_rjDest,
       subject:`[Club] ❌ Ejecutor rechazó — ${rec.numero}: ${rec.sector}`,
       body:`${rec.ejecutorNombre} rechazó la tarea ${rec.numero} (${rec.sector}).\n\nMotivo: ${motivo}\n\nDebés reasignar esta tarea.`});
     setView("rechazar_ok");
@@ -1857,6 +1876,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
+
 
 
 
