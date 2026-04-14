@@ -116,9 +116,6 @@ const SUBS = {
   limpieza: {
     default:   ["Limpieza general","Higiene y desinfección","Residuos / contenedores","Olores","Plagas","Otro"],
   },
-  equipamiento: {
-    default:   ["Mobiliario","Electrodomésticos","Equipos deportivos","Equipos de cocina","Equipos audiovisuales","Señalización","Otro"],
-  },
   preparacion: {
     default:   ["Montaje de salón / evento","Armado de cancha","Preparación de vestuarios","Decoración / señalización","Otro"],
   },
@@ -139,10 +136,9 @@ function getSubcategorias(cat, sector) {
 }
 
 const CATS = {
-  infraestructura:{id:"infraestructura",label:"Infraestructura",icon:"🏗️",resp:{nombre:"— Por configurar —",mail:""}},
+  infraestructura:{id:"infraestructura",label:"Obras",icon:"🏗️",resp:{nombre:"— Por configurar —",mail:""}},
   limpieza:{id:"limpieza",label:"Limpieza",icon:"🧹",resp:{nombre:"— Por configurar —",mail:""}},
-  mantenimiento:{id:"mantenimiento",label:"Mantenimiento",icon:"🔧",resp:{nombre:"— Por configurar —",mail:""}},
-  equipamiento:{id:"equipamiento",label:"Equipamiento",icon:"⚙️",resp:{nombre:"— Por configurar —",mail:""}},
+  mantenimiento:{id:"mantenimiento",label:"Mantenimiento Preventivo",icon:"🔧",resp:{nombre:"— Por configurar —",mail:""}},
   preparacion:{id:"preparacion",label:"Preparación de espacio",icon:"📋",resp:{nombre:"— Por configurar —",mail:""}},
   servicios:{id:"servicios",label:"Servicios & Atención",icon:"🤝",resp:{nombre:"— Por configurar —",mail:""}},
   cuotas:{id:"cuotas",label:"Cuotas & Aranceles",icon:"💳",resp:{nombre:"— Por configurar —",mail:""}},
@@ -164,6 +160,7 @@ const ESTADOS = [
   {id:"sin_resolucion",label:"Sin resolución temporaria", color:"#be185d"},
   {id:"vinculado_proyecto", label:"Vinculado a proyecto", color:"#7c3aed"},
   {id:"demorada",      label:"Demorada",       color:"#dc2626"},
+  {id:"esperando_validacion", label:"Esperando validación", color:"#6d28d9"},
   {id:"completada",    label:"Completada",     color:"#22c55e"},
   {id:"consolidada",   label:"Consolidada",    color:"#8b5cf6"},
 ];
@@ -195,6 +192,7 @@ function getAccionRequerida(r) {
   if (r.ejecutorRechazado) return {label:"❌ Reasignar ejecutor", color:"#dc2626", bg:"#fef2f2"};
   if (!r.ejecutorConfirmado) return {label:"⏳ Esperando confirmación", color:"#1d4ed8", bg:"#eff6ff"};
   if (r.estadoAvance === "sin_resolucion") return {label:"🟡 Sin resolución — en seguimiento", color:"#d97706", bg:"#fffbeb"};
+  if (r.estadoAvance === "esperando_validacion") return {label:"🔵 Esperando validación directivo", color:"#6d28d9", bg:"#f5f3ff"};
   return null;
 }
 
@@ -583,8 +581,23 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
     // Validate required fields for assignment (only if not linked to project)
     if(!isVinculado && (tab==="asignacion" || tab==="gestion")) {
       if(!f.ejecutorMail) { setSaveErr("Debés asignar un ejecutor antes de guardar."); return; }
+      if(f.ejecutorMail && !f.nuevoComentario.trim() && !rec.comentarios?.some(c=>c.autor==="Intendencia")) { setSaveErr("El comentario para el ejecutor es obligatorio."); setTab("gestion"); return; }
       if(!f.fechaInicioEsperado && !rec.fechaInicioOriginal) { setSaveErr("La fecha de inicio es obligatoria."); return; }
       if(!f.fechaCierre && !rec.fechaOriginalCierre) { setSaveErr("La fecha de cierre es obligatoria."); return; }
+      // Block save if fechaCierre is in the past without updated date (unless completada)
+      if(f.estadoAvance !== "completada") {
+        const fechaEfectiva = f.fechaCierreActualizada || f.fechaCierre || rec.fechaOriginalCierre;
+        if(fechaEfectiva && new Date(fechaEfectiva) < new Date() && !f.fechaCierreActualizada && !f.motivoActualizacion?.trim()) {
+          setSaveErr("La fecha de cierre está vencida. Debés ingresar una nueva fecha y el motivo del cambio.");
+          setTab("gestion");
+          return;
+        }
+        if(f.fechaCierreActualizada && !f.motivoActualizacion?.trim()) {
+          setSaveErr("Si actualizás la fecha de cierre, el motivo es obligatorio.");
+          setTab("gestion");
+          return;
+        }
+      }
       if(!f.criticidad) { setSaveErr("Debés asignar una criticidad."); return; }
     }
     setSending(true);
@@ -618,7 +631,10 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
         const calReminderDesc = encodeURIComponent(`Confirmar que la tarea ${rec.numero} fue completada:\n${appUrl}?completar=${rec.id}`);
         const calReminderLink = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${calReminderTitle}&dates=${endDate}/${endDate}&details=${calReminderDesc}`;
         const ejNombres = (f.ejecutores_lista||[]).length > 1 ? (f.ejecutores_lista||[]).map(e=>e.nombre).join(" y ") : f.ejecutorNombre;
-        return `Hola ${ejNombres},\n\nSe te asignó la siguiente tarea:\n\nNúmero: ${rec.numero}\nSector: ${rec.sector}\nProblema: ${cat?.label} › ${rec.sub}\nDescripción: ${rec.desc}\nFecha inicio: ${fd(f.fechaInicioEsperado||"")}\nFecha cierre: ${fd(f.fechaCierre)}\n\n✅ CONFIRMAR:\n${appUrl}?confirmar=${rec.id}\n\n❌ RECHAZAR:\n${appUrl}?rechazar=${rec.id}\n\n📅 AGREGAR AL CALENDARIO:\nEvento de tarea: ${calLink}\nRecordatorio de cierre: ${calReminderLink}\n\nSi no respondés en 24hs el sistema notificará al responsable.`;
+        const comentarioEj = f.nuevoComentario?.trim() ? `\n\n💬 INSTRUCCIONES DEL RESPONSABLE:\n${f.nuevoComentario.trim()}` : "";
+        const fotosReclamo = (rec.adjuntos||[]).filter(a=>a.url);
+        const fotosInfo = fotosReclamo.length > 0 ? `\n\n📎 FOTOS DEL PROBLEMA:\n${fotosReclamo.map(a=>a.url).join("\n")}` : "";
+        return `Hola ${ejNombres},\n\nSe te asignó la siguiente tarea:${comentarioEj}\n\nNúmero: ${rec.numero}\nSector: ${rec.sector}\nProblema: ${cat?.label} › ${rec.sub}\nDescripción: ${rec.desc}\nFecha inicio: ${fd(f.fechaInicioEsperado||"")}\nFecha cierre: ${fd(f.fechaCierre)}${fotosInfo}\n\n✅ CONFIRMAR:\n${appUrl}?confirmar=${rec.id}\n\n❌ RECHAZAR:\n${appUrl}?rechazar=${rec.id}\n\n📅 AGREGAR AL CALENDARIO:\nEvento de tarea: ${calLink}\nRecordatorio de cierre: ${calReminderLink}\n\nCuando termines, confirmá la resolución acá:\n${appUrl}?completar=${rec.id}`;
       })()});
     }
     const fechaCierreConfirmada = f.fechaCierre ? f.fechaCierre : rec.fechaCierreConfirmada||null;
@@ -633,9 +649,20 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
       fechaCierreConfirmada,fechaInicioOriginal,fechaOriginalCierre,ejecutorMailOriginal,fechaAsignacion,
       updatedAt:new Date().toISOString()};
     await onSave(savedRec);
-    // Auto-notify user when marked as completada
+    // When marked as completada → set to esperando_validacion (directivo must approve first)
     if(f.estadoAvance==="completada" && rec.estadoAvance!=="completada" && f.descripcionResolucion.trim()) {
-      await notifResolucionAuto(savedRec);
+      // Update state to esperando_validacion instead of completada until directivo approves
+      const recEspera = {...savedRec, estadoAvance:"esperando_validacion"};
+      await sbUpsert(recEspera);
+      setRecs(prev=>prev.map(r=>r.id===recEspera.id?recEspera:r));
+      // Notify directivos
+      const dirMails = getDirectivos(savedRec.cat).map(d=>d.mail).filter(Boolean);
+      const respMail = getResponsableMail(savedRec.cat);
+      if(dirMails.length) {
+        await sendEmail({to:dirMails, cc:[respMail].filter(Boolean),
+          subject:`[Club] 🔵 Tarea completada — pendiente validación — ${savedRec.numero}`,
+          body:`La tarea ${savedRec.numero} fue marcada como completada y requiere tu validación.\n\nSector: ${savedRec.sector}\nEjecutor: ${savedRec.ejecutorNombre||"—"}\nResolución: ${savedRec.descripcionResolucion||"—"}\n\nAprobar: ${window.location.href.split("?")[0]}?validar=${savedRec.id}\nRechazar: ${window.location.href.split("?")[0]}?rechazar_validacion=${savedRec.id}`});
+      }
     }
     setSending(false);
   };
@@ -808,7 +835,10 @@ Resolución: ${descripcion||"—"}`});
                 h('input',{type:"time",value:f.horaFin||"",onChange:e=>set("horaFin",e.target.value),style:aS()})))),
           h('div',{style:{marginBottom:14}},h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Presupuesto ($)"),h('input',{value:f.presupuesto,onChange:e=>set("presupuesto",e.target.value),placeholder:"0",type:"number",style:aS()})),
           h('div',{style:{marginBottom:14}},h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Detalle del presupuesto"),h('textarea',{value:f.presupuestoDetalle,onChange:e=>set("presupuestoDetalle",e.target.value),rows:2,placeholder:"Conceptos...",style:{...aS(),resize:"vertical"}})),
-          h('div',{style:{marginBottom:18}},h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Comentario interno"),h('textarea',{value:f.nuevoComentario,onChange:e=>set("nuevoComentario",e.target.value),rows:3,placeholder:"Novedad, observación o avance...",style:{...aS(),resize:"vertical"}}))),
+          h('div',{style:{marginBottom:18}},
+  h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:!f.ejecutorMail||f.nuevoComentario.trim()?"#374151":"#dc2626",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Comentario para el ejecutor *"),
+  h('div',{style:{fontSize:11,color:"#64748b",marginBottom:6}},"Este comentario le llegará al ejecutor en el email de asignación."),
+  h('textarea',{value:f.nuevoComentario,onChange:e=>set("nuevoComentario",e.target.value),rows:3,placeholder:"Describí qué debe hacer el ejecutor, cómo acceder al lugar, herramientas necesarias, etc...",style:{...aS(),resize:"vertical",border:f.ejecutorMail&&!f.nuevoComentario.trim()?"2px solid #ef4444":undefined}}))),
 
         // TAB ASIGNACIÓN
         tab==="asignacion" && h('div',null,
@@ -1012,22 +1042,22 @@ function PanelConfig({onClose, onSaveEjecutores}) {
 
         // TAB ESCALADO
         tab==="escalado" && h('div',null,
-          h('div',{style:{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:12}},"Reglas de escalado automático"),
+          h('div',{style:{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:12}},"Tiempos para gestionar reclamos"),
           h('div',{style:{background:"#f8fafc",borderRadius:12,overflow:"hidden",marginBottom:16}},
             h('table',{style:{width:"100%",borderCollapse:"collapse"}},
               h('thead',null,h('tr',null,
-                ...["Criticidad","1er recordatorio","Escalado a directivo"].map(hd=>
+                ...["Criticidad","Tiempo para gestionar","Acción si no se gestiona"].map(hd=>
                   h('th',{key:hd,style:{padding:"10px 14px",fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:0.5,textAlign:"left",background:"#f1f5f9"}},hd)))),
               h('tbody',null,
                 ...Object.entries(ESCALADO).map(([crit,p],i)=>{
                   const pri = PRIS.find(x=>x.id===crit);
                   return h('tr',{key:crit,style:{borderTop:"1px solid #f1f5f9",background:i%2===0?"white":"#fafafa"}},
                     h('td',{style:{padding:"10px 14px"}},h('span',{style:{display:"inline-block",padding:"2px 8px",borderRadius:20,fontSize:12,fontWeight:600,color:pri?.color,background:pri?.color+"22"}},pri?.label)),
-                    h('td',{style:{padding:"10px 14px",fontSize:13,color:"#374151"}},crit==="mega_urgente"?Math.round(p.recordatorio*1440)+" min":p.recordatorio+" día"+(p.recordatorio>1?"s":"")),
-                    h('td',{style:{padding:"10px 14px",fontSize:13,color:"#374151"}},crit==="mega_urgente"?Math.round(p.directivo*1440)+" min":p.directivo+" día"+(p.directivo>1?"s":"")));
+                    h('td',{style:{padding:"10px 14px",fontSize:13,color:"#374151"}},(p.dias||p.recordatorio||3)+" día"+((p.dias||p.recordatorio||3)>1?"s":"")),
+                    h('td',{style:{padding:"10px 14px",fontSize:13,color:"#374151"}},"Aparece como 'Fuera de plazo' en el mail diario"));
                 })))),
           h('div',{style:{background:"#eff6ff",border:"1.5px solid #bfdbfe",borderRadius:10,padding:12,fontSize:12,color:"#1d4ed8",lineHeight:1.6}},
-            "💡 Los plazos se cuentan desde la creación del reclamo. Si el ejecutor rechaza, el tiempo restante no se renueva — el intendente tiene menos tiempo para reasignar.")),
+            "💡 Los plazos se cuentan desde la creación del reclamo. Si un reclamo supera el tiempo asignado sin ser gestionado, figura como 'Fuera de plazo' en el mail diario al responsable.")),
 
         // TAB SISTEMA
         tab==="sistema" && h('div',null,
@@ -1579,6 +1609,62 @@ function CompletarView({recId, recs, setRecs, loaded}) {
         h('button',{onClick:submit,disabled:sending,style:{width:"100%",padding:"14px",background:sending?"#94a3b8":"linear-gradient(135deg,#22c55e,#15803d)",color:"white",border:"none",borderRadius:12,fontSize:15,fontWeight:700,cursor:"pointer"}},sending?"Enviando...":"✅ Confirmar resolución"))));
 }
 
+// ── VALIDACION DIRECTIVO VIEWS ───────────────────────────────────────────────
+function RechazarValidacionView({recId, recs, setRecs, loaded}) {
+  const rec = recs.find(r=>r.id===Number(recId));
+  const [motivo,setMotivo] = useState("");
+  const [err,setErr] = useState(false);
+  const [done,setDone] = useState(false);
+  const [sending,setSending] = useState(false);
+
+  if(!loaded) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:18}},"Cargando...");
+  if(!rec) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
+    h('div',{style:{background:"white",borderRadius:20,padding:40,maxWidth:420,width:"100%",textAlign:"center"}},
+      h('div',{style:{fontSize:48,marginBottom:16}},"🔍"),h('p',{style:{color:"#64748b"}},"Reclamo no encontrado.")));
+  if(done) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
+    h('div',{style:{background:"white",borderRadius:20,padding:40,maxWidth:420,width:"100%",textAlign:"center"}},
+      h('div',{style:{fontSize:64,marginBottom:16}},"🔄"),
+      h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:24,color:"#0f172a",margin:"0 0 12px"}},"Reclamo reabierto"),
+      h('p',{style:{color:"#64748b",fontSize:15,lineHeight:1.6}},"El reclamo fue reabierto. El responsable fue notificado con tu comentario."),
+      h('p',{style:{color:"#94a3b8",fontSize:13,marginTop:16}},"Podés cerrar esta ventana.")));
+
+  const submit = async () => {
+    if(!motivo.trim()){setErr(true);return;}
+    setSending(true);
+    const appUrl = window.location.href.split("?")[0];
+    const updated = {...rec, estadoAvance:"bajo_analisis",
+      descripcionResolucion:"",
+      comentarios:[...(rec.comentarios||[]),{texto:`Directivo rechazó la resolución. Motivo: ${motivo}`,fecha:new Date().toISOString(),autor:"Directivo"}]};
+    await sbUpsert(updated);
+    setRecs(prev=>prev.map(r=>r.id===rec.id?updated:r));
+    const respMail = getResponsableMail(rec.cat);
+    if(respMail) await sendEmail({to:respMail,
+      subject:`[Club] 🔄 Resolución rechazada por directivo — ${rec.numero}`,
+      body:`El directivo rechazó la resolución del reclamo ${rec.numero} (${rec.sector}).
+
+Motivo: ${motivo}
+
+El reclamo fue reabierto. Las fechas originales se mantienen.`});
+    setSending(false); setDone(true);
+  };
+
+  return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",padding:"20px 16px 40px"}},
+    h('div',{style:{textAlign:"center",marginBottom:24,paddingTop:20}},
+      h('div',{style:{fontSize:11,letterSpacing:3,color:"#f9a8d4",textTransform:"uppercase",marginBottom:8}},"Validación de Directivo"),
+      h('h1',{style:{fontFamily:"'Playfair Display',serif",fontSize:26,color:"white",fontWeight:900}},rec.numero),
+      h('div',{style:{width:40,height:3,background:"#ef4444",margin:"10px auto 0",borderRadius:2}})),
+    h('div',{style:{maxWidth:480,margin:"0 auto"}},
+      h('div',{style:{background:"white",borderRadius:16,padding:"24px 20px"}},
+        h('div',{style:{background:"#f8fafc",borderRadius:10,padding:12,marginBottom:16,fontSize:13}},
+          h('div',{style:{fontWeight:600,color:"#1e293b",marginBottom:4}},rec.sector+" — "+rec.sub),
+          h('div',{style:{color:"#64748b",marginBottom:6}},rec.desc),
+          rec.descripcionResolucion && h('div',{style:{background:"#f0fdf4",borderRadius:8,padding:"8px 10px",fontSize:12,color:"#15803d"}},"Resolución: "+rec.descripcionResolucion)),
+        h('div',{style:{marginBottom:16}},
+          h('label',{style:{display:"block",fontSize:12,fontWeight:600,color:err?"#dc2626":"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},"Motivo del rechazo *"),
+          h('textarea',{value:motivo,onChange:e=>{setMotivo(e.target.value);setErr(false);},rows:4,placeholder:"Explicá por qué la resolución no fue satisfactoria...",style:{width:"100%",padding:"10px 14px",borderRadius:8,border:err?"2px solid #ef4444":"1.5px solid #e2e8f0",fontSize:14,resize:"vertical",outline:"none",boxSizing:"border-box"}})),
+        h('button',{onClick:submit,disabled:sending,style:{width:"100%",padding:"14px",background:sending?"#94a3b8":"linear-gradient(135deg,#ef4444,#dc2626)",color:"white",border:"none",borderRadius:12,fontSize:15,fontWeight:700,cursor:"pointer"}},sending?"Enviando...":"🔄 Rechazar y reabrir reclamo"))));
+}
+
 // ── CALIFICAR VIEW ────────────────────────────────────────────────────────
 function CalificarView({recId, recs, setRecs, loaded}) {
   const rec = recs.find(r=>r.id===recId);
@@ -1692,8 +1778,12 @@ function App() {
   const _params = new URLSearchParams(window.location.search);
   const _segParam  = _params.get("seguimiento");
   const _calParam  = _params.get("calificar");
-  const _compParam = _params.get("completar");
+  const _compParam  = _params.get("completar");
+  const _valParam   = _params.get("validar");
+  const _rechValParam = _params.get("rechazar_validacion");
   const _initView  = _segParam  ? "seguimiento_"+_segParam
+    : _valParam   ? "loading"
+    : _rechValParam ? "rechazar_val_"+_rechValParam
     : _compParam  ? "completar_"+_compParam
     : _calParam   ? "calificar_"+_calParam
     : _params.get("confirmar") ? "loading"
@@ -1716,6 +1806,8 @@ function App() {
       const seguimientoN = params.get("seguimiento");
       const calificarId  = params.get("calificar");
       const completarId  = params.get("completar");
+      const validarId    = params.get("validar");
+      const rechazarValId = params.get("rechazar_validacion");
 
       const lista = await sbGetAll();
 
@@ -1737,6 +1829,25 @@ function App() {
         const r=lista.find(r=>String(r.id)===rechazarId);
         ls.set("pendingRechazar",{id:rechazarId,rec:r});
         setView("rechazar");
+      } else if(validarId){
+        const r=lista.find(r=>String(r.id)===validarId);
+        if(r){
+          const appUrl=window.location.href.split("?")[0];
+          const updated={...r,estadoAvance:"completada",
+            comentarios:[...(r.comentarios||[]),{texto:"Resolución validada por directivo.",fecha:new Date().toISOString(),autor:"Directivo"}]};
+          await sbUpsert(updated);
+          setRecs(lista.map(x=>x.id===updated.id?updated:x));
+          // Notify user with calificar link
+          const catConf=CATS[r.cat];
+          const mensajes={infraestructura:"nuestro equipo de obras revisó y resolvió el inconveniente",mantenimiento:"nuestro equipo de mantenimiento preventivo atendió el problema",limpieza:"nuestro equipo de limpieza atendió la situación",preparacion:"el espacio fue preparado correctamente",servicios:"nuestro equipo de atención al socio gestionó tu consulta",cuotas:"nuestro equipo administrativo resolvió tu consulta"};
+          const msgCat=mensajes[r.cat]||"nuestro equipo atendió y resolvió el inconveniente";
+          if(r.email) await sendEmail({to:r.email,
+            subject:`[Club] ✅ Tu reclamo fue resuelto — ${r.numero}`,
+            body:`Hola ${r.nombre},\n\nNos alegra informarte que el problema que reportaste en ${r.sector} fue resuelto. ${msgCat}.\n\n${r.descripcionResolucion?"Lo que se hizo:\n"+r.descripcionResolucion+"\n\n":""}Cuando tengas un momento, evaluá si el reclamo ha sido resuelto correctamente y calificá la atención. En caso de no estar conforme podés reabrir el ticket:\n${appUrl}?calificar=${r.id}\n\nGracias por ayudarnos a mejorar el club.\n\n— Equipo de Intendencia`});
+        }
+        setView("validar_ok");
+      } else if(rechazarValId){
+        setView("rechazar_val_"+rechazarValId);
       } else if(completarId){
         setView("completar_"+completarId);
       } else if(calificarId){
@@ -1748,8 +1859,9 @@ function App() {
         if(r){
           const updated={...r,estadoAvance:"bajo_analisis",
             reabiertaEn:new Date().toISOString(),
-            createdAt:new Date().toISOString(), // reset escalado timer
-            comentarios:[...(r.comentarios||[]),{texto:"Reclamo reabierto por el usuario — requiere revisión.",fecha:new Date().toISOString(),autor:"Sistema"}]};
+            // Keep original createdAt and dates — times don't reset on reopen
+            descripcionResolucion:"",
+            comentarios:[...(r.comentarios||[]),{texto:"Reclamo reabierto — requiere revisión. Fechas originales se mantienen.",fecha:new Date().toISOString(),autor:"Sistema"}]};
           await sbUpsert(updated);
           // Notify responsable
           const respMail = getResponsableMail(r.cat);
@@ -1861,6 +1973,13 @@ Te avisaremos cuando esté resuelto.
       h('p',{style:{color:"#64748b",fontSize:15,lineHeight:1.6}},"Tu respuesta fue registrada. El responsable fue notificado y reasignará la tarea."),
       h('p',{style:{color:"#94a3b8",fontSize:13,marginTop:16}},"Podés cerrar esta ventana.")));
 
+  if(view==="validar_ok") return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
+    h('div',{style:{background:"white",borderRadius:20,padding:40,maxWidth:420,width:"100%",textAlign:"center"}},
+      h('div',{style:{fontSize:64,marginBottom:16}},"✅"),
+      h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:24,color:"#0f172a",margin:"0 0 12px"}},"Resolución validada"),
+      h('p',{style:{color:"#64748b",fontSize:15,lineHeight:1.6}},"La resolución fue aprobada. El usuario recibirá el email para calificar la atención."),
+      h('p',{style:{color:"#94a3b8",fontSize:13,marginTop:16}},"Podés cerrar esta ventana.")));
+  if(view && view.startsWith("rechazar_val_")) { return h(RechazarValidacionView,{recId:view.replace("rechazar_val_",""),recs,setRecs,loaded}); }
   if(view && view.startsWith("completar_")) { return h(CompletarView,{recId:view.replace("completar_",""),recs,setRecs,loaded}); }
   if(view && view.startsWith("calificar_")) { return h(CalificarView,{recId:Number(view.replace("calificar_","")),recs,setRecs,loaded}); }
 
@@ -1951,6 +2070,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
+
 
 
 
