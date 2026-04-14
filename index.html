@@ -369,12 +369,7 @@ function FormularioSocio({onSubmit, reclamos}) {
       if (["servicios","cuotas"].includes(v)) extra.sector = "Administración";
     }
     setF(p => ({...p,[k]:v,...extra}));
-    const sec = k==="sector"?v : (extra.sector||f.sector);
-    const cat = k==="cat"?v:f.cat;
-    if (sec&&cat) {
-      const d=reclamos.find(r=>r.sector===sec&&r.cat===cat&&!["completada","consolidada","sin_resolucion","vinculado_proyecto"].includes(r.estadoAvance));
-      setDup(d||null);
-    }
+    // Duplicate detection removed from public form — handled internally by panel
   };
 
   const validate = () => {
@@ -465,9 +460,7 @@ function FormularioSocio({onSubmit, reclamos}) {
             h('input',{value:f.celular,onChange:e=>set("celular",e.target.value),placeholder:"Ej: 11-1234-5678",style:{...iS(false),paddingLeft:38},type:"tel"}))),
         h('div',{style:{height:1,background:"rgba(255,255,255,0.1)",marginBottom:18}}),
         // Duplicado warning
-        dup && h('div',{style:{background:"rgba(234,179,8,0.15)",border:"1.5px solid #eab308",borderRadius:10,padding:"12px 16px",marginBottom:16}},
-          h('div',{style:{color:"#fbbf24",fontWeight:700,fontSize:13,marginBottom:4}},"⚠️ Ya existe un reclamo similar abierto"),
-          h('div',{style:{color:"#fcd34d",fontSize:12}},dup.numero+" · "+dup.sector+". Podés continuar si el problema es diferente.")),
+
         // Categoría PRIMERO
         h('div',{style:{marginBottom:14}},lbl("Tipo de problema *",err.cat),
           h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}},
@@ -944,7 +937,8 @@ Resolución: ${descripcion||"—"}`});
             h('button',{onClick:async()=>{
               if(!f.descripcionResolucion?.trim()){setSaveErr("La descripción de lo realizado es obligatoria para completar.");return;}
               if(!confirm("¿Marcar como completado y enviar al directivo para validación?")) return;
-              await handleSave();
+              set("estadoAvance","completada");
+              setTimeout(()=>save(),50);
             },style:{width:"100%",padding:"13px",background:"linear-gradient(135deg,#22c55e,#15803d)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700}},"✅ Marcar como completado — enviar a validación")),
           ["esperando_validacion"].includes(f.estadoAvance) && h('div',{style:{background:"#f5f3ff",border:"1.5px solid #ddd6fe",borderRadius:8,padding:"10px 14px",fontSize:12,color:"#6d28d9",marginBottom:8}},"🔵 Esperando validación del directivo. Una vez aprobado, el usuario recibirá el mail de calificación.")),
 
@@ -2092,6 +2086,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
+
 
 
 
