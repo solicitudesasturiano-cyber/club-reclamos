@@ -632,6 +632,7 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
           ? `<div style="background:#fffbeb;border-left:4px solid #f59e0b;padding:10px 14px;border-radius:0 8px 8px 0;margin-bottom:14px"><div style="font-size:11px;font-weight:700;color:#92400e;margin-bottom:4px;text-transform:uppercase">Instrucciones del responsable</div><div style="color:#78350f;font-size:13px">${f.nuevoComentario.trim()}</div></div>`
           : '';
         const horaInfo = (isSameDay && f.horaInicio) ? `<tr><td style="padding:4px 0;color:#64748b;width:120px">Horario:</td><td style="font-weight:600">${f.horaInicio}${f.horaFin?' a '+f.horaFin:''}</td></tr>` : '';
+        const calendarUrl = `${appUrl}?calendar=${rec.id}&mail=${encodeURIComponent(ejCurrent.mail)}`;
         const ejHtml = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#f8fafc;padding:20px">
           <div style="background:#0f172a;padding:20px 24px;border-radius:12px 12px 0 0">
             <div style="color:#93c5fd;font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-bottom:4px">Asturiano — Sistema de Reclamos</div>
@@ -640,7 +641,7 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
           <div style="background:white;padding:24px;border-radius:0 0 12px 12px;border:1px solid #e2e8f0">
             <p style="color:#475569;font-size:15px;margin:0 0 16px">Hola <strong>${ejCurrent.nombre}</strong>, se te asignó la siguiente tarea:</p>
             ${comentarioHtml}
-            <div style="background:#f8fafc;border-radius:8px;padding:14px;margin-bottom:16px">
+            <div style="background:#f8fafc;border-radius:8px;padding:14px;margin-bottom:20px">
               <table style="width:100%;font-size:13px">
                 <tr><td style="padding:4px 0;color:#64748b;width:120px">Numero:</td><td style="font-weight:700;font-family:monospace;color:#3b82f6">${rec.numero}</td></tr>
                 <tr><td style="padding:4px 0;color:#64748b">Sector:</td><td style="font-weight:600">${rec.sector}</td></tr>
@@ -652,15 +653,15 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
               </table>
               ${fotosHtml}
             </div>
-            <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
-              <a href="${appUrl}?confirmar=${rec.id}&mail=${encodeURIComponent(ejCurrent.mail)}" style="display:inline-block;padding:10px 20px;background:#22c55e;color:white;text-decoration:none;border-radius:8px;font-weight:700;font-size:14px">Confirmar tarea</a>
-              <a href="${appUrl}?rechazar=${rec.id}&mail=${encodeURIComponent(ejCurrent.mail)}" style="display:inline-block;padding:10px 20px;background:#ef4444;color:white;text-decoration:none;border-radius:8px;font-weight:700;font-size:14px">Rechazar tarea</a>
+            <table style="width:100%;margin-bottom:16px"><tr>
+              <td style="padding-right:8px"><a href="${appUrl}?confirmar=${rec.id}&mail=${encodeURIComponent(ejCurrent.mail)}" style="display:block;padding:12px;background:#22c55e;color:white;text-decoration:none;border-radius:8px;font-weight:700;font-size:14px;text-align:center">Confirmar tarea</a></td>
+              <td><a href="${appUrl}?rechazar=${rec.id}&mail=${encodeURIComponent(ejCurrent.mail)}" style="display:block;padding:12px;background:#ef4444;color:white;text-decoration:none;border-radius:8px;font-weight:700;font-size:14px;text-align:center">Rechazar tarea</a></td>
+            </tr></table>
+            <div style="border-top:1px solid #f1f5f9;padding-top:14px">
+              <a href="${calendarUrl}" style="display:inline-block;padding:10px 18px;background:#3b82f6;color:white;text-decoration:none;border-radius:8px;font-weight:600;font-size:13px">Agregar al calendario (requiere confirmar primero)</a>
             </div>
-            <div style="border-top:1px solid #f1f5f9;padding-top:14px;color:#94a3b8;font-size:12px">
-              Los links para agregar al calendario estarán disponibles una vez que confirmes la tarea.
-            </div>
-            <div style="margin-top:14px;padding:10px 14px;background:#f0fdf4;border-radius:8px;font-size:12px;color:#15803d">
-              Cuando completes la tarea, confirma la resolucion: <a href="${appUrl}?completar=${rec.id}" style="color:#15803d;font-weight:700">Marcar como completado</a>
+            <div style="margin-top:12px;padding:10px 14px;background:#f0fdf4;border-radius:8px;font-size:12px;color:#15803d">
+              Cuando completes la tarea: <a href="${appUrl}?completar=${rec.id}" style="color:#15803d;font-weight:700">Marcar como completado</a>
             </div>
           </div>
           <div style="text-align:center;color:#94a3b8;font-size:11px;margin-top:12px">Asturiano — Sistema de Reclamos</div>
@@ -936,7 +937,7 @@ Resolución: ${descripcion||"—"}`});
                   style:{flex:1,padding:"6px",borderRadius:8,border:f.tipoEjecutor===tipo?"2px solid #3b82f6":"2px solid #e2e8f0",background:f.tipoEjecutor===tipo?"#eff6ff":"white",color:f.tipoEjecutor===tipo?"#1d4ed8":"#64748b",cursor:"pointer",fontSize:12,fontWeight:600}},lbl))),
             f.tipoEjecutor==="interno"
               ? h('div',{style:{display:"flex",gap:6}},
-                  h('select',{value:"",onChange:e=>{if(!e.target.value)return;const ej=ejecutores.find(x=>x.mail===e.target.value);if(ej&&!(f.ejecutores_lista||[]).find(x=>x.mail===ej.mail)){const l=[...(f.ejecutores_lista||[]),ej];set("ejecutores_lista",l);set("ejecutorMail",l[0].mail);set("ejecutorNombre",l.map(x=>x.nombre).join(", "));}e.target.value="";},style:{...aS(),flex:1}},
+                  h('select',{value:"",onChange:e=>{if(!e.target.value)return;const ej=ejecutores.find(x=>x.mail===e.target.value);if(ej&&!(f.ejecutores_lista||[]).find(x=>x.mail===ej.mail)){const ejConEstado={...ej,confirmado:false,rechazado:false,fechaConfirmacion:null};const l=[...(f.ejecutores_lista||[]),ejConEstado];set("ejecutores_lista",l);set("ejecutorMail",l[0].mail);set("ejecutorNombre",l.map(x=>x.nombre).join(", "));}e.target.value="";},style:{...aS(),flex:1}},
                     h('option',{value:""},"+ Agregar ejecutor..."),
                     ...ejecutores.map(e=>h('option',{key:e.mail,value:e.mail},e.nombre))))
               : h('div',{style:{display:"flex",flexDirection:"column",gap:6}},
@@ -1608,14 +1609,17 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
                       h('div',{style:{fontWeight:600,color:"#1e293b",fontSize:12}},r.ejecutorNombre),
                       h('span',{style:{fontSize:10,color:bc,fontWeight:600}},badge));
                   }
-                  return h('div',{style:{display:"flex",flexDirection:"column",gap:3}},
-                    ...lista.map((ej,i)=>h('div',{key:i},
-                      h('span',{style:{fontSize:11,color:"#1e293b",fontWeight:500}},ej.nombre+" "),
-                      ej.rechazado
-                        ? h('span',{style:{fontSize:10,color:"#dc2626",fontWeight:700}},"✗")
-                        : ej.confirmado
-                          ? h('span',{style:{fontSize:10,color:"#15803d",fontWeight:700}},"✓")
-                          : h('span',{style:{fontSize:10,color:"#f97316",fontWeight:700}},"?"))));
+                  return h('div',{style:{display:"flex",flexDirection:"column",gap:4}},
+                    ...lista.map((ej,i)=>{
+                      const isConf = ej.confirmado===true;
+                      const isRej = ej.rechazado===true;
+                      const color = isRej?"#dc2626":isConf?"#15803d":"#f97316";
+                      const icon = isRej?"✗":isConf?"✓":"?";
+                      const bg = isRej?"#fef2f2":isConf?"#f0fdf4":"#fff7ed";
+                      return h('div',{key:i,style:{display:"flex",alignItems:"center",gap:4}},
+                        h('span',{style:{fontSize:11,color:"#1e293b",fontWeight:500}},ej.nombre),
+                        h('span',{style:{display:"inline-block",padding:"1px 6px",borderRadius:4,fontSize:10,fontWeight:700,color,background:bg}},icon));
+                    }));
                 })()),
               h('td',{style:{padding:"11px 10px"}},(() => {
                 const acc = getAccionRequerida(r);
@@ -1913,6 +1917,8 @@ function App() {
       const calificarId  = params.get("calificar");
       const completarId  = params.get("completar");
       const validarId    = params.get("validar");
+      const calendarId   = params.get("calendar");
+      const calendarMail = params.get("mail");
       const rechazarValId = params.get("rechazar_validacion");
 
       const lista = await sbGetAll();
@@ -1963,6 +1969,28 @@ function App() {
         setView("validar_ok");
       } else if(rechazarValId){
         setView("rechazar_val_"+rechazarValId);
+      } else if(calendarId){
+        // Check if executor confirmed before allowing calendar
+        const r=lista.find(r=>String(r.id)===calendarId);
+        if(r){
+          const ejLista = r.ejecutores_lista||[];
+          const ejMatch = ejLista.find(e=>e.mail===calendarMail);
+          const hasConfirmed = ejMatch ? ejMatch.confirmado : r.ejecutorConfirmado;
+          if(hasConfirmed){
+            // Generate and download ICS with both events
+            const s = (r.fechaInicioEsperado||r.createdAt?.split("T")[0]||"").replace(/-/g,"");
+            const e2 = (r.fechaCierre||s).replace(/-/g,"");
+            const appU = window.location.href.split("?")[0];
+            const now = new Date().toISOString().replace(/[-:]/g,"").split(".")[0]+"Z";
+            const ics = `BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//Asturiano//Reclamos//ES\nBEGIN:VEVENT\nUID:tarea-${r.id}@asturiano\nDTSTAMP:${now}\nDTSTART;VALUE=DATE:${s}\nDTEND;VALUE=DATE:${e2||s}\nSUMMARY:Tarea ${r.sector} - ${r.numero}\nDESCRIPTION:${r.sub}\\n${r.desc}\\nCompletar: ${appU}?completar=${r.id}\nEND:VEVENT\nBEGIN:VEVENT\nUID:recordatorio-${r.id}@asturiano\nDTSTAMP:${now}\nDTSTART;VALUE=DATE:${e2||s}\nDTEND;VALUE=DATE:${e2||s}\nSUMMARY:Recordatorio cierre - ${r.numero}\nDESCRIPTION:Confirmar resolucion: ${appU}?completar=${r.id}\nEND:VEVENT\nEND:VCALENDAR`;
+            const blob = new Blob([ics],{type:"text/calendar"});
+            const url2 = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href=url2; a.download=`tarea-${r.numero}.ics`; a.click();
+            URL.revokeObjectURL(url2);
+          }
+        }
+        setView("calendar_result_"+(calendarId)+"_"+(calendarMail||""));
       } else if(completarId){
         setView("completar_"+completarId);
       } else if(calificarId){
@@ -2125,6 +2153,25 @@ Te avisaremos cuando esté resuelto.
       h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:24,color:"#0f172a",margin:"0 0 12px"}},"Resolución validada"),
       h('p',{style:{color:"#64748b",fontSize:15,lineHeight:1.6}},"La resolución fue aprobada. El usuario recibirá el email para calificar la atención."),
       h('p',{style:{color:"#94a3b8",fontSize:13,marginTop:16}},"Podés cerrar esta ventana.")));
+  if(view && view.startsWith("calendar_result_")) {
+    const parts = view.replace("calendar_result_","").split("_");
+    const cId = parts[0];
+    const cMail = parts.slice(1).join("_");
+    const r = recs.find(r=>String(r.id)===cId);
+    const ejLista = r?.ejecutores_lista||[];
+    const ejMatch = ejLista.find(e=>e.mail===cMail);
+    const hasConfirmed = ejMatch ? ejMatch.confirmado : r?.ejecutorConfirmado;
+    return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
+      h('div',{style:{background:"white",borderRadius:20,padding:40,maxWidth:440,width:"100%",textAlign:"center"}},
+        h('div',{style:{fontSize:64,marginBottom:16}},hasConfirmed?"📅":"⚠️"),
+        h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:24,color:"#0f172a",margin:"0 0 12px"}},
+          hasConfirmed?"Eventos descargados":"Primero debés confirmar"),
+        h('p',{style:{color:"#64748b",fontSize:15,lineHeight:1.6}},
+          hasConfirmed
+            ? "Se descargó el archivo .ics con los 2 eventos. Abrilo para agregarlos a tu calendario (Google, Apple, Outlook)."
+            : "Para agregar la tarea al calendario, primero debés confirmar que la realizarás. Usá el link de confirmación en el mail que recibiste."),
+        h('p',{style:{color:"#94a3b8",fontSize:13,marginTop:16}},"Podés cerrar esta ventana.")));
+  }
   if(view && view.startsWith("rechazar_val_")) { return h(RechazarValidacionView,{recId:view.replace("rechazar_val_",""),recs,setRecs,loaded}); }
   if(view && view.startsWith("completar_")) { return h(CompletarView,{recId:view.replace("completar_",""),recs,setRecs,loaded}); }
   if(view && view.startsWith("calificar_")) { return h(CalificarView,{recId:Number(view.replace("calificar_","")),recs,setRecs,loaded}); }
