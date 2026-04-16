@@ -285,13 +285,14 @@ async function sbClearAll() {
 }
 
 // ── EMAIL ──────────────────────────────────────────────────────────────────
-async function sendEmail({to, cc, subject, body}) {
+async function sendEmail({to, cc, subject, body, htmlBody}) {
   const cfg = ls.get("config") || {};
   const url = cfg.scriptUrl || SCRIPT_URL;
   const toArr = (Array.isArray(to)?to:[to]).filter(Boolean);
   const ccArr = cc?(Array.isArray(cc)?cc:[cc]).filter(Boolean):[];
   try {
-    const r = await fetch(url, {method:"POST", headers:{"Content-Type":"text/plain"}, body:JSON.stringify({to:toArr,cc:ccArr,subject,body})});
+    const payload = {to:toArr,cc:ccArr,subject,body:body||"",htmlBody:htmlBody||null};
+    const r = await fetch(url, {method:"POST", headers:{"Content-Type":"text/plain"}, body:JSON.stringify(payload)});
     const d = await r.json();
     console.log("Email:", d);
     return d;
@@ -607,10 +608,14 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
     if(f.ejecutorMail && f.ejecutorMail!==rec.ejecutorMail){
       const appUrl=window.location.href.split("?")[0];
       const catRespMails=(getCatCfg(rec.cat).responsables||[]).map(x=>x.mail);
-    const cc=[...catRespMails].filter(e=>e&&e!==f.ejecutorMail);
-      await sendEmail({to:f.ejecutorMail,cc,
+      // Send individual email per executor with their own confirm link
+      const ejsToEmail = (f.ejecutores_lista||[]).filter(ej=>ej.mail&&!ej.mail.includes("externo"));
+      const emailTargets = ejsToEmail.length > 0 ? ejsToEmail : [{mail:f.ejecutorMail,nombre:f.ejecutorNombre}];
+      for(const ejCurrent of emailTargets) {
+      const cc=[...catRespMails].filter(e=>e&&e!==ejCurrent.mail);
+      await sendEmail({to:ejCurrent.mail,cc,
         subject:`[Asturiano] Tarea asignada — ${rec.numero}: ${rec.sector}`,
-  body:(()=>{
+  htmlBody:(()=>{
         const isSameDay = f.fechaInicioEsperado && f.fechaCierre && f.fechaInicioEsperado===f.fechaCierre;
         const startDate = (f.fechaInicioEsperado||new Date().toISOString().split("T")[0]).replace(/-/g,"");
         const startTime = (isSameDay && f.horaInicio) ? "T"+f.horaInicio.replace(":","")+"00" : "";
@@ -622,7 +627,7 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
         const calReminderTitle = encodeURIComponent(`✅ Confirmar resolución — ${rec.numero}`);
         const calReminderDesc = encodeURIComponent(`Confirmar que la tarea ${rec.numero} fue completada:\n${appUrl}?completar=${rec.id}`);
         const calReminderLink = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${calReminderTitle}&dates=${endDate}/${endDate}&details=${calReminderDesc}`;
-        const ejNombres = (f.ejecutores_lista||[]).length > 1 ? (f.ejecutores_lista||[]).map(e=>e.nombre).join(" y ") : f.ejecutorNombre;
+        const ejNombres = ejCurrent.nombre || f.ejecutorNombre;
         const comentarioEj = f.nuevoComentario?.trim() ? `\n\n💬 INSTRUCCIONES DEL RESPONSABLE:\n${f.nuevoComentario.trim()}` : "";
         const fotosReclamo = (rec.adjuntos||[]).filter(a=>a.url);
         const fotosInfo = fotosReclamo.length > 0 ? `\n\n📎 FOTOS DEL PROBLEMA:\n${fotosReclamo.map(a=>a.url).join("\n")}` : "";
@@ -654,8 +659,8 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
               ${fotosHtml}
             </div>
             <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
-              <a href="${appUrl}?confirmar=${rec.id}" style="display:inline-block;padding:10px 20px;background:#22c55e;color:white;text-decoration:none;border-radius:8px;font-weight:700;font-size:14px">Confirmar tarea</a>
-              <a href="${appUrl}?rechazar=${rec.id}" style="display:inline-block;padding:10px 20px;background:#ef4444;color:white;text-decoration:none;border-radius:8px;font-weight:700;font-size:14px">Rechazar tarea</a>
+              <a href="${appUrl}?confirmar=${rec.id}&mail=${encodeURIComponent(ejCurrent.mail)}" style="display:inline-block;padding:10px 20px;background:#22c55e;color:white;text-decoration:none;border-radius:8px;font-weight:700;font-size:14px">Confirmar tarea</a>
+              <a href="${appUrl}?rechazar=${rec.id}&mail=${encodeURIComponent(ejCurrent.mail)}" style="display:inline-block;padding:10px 20px;background:#ef4444;color:white;text-decoration:none;border-radius:8px;font-weight:700;font-size:14px">Rechazar tarea</a>
             </div>
             <div style="border-top:1px solid #f1f5f9;padding-top:14px">
               <a href="${calLink}" style="display:inline-block;padding:8px 16px;background:#3b82f6;color:white;text-decoration:none;border-radius:8px;font-size:13px;font-weight:600;margin-right:8px">Agregar al calendario</a>
@@ -669,6 +674,7 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
         </div>`;
         return ejHtml;
       })()});
+      } // end for ejCurrent
     }
     const fechaCierreConfirmada = f.fechaCierre ? f.fechaCierre : rec.fechaCierreConfirmada||null;
     // Upload new adjuntosResolucion that still have base64 data
@@ -903,7 +909,10 @@ Resolución: ${descripcion||"—"}`});
               ...(f.ejecutores_lista||[]).map((ej,i)=>h('div',{key:i,style:{display:"flex",alignItems:"center",gap:8,background:"#f8fafc",borderRadius:8,padding:"8px 12px",fontSize:13}},
                 h('div',{style:{flex:1}},
                   h('div',{style:{fontWeight:600,color:"#1e293b"}},ej.nombre),
-                  h('div',{style:{fontSize:12,color:"#64748b"}},ej.mail||ej.telefono||"")),
+                  h('div',{style:{fontSize:12,color:"#64748b"}},ej.mail||ej.telefono||""),
+                  ej.rechazado ? h('div',{style:{fontSize:11,color:"#dc2626",fontWeight:600,marginTop:2}},"❌ Rechazó — reasignar")
+                  : ej.confirmado ? h('div',{style:{fontSize:11,color:"#22c55e",fontWeight:600,marginTop:2}},"✅ Confirmó "+fdt(ej.fechaConfirmacion))
+                  : h('div',{style:{fontSize:11,color:"#f97316",marginTop:2}},"⏳ Sin respuesta")),
                 h('button',{onClick:()=>{const l=[...(f.ejecutores_lista||[])];l.splice(i,1);set("ejecutores_lista",l);if(l.length===0){set("ejecutorMail","");set("ejecutorNombre","");}else{set("ejecutorMail",l[0].mail&&l[0].mail!=="tercero@externo"?l[0].mail:"");set("ejecutorNombre",l.map(e=>e.nombre).join(", "));}},style:{background:"none",border:"none",cursor:"pointer",color:"#ef4444",fontSize:14}},"✕")))),
             // Add executor
             h('div',{style:{display:"flex",gap:6,marginBottom:8}},
@@ -1542,7 +1551,7 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
     // Lista
     mainTab==="reclamos" && view==="lista" && h('div',{style:{padding:"0 24px 24px",overflowX:"auto"}},
       h('table',{style:{width:"100%",borderCollapse:"separate",borderSpacing:"0 5px"}},
-        h('thead',null,h('tr',null,...["Nº","Fecha","Sector","Tipo","Detalle","Criticidad","Estado","Ejecutor","Acción","Cierre",""].map(hd=>
+        h('thead',null,h('tr',null,...["Nº","Fecha","Sector","Solicitante","Tipo","Detalle","Criticidad","Estado","Ejecutor","Acción","Cierre",""].map(hd=>
           h('th',{key:hd,style:{textAlign:"left",padding:"8px 10px",fontSize:11,color:"#94a3b8",fontWeight:600,letterSpacing:0.5,textTransform:"uppercase"}},hd)))),
         h('tbody',null,
           !filtrados.length && h('tr',null,h('td',{colSpan:12,style:{textAlign:"center",padding:40,color:"#94a3b8"}},"No hay reclamos")),
@@ -1555,6 +1564,9 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
                 r.reclamosHijos?.length > 0 && h('div',{style:{fontSize:10,color:"#8b5cf6",fontWeight:600,marginTop:2}},
                   "🔗 "+( r.reclamosHijos.length+1)+" reclamos")),
               h('td',{style:{padding:"11px 10px",fontSize:11,color:"#64748b",whiteSpace:"nowrap"}},fd(r.createdAt)),
+              h('td',{style:{padding:"11px 10px",fontSize:12,maxWidth:110}},
+                h('div',{style:{fontWeight:600,color:"#1e293b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},r.nombre||"—"),
+                h('div',{style:{fontSize:10,color:"#94a3b8"}},r.tipo||"")),
               h('td',{style:{padding:"11px 10px",fontSize:12,fontWeight:500,maxWidth:100}},r.sector),
               h('td',{style:{padding:"11px 10px",fontSize:13}},cat?.icon),
               h('td',{style:{padding:"11px 10px",fontSize:11,color:"#64748b",maxWidth:130,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},r.sub),
@@ -1867,9 +1879,18 @@ function App() {
       if(confirmarId){
         const r=lista.find(r=>String(r.id)===confirmarId);
         if(r){
-          const updated={...r,ejecutorConfirmado:true,ejecutorRechazado:false,
+          // Update individual executor in lista + global flag
+          const mailParam = params.get("mail") || r.ejecutorMail;
+          const ejListaUpdated = (r.ejecutores_lista||[]).map(ej=>
+            ej.mail===mailParam ? {...ej,confirmado:true,rechazado:false,fechaConfirmacion:new Date().toISOString()} : ej
+          );
+          const allConfirmed = ejListaUpdated.length>0 && ejListaUpdated.every(ej=>ej.confirmado||ej.rechazado);
+          const updated={...r,
+            ejecutorConfirmado: ejListaUpdated.some(ej=>ej.confirmado)||true,
+            ejecutorRechazado:false,
             fechaConfirmacion:new Date().toISOString(),
-            comentarios:[...(r.comentarios||[]),{texto:"Ejecutor confirmó responsabilidad.",fecha:new Date().toISOString(),autor:"Sistema"}]};
+            ejecutores_lista: ejListaUpdated,
+            comentarios:[...(r.comentarios||[]),{texto:"Ejecutor "+mailParam+" confirmó responsabilidad.",fecha:new Date().toISOString(),autor:"Sistema"}]};
           await sbUpsert(updated);
           const _cf=getCatCfg(r.cat);
           const _cfDest=[...(_cf.responsables||[]).map(x=>x.mail),...(_cf.directivos||[]).map(x=>x.mail)].filter(Boolean);
@@ -1878,7 +1899,8 @@ function App() {
         setView("confirm_ok");
       } else if(rechazarId){
         const r=lista.find(r=>String(r.id)===rechazarId);
-        ls.set("pendingRechazar",{id:rechazarId,rec:r});
+        const rechazarMail = params.get("mail") || r?.ejecutorMail;
+        ls.set("pendingRechazar",{id:rechazarId,rec:r,mail:rechazarMail});
         setView("rechazar");
       } else if(validarId){
         const r=lista.find(r=>String(r.id)===validarId);
@@ -2121,6 +2143,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
+
 
 
 
