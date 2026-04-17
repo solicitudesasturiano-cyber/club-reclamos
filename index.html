@@ -614,7 +614,8 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
       const appUrl=window.location.href.split("?")[0];
       const catRespMails=(getCatCfg(rec.cat).responsables||[]).map(x=>x.mail);
       for(const ejCurrent of ejsNuevos) {
-        const cc=[...catRespMails].filter(e=>e&&e!==ejCurrent.mail);
+        // CC: only category responsables, never other executors
+        const cc = catRespMails.filter(e => e && e !== ejCurrent.mail);
         const isSameDay = f.fechaInicioEsperado && f.fechaCierre && f.fechaInicioEsperado===f.fechaCierre;
         const startDate = (f.fechaInicioEsperado||new Date().toISOString().split("T")[0]).replace(/-/g,"");
         const startTime = (isSameDay && f.horaInicio) ? "T"+f.horaInicio.replace(":","")+"00" : "";
@@ -637,13 +638,17 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
         const calendarUrl = `${appUrl}?calendar=${rec.id}&mail=${encodeURIComponent(ejCurrent.mail)}`;
         const confirmarUrl = `${appUrl}?confirmar=${rec.id}&mail=${encodeURIComponent(ejCurrent.mail)}`;
         const rechazarUrl  = `${appUrl}?rechazar=${rec.id}&mail=${encodeURIComponent(ejCurrent.mail)}`;
+        const otrosEjs = ejsNuevos.filter(e=>e.mail!==ejCurrent.mail).map(e=>e.nombre);
+        const saludoNombres = otrosEjs.length > 0
+          ? `${ejCurrent.nombre} y ${otrosEjs.join(" y ")}`
+          : ejCurrent.nombre;
         const ejHtml = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#f8fafc;padding:20px">
           <div style="background:#0f172a;padding:20px 24px;border-radius:12px 12px 0 0">
             <div style="color:#93c5fd;font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-bottom:4px">Asturiano — Sistema de Reclamos</div>
             <div style="color:white;font-size:20px;font-weight:700">Tarea asignada — ${rec.numero}</div>
           </div>
           <div style="background:white;padding:24px;border-radius:0 0 12px 12px;border:1px solid #e2e8f0">
-            <p style="color:#475569;font-size:15px;margin:0 0 16px">Hola <strong>${ejCurrent.nombre}</strong>, se te asignó la siguiente tarea:</p>
+            <p style="color:#475569;font-size:15px;margin:0 0 16px">Hola <strong>${saludoNombres}</strong>, se les asign&#243; la siguiente tarea:</p>
             ${comentarioHtml}
             <div style="background:#f8fafc;border-radius:8px;padding:14px;margin-bottom:20px">
               <table style="width:100%;font-size:13px">
@@ -1629,7 +1634,6 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
                     }));
                 })()),
               h('td',{style:{padding:"11px 10px",minWidth:160}},(() => {
-                // Derive confirmation badge
                 const lista = r.ejecutores_lista||[];
                 let confBadge;
                 if(lista.length > 0) {
@@ -1647,11 +1651,15 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
                 } else {
                   confBadge = h(Badge,{color:"#6d28d9",label:"Esp. confirmación",sm:true});
                 }
-                // Acción requerida (timing/urgency)
+                // Solo mostrar acción si agrega info que el badge no muestra ya
                 const acc = getAccionRequerida(r);
+                const accRedundante = acc && (
+                  acc.label.includes("Esperando confirmación") ||
+                  acc.label.includes("Pendiente asignación")
+                );
                 return h('div',{style:{display:"flex",flexDirection:"column",gap:4}},
                   confBadge,
-                  acc && h('span',{style:{display:"inline-block",padding:"2px 7px",borderRadius:6,fontSize:10,fontWeight:700,color:acc.color,background:acc.bg,whiteSpace:"nowrap"}},acc.label));
+                  acc && !accRedundante && h('span',{style:{display:"inline-block",padding:"2px 7px",borderRadius:6,fontSize:10,fontWeight:700,color:acc.color,background:acc.bg,whiteSpace:"nowrap"}},acc.label));
               })()),
               h('td',{style:{padding:"11px 10px",fontSize:11,color:"#64748b",whiteSpace:"nowrap"}},fd(r.fechaCierreConfirmada||r.fechaCierre)),
               h('td',{style:{padding:"11px 10px",borderRadius:"0 10px 10px 0"}},
@@ -2298,7 +2306,6 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
-
 
 
 
