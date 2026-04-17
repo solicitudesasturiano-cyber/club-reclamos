@@ -604,11 +604,12 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
     const ejecutorMailOriginal = rec.ejecutorMailOriginal || (f.ejecutorMail !== rec.ejecutorMail ? f.ejecutorMail : rec.ejecutorMailOriginal);
 
     const fechaAsignacion = (f.ejecutorMail && f.ejecutorMail!==rec.ejecutorMail) ? new Date().toISOString() : rec.fechaAsignacion;
-    // Only send emails to executors that are NEWLY added (not already in rec)
-    const ejsNuevos = (f.ejecutores_lista||[]).filter(ej=>
+    // Only send emails to executors that are NEWLY added (not already in rec) — deduplicated
+    const ejsNuevosRaw = (f.ejecutores_lista||[]).filter(ej=>
       ej.mail && !ej.mail.includes("externo") &&
       !(rec.ejecutores_lista||[]).find(x=>x.mail===ej.mail)
     );
+    const ejsNuevos = ejsNuevosRaw.filter((ej,i,arr)=>arr.findIndex(x=>x.mail===ej.mail)===i);
     if(ejsNuevos.length > 0){
       const appUrl=window.location.href.split("?")[0];
       const catRespMails=(getCatCfg(rec.cat).responsables||[]).map(x=>x.mail);
@@ -634,6 +635,8 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
           : '';
         const horaInfo = (isSameDay && f.horaInicio) ? `<tr><td style="padding:4px 0;color:#64748b;width:120px">Horario:</td><td style="font-weight:600">${f.horaInicio}${f.horaFin?' a '+f.horaFin:''}</td></tr>` : '';
         const calendarUrl = `${appUrl}?calendar=${rec.id}&mail=${encodeURIComponent(ejCurrent.mail)}`;
+        const confirmarUrl = `${appUrl}?confirmar=${rec.id}&mail=${encodeURIComponent(ejCurrent.mail)}`;
+        const rechazarUrl  = `${appUrl}?rechazar=${rec.id}&mail=${encodeURIComponent(ejCurrent.mail)}`;
         const ejHtml = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#f8fafc;padding:20px">
           <div style="background:#0f172a;padding:20px 24px;border-radius:12px 12px 0 0">
             <div style="color:#93c5fd;font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-bottom:4px">Asturiano — Sistema de Reclamos</div>
@@ -646,28 +649,32 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
               <table style="width:100%;font-size:13px">
                 <tr><td style="padding:4px 0;color:#64748b;width:120px">Numero:</td><td style="font-weight:700;font-family:monospace;color:#3b82f6">${rec.numero}</td></tr>
                 <tr><td style="padding:4px 0;color:#64748b">Sector:</td><td style="font-weight:600">${rec.sector}</td></tr>
-                <tr><td style="padding:4px 0;color:#64748b">Tipo:</td><td>${rec.sub}</td></tr>
+                <tr><td style="padding:4px 0;color:#64748b">Tipo:</td><td>${cat?.label} &rsaquo; ${rec.sub}</td></tr>
                 <tr><td style="padding:4px 0;color:#64748b">Descripcion:</td><td>${rec.desc}</td></tr>
-                <tr><td style="padding:4px 0;color:#64748b">Fecha inicio:</td><td>${fd(f.fechaInicioEsperado||'')}</td></tr>
-                <tr><td style="padding:4px 0;color:#64748b">Fecha cierre:</td><td>${fd(f.fechaCierre)}</td></tr>
+                <tr><td style="padding:4px 0;color:#64748b">Fecha inicio:</td><td style="font-weight:600">${fd(f.fechaInicioEsperado||'')}</td></tr>
+                <tr><td style="padding:4px 0;color:#64748b">Fecha cierre:</td><td style="font-weight:600">${fd(f.fechaCierre)}</td></tr>
                 ${horaInfo}
               </table>
               ${fotosHtml}
             </div>
-            <table style="width:100%;margin-bottom:16px"><tr>
-              <td style="padding-right:8px"><a href="${appUrl}?confirmar=${rec.id}&mail=${encodeURIComponent(ejCurrent.mail)}" style="display:block;padding:12px;background:#22c55e;color:white;text-decoration:none;border-radius:8px;font-weight:700;font-size:14px;text-align:center">Confirmar tarea</a></td>
-              <td><a href="${appUrl}?rechazar=${rec.id}&mail=${encodeURIComponent(ejCurrent.mail)}" style="display:block;padding:12px;background:#ef4444;color:white;text-decoration:none;border-radius:8px;font-weight:700;font-size:14px;text-align:center">Rechazar tarea</a></td>
+            <div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:10px;text-transform:uppercase;letter-spacing:0.5px">&#10102; Confirm&#225; o rechaz&#225; la tarea</div>
+            <table style="width:100%;margin-bottom:20px"><tr>
+              <td style="padding-right:6px"><a href="${confirmarUrl}" style="display:block;padding:13px 10px;background:#22c55e;color:white;text-decoration:none;border-radius:8px;font-weight:700;font-size:14px;text-align:center">&#10003; Confirmar tarea</a></td>
+              <td style="padding-left:6px"><a href="${rechazarUrl}" style="display:block;padding:13px 10px;background:#ef4444;color:white;text-decoration:none;border-radius:8px;font-weight:700;font-size:14px;text-align:center">&#10007; Rechazar tarea</a></td>
             </tr></table>
-            <div style="border-top:1px solid #f1f5f9;padding-top:14px">
-              <a href="${calendarUrl}" style="display:inline-block;padding:10px 18px;background:#3b82f6;color:white;text-decoration:none;border-radius:8px;font-weight:600;font-size:13px">Agregar al calendario (requiere confirmar primero)</a>
+            <div style="border-top:1px solid #f1f5f9;padding-top:16px;margin-bottom:16px">
+              <div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">&#10103; Agend&#225; los eventos (solo si confirm&#225;s)</div>
+              <p style="font-size:12px;color:#64748b;margin:0 0 10px">Una vez que confirm&#233;s la tarea, us&#225; este link para agregar los 2 eventos a tu calendario: el per&#237;odo de trabajo y el recordatorio de cierre.</p>
+              <a href="${calendarUrl}" style="display:inline-block;padding:10px 18px;background:#3b82f6;color:white;text-decoration:none;border-radius:8px;font-weight:600;font-size:13px">&#128197; Agregar al calendario</a>
             </div>
-            <div style="margin-top:12px;padding:10px 14px;background:#f0fdf4;border-radius:8px;font-size:12px;color:#15803d">
-              Cuando completes la tarea: <a href="${appUrl}?completar=${rec.id}" style="color:#15803d;font-weight:700">Marcar como completado</a>
+            <div style="padding:10px 14px;background:#f0fdf4;border-radius:8px;font-size:12px;color:#15803d">
+              &#10003; Cuando completes la tarea: <a href="${appUrl}?completar=${rec.id}" style="color:#15803d;font-weight:700">Marcar como completada</a>
             </div>
           </div>
           <div style="text-align:center;color:#94a3b8;font-size:11px;margin-top:12px">Asturiano — Sistema de Reclamos</div>
         </div>`;
-        await sendEmail({to:ejCurrent.mail, cc, subject:`[Asturiano] Tarea asignada — ${rec.numero}: ${rec.sector}`, htmlBody:ejHtml, body:`Tarea asignada ${rec.numero} - ${rec.sector}. Confirmar: ${appUrl}?confirmar=${rec.id}&mail=${encodeURIComponent(ejCurrent.mail)}`});
+        const ejBodyPlain = `Tarea asignada: ${rec.numero} — ${rec.sector}\n\nSector: ${rec.sector}\nProblema: ${cat?.label} > ${rec.sub}\nDescripcion: ${rec.desc}\nFecha inicio: ${fd(f.fechaInicioEsperado||'')}\nFecha cierre: ${fd(f.fechaCierre)}\n\nCONFIRMAR: ${confirmarUrl}\nRECHAZAR: ${rechazarUrl}\n\nCalendario (solo si confirmaste): ${calendarUrl}`;
+        await sendEmail({to:ejCurrent.mail, cc, subject:`[Asturiano] Tarea asignada — ${rec.numero}: ${rec.sector}`, htmlBody:ejHtml, body:ejBodyPlain});
       }
     }
     const fechaCierreConfirmada = f.fechaCierre ? f.fechaCierre : rec.fechaCierreConfirmada||null;
@@ -1568,7 +1575,7 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
     // Lista
     mainTab==="reclamos" && view==="lista" && h('div',{style:{padding:"0 24px 24px",overflowX:"auto"}},
       h('table',{style:{width:"100%",borderCollapse:"separate",borderSpacing:"0 5px"}},
-        h('thead',null,h('tr',null,...["Nº","Fecha","Solicitante","Sector","Detalle","Criticidad (socio→int)","Ejecutor","Estado","Acción","Cierre",""].map(hd=>
+        h('thead',null,h('tr',null,...["Nº","Fecha","Solicitante","Sector","Detalle","Criticidad (socio→int)","Ejecutor","Estado / Acción","Cierre",""].map(hd=>
           h('th',{key:hd,style:{textAlign:"left",padding:"8px 10px",fontSize:11,color:"#94a3b8",fontWeight:600,letterSpacing:0.5,textTransform:"uppercase"}},hd)))),
         h('tbody',null,
           !filtrados.length && h('tr',null,h('td',{colSpan:12,style:{textAlign:"center",padding:40,color:"#94a3b8"}},"No hay reclamos")),
@@ -1603,45 +1610,48 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
                   const lista = r.ejecutores_lista||[];
                   if(lista.length === 0) {
                     if(!r.ejecutorNombre) return h('span',{style:{color:"#cbd5e1"}},"—");
-                    const badge = r.ejecutorRechazado ? "Rechazó" : r.ejecutorConfirmado ? "Confirmó ✅" : "Sin resp ⏳";
+                    const badge = r.ejecutorRechazado ? "Rechazó ✗" : r.ejecutorConfirmado ? "Confirmó ✓" : "Sin resp ⏳";
                     const bc = r.ejecutorRechazado ? "#dc2626" : r.ejecutorConfirmado ? "#15803d" : "#f97316";
                     return h('div',null,
                       h('div',{style:{fontWeight:600,color:"#1e293b",fontSize:12}},r.ejecutorNombre),
                       h('span',{style:{fontSize:10,color:bc,fontWeight:600}},badge));
                   }
-                  return h('div',{style:{display:"flex",flexDirection:"column",gap:4}},
+                  return h('div',{style:{display:"flex",flexDirection:"column",gap:3}},
                     ...lista.map((ej,i)=>{
                       const isConf = ej.confirmado===true;
-                      const isRej = ej.rechazado===true;
-                      const color = isRej?"#dc2626":isConf?"#15803d":"#f97316";
-                      const icon = isRej?"✗":isConf?"✓":"?";
-                      const bg = isRej?"#fef2f2":isConf?"#f0fdf4":"#fff7ed";
+                      const isRej  = ej.rechazado===true;
+                      const color  = isRej?"#dc2626":isConf?"#15803d":"#f97316";
+                      const icon   = isRej?"✗":isConf?"✓":"?";
+                      const bg     = isRej?"#fef2f2":isConf?"#f0fdf4":"#fff7ed";
                       return h('div',{key:i,style:{display:"flex",alignItems:"center",gap:4}},
                         h('span',{style:{fontSize:11,color:"#1e293b",fontWeight:500}},ej.nombre),
                         h('span',{style:{display:"inline-block",padding:"1px 6px",borderRadius:4,fontSize:10,fontWeight:700,color,background:bg}},icon));
                     }));
                 })()),
-              h('td',{style:{padding:"11px 10px"}},(() => {
+              h('td',{style:{padding:"11px 10px",minWidth:160}},(() => {
+                // Derive confirmation badge
                 const lista = r.ejecutores_lista||[];
+                let confBadge;
                 if(lista.length > 0) {
                   const allConf = lista.every(ej=>ej.confirmado===true);
                   const allRej  = lista.every(ej=>ej.rechazado===true);
-                  if(allConf) return h(Badge,{color:"#15803d",label:"Confirmado ✓",sm:true});
-                  if(allRej)  return h(Badge,{color:"#dc2626",label:"Rechazado ✗",sm:true});
-                  // Alguno pendiente → Esp. confirmación (independientemente de si alguno confirmó)
-                  return h(Badge,{color:"#6d28d9",label:"Esp. confirmación",sm:true});
+                  if(allConf)      confBadge = h(Badge,{color:"#15803d",label:"Confirmado ✓",sm:true});
+                  else if(allRej)  confBadge = h(Badge,{color:"#dc2626",label:"Rechazado ✗",sm:true});
+                  else             confBadge = h(Badge,{color:"#6d28d9",label:"Esp. confirmación",sm:true});
+                } else if(!r.ejecutorMail) {
+                  confBadge = h(Badge,{color:"#6b7280",label:"Pend. asignación",sm:true});
+                } else if(r.ejecutorRechazado) {
+                  confBadge = h(Badge,{color:"#dc2626",label:"Rechazado ✗",sm:true});
+                } else if(r.ejecutorConfirmado) {
+                  confBadge = h(Badge,{color:"#15803d",label:"Confirmado ✓",sm:true});
+                } else {
+                  confBadge = h(Badge,{color:"#6d28d9",label:"Esp. confirmación",sm:true});
                 }
-                // Sin lista → badge del estado del reclamo
-                if(!r.ejecutorMail) return h(Badge,{color:"#6b7280",label:"Pend. asignación",sm:true});
-                if(r.ejecutorRechazado) return h(Badge,{color:"#dc2626",label:"Rechazado ✗",sm:true});
-                if(r.ejecutorConfirmado) return h(Badge,{color:"#15803d",label:"Confirmado ✓",sm:true});
-                if(r.ejecutorMail) return h(Badge,{color:"#6d28d9",label:"Esp. confirmación",sm:true});
-                return h(Badge,{color:est?.color,label:est?.label,sm:true});
-              })()),
-              h('td',{style:{padding:"11px 10px"}},(() => {
+                // Acción requerida (timing/urgency)
                 const acc = getAccionRequerida(r);
-                if(!acc) return h('span',{style:{color:"#cbd5e1",fontSize:11}},"—");
-                return h('span',{style:{display:"inline-block",padding:"3px 8px",borderRadius:6,fontSize:11,fontWeight:700,color:acc.color,background:acc.bg,whiteSpace:"nowrap"}},acc.label);
+                return h('div',{style:{display:"flex",flexDirection:"column",gap:4}},
+                  confBadge,
+                  acc && h('span',{style:{display:"inline-block",padding:"2px 7px",borderRadius:6,fontSize:10,fontWeight:700,color:acc.color,background:acc.bg,whiteSpace:"nowrap"}},acc.label));
               })()),
               h('td',{style:{padding:"11px 10px",fontSize:11,color:"#64748b",whiteSpace:"nowrap"}},fd(r.fechaCierreConfirmada||r.fechaCierre)),
               h('td',{style:{padding:"11px 10px",borderRadius:"0 10px 10px 0"}},
@@ -2178,15 +2188,23 @@ Te avisaremos cuando esté resuelto.
     const ejLista = r?.ejecutores_lista||[];
     const ejMatch = ejLista.find(e=>e.mail===cMail);
     const hasConfirmed = ejMatch ? ejMatch.confirmado : r?.ejecutorConfirmado;
+    const hasRejected  = ejMatch ? ejMatch.rechazado  : r?.ejecutorRechazado;
+    const appUrl = window.location.href.split("?")[0];
     return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
       h('div',{style:{background:"white",borderRadius:20,padding:40,maxWidth:440,width:"100%",textAlign:"center"}},
-        h('div',{style:{fontSize:64,marginBottom:16}},hasConfirmed?"📅":"⚠️"),
+        h('div',{style:{fontSize:64,marginBottom:16}},hasConfirmed?"📅":hasRejected?"🚫":"⚠️"),
         h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:24,color:"#0f172a",margin:"0 0 12px"}},
-          hasConfirmed?"Eventos descargados":"Primero debés confirmar"),
+          hasConfirmed?"Eventos descargados":hasRejected?"Rechazaste esta tarea":"Primero debés confirmar"),
         h('p',{style:{color:"#64748b",fontSize:15,lineHeight:1.6}},
           hasConfirmed
             ? "Se descargó el archivo .ics con los 2 eventos. Abrilo para agregarlos a tu calendario (Google, Apple, Outlook)."
-            : "Para agregar la tarea al calendario, primero debés confirmar que la realizarás. Usá el link de confirmación en el mail que recibiste."),
+            : hasRejected
+              ? "Rechazaste esta tarea, por lo que no podés agregar los eventos al calendario. El responsable fue notificado para reasignarla."
+              : "Para agregar los eventos al calendario primero tenés que confirmar la tarea."),
+        !hasConfirmed && !hasRejected && r &&
+          h('a',{href:`${appUrl}?confirmar=${r.id}&mail=${encodeURIComponent(cMail)}`,
+            style:{display:"inline-block",marginTop:16,padding:"12px 28px",background:"#22c55e",color:"white",textDecoration:"none",borderRadius:10,fontWeight:700,fontSize:14}},
+            "✓ Confirmar tarea ahora"),
         h('p',{style:{color:"#94a3b8",fontSize:13,marginTop:16}},"Podés cerrar esta ventana.")));
   }
   if(view && view.startsWith("rechazar_val_")) { return h(RechazarValidacionView,{recId:view.replace("rechazar_val_",""),recs,setRecs,loaded}); }
