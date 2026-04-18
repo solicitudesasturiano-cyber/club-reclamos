@@ -1598,8 +1598,9 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
                 h('div',{style:{fontWeight:600,color:"#1e293b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},r.nombre||"—"),
                 h('div',{style:{fontSize:10,color:"#94a3b8"}},r.tipo||"")),
               h('td',{style:{padding:"11px 10px",fontSize:12,fontWeight:500}},
-                h('div',{style:{fontWeight:500,color:"#1e293b"}},r.sector),
-                h('div',{style:{fontSize:11,color:"#64748b",marginTop:1}},cat?.icon+" "+(r.sub||""))),
+                h('div',{style:{fontWeight:500,color:"#1e293b"}},r.sector)),
+              h('td',{style:{padding:"11px 10px",fontSize:12}},
+                h('div',{style:{fontSize:11,color:"#64748b"}},cat?.icon+" "+(r.sub||""))),
               h('td',{style:{padding:"11px 10px"}},
                 (() => {
                   const socio = PRIS.find(p=>p.id===r.pri);
@@ -2296,7 +2297,6 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
-
 
 
 
