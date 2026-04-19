@@ -223,21 +223,23 @@ function getEstadoEjecucion(r) {
   const fechaActiva = ahora >= inicio;
   const demorada = cierre && ahora > cierre;
 
+  const prefix = r.reabierta ? "↩️ Reabierta — " : "";
+
   if (fechaActiva || demorada) {
     if (!tieneEjecutor)
-      return { label: "🚨 Sin asignar", color: "#dc2626", bg: "#fef2f2" };
+      return { label: prefix+"🚨 Sin asignar", color: "#dc2626", bg: "#fef2f2" };
     if (todosRechazaron)
-      return { label: "🚨 Sin ejecutor activo", color: "#dc2626", bg: "#fef2f2" };
+      return { label: prefix+"🚨 Sin ejecutor activo", color: "#dc2626", bg: "#fef2f2" };
     if (!alguienConfirmo)
       return demorada
-        ? { label: "⚠️ Demorada — sin confirmar", color: "#dc2626", bg: "#fef2f2" }
-        : { label: "⏳ Pend. confirmación", color: "#d97706", bg: "#fffbeb" };
+        ? { label: prefix+"⚠️ Demorada — sin confirmar", color: "#dc2626", bg: "#fef2f2" }
+        : { label: prefix+"⏳ Pend. confirmación", color: "#d97706", bg: "#fffbeb" };
     return demorada
-      ? { label: "⚠️ Demorada", color: "#dc2626", bg: "#fef2f2" }
-      : { label: "✅ En curso", color: "#3b82f6", bg: "#eff6ff" };
+      ? { label: prefix+"⚠️ Demorada", color: "#dc2626", bg: "#fef2f2" }
+      : { label: prefix+"✅ En curso", color: "#3b82f6", bg: "#eff6ff" };
   }
 
-  return { label: "No iniciada", color: "#6b7280", bg: "#f8fafc" };
+  return { label: prefix+"No iniciada", color: "#6b7280", bg: "#f8fafc" };
 }
 const ls = {
   get: k => { try { const v=localStorage.getItem(k); return v?JSON.parse(v):null; } catch{return null;} },
@@ -755,9 +757,33 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
     const autoEstado = calcEstado();
     let savedRec = {...rec,...f,adjuntosResolucion,comentarios,nuevoComentario:undefined,
       estadoAvance: autoEstado,
+      reabierta: rec.reabierta || false,
       fechaCierreConfirmada,fechaInicioOriginal,fechaOriginalCierre,ejecutorMailOriginal,fechaAsignacion,
       updatedAt:new Date().toISOString()};
     await onSave(savedRec);
+    // Si está reabierta y se asignó nueva fecha → notificar al ejecutor
+    if(rec.reabierta && f.fechaCierreActualizada && f.fechaCierreActualizada !== rec.fechaCierreActualizada) {
+      const appUrl = window.location.href.split("?")[0];
+      const ejMails = (f.ejecutores_lista||[]).filter(ej=>ej.mail&&!ej.mail.includes("externo")&&!ej.rechazado).map(ej=>ej.mail);
+      if(!ejMails.length && rec.ejecutorMail && !rec.ejecutorMail.includes("externo")) ejMails.push(rec.ejecutorMail);
+      const fechaInicioNueva = f.fechaInicioActualizada || f.fechaInicioEsperado || rec.fechaInicioOriginal || "";
+      const fechaCierreNueva = f.fechaCierreActualizada;
+      const sDate = fechaInicioNueva.replace(/-/g,"");
+      const eDate = fechaCierreNueva.replace(/-/g,"");
+      const calTitle = encodeURIComponent("Tarea (nueva fecha) "+rec.sector+" — "+rec.numero);
+      const calDesc  = encodeURIComponent("Tarea reabierta. Descripción: "+rec.desc+"\nCompletar: "+appUrl+"?completar="+rec.id);
+      const calLink  = "https://calendar.google.com/calendar/render?action=TEMPLATE&text="+calTitle+"&dates="+sDate+"/"+eDate+"&details="+calDesc;
+      const catRespMails = (getCatCfg(rec.cat).responsables||[]).map(x=>x.mail).filter(Boolean);
+      for(const ejMail of ejMails) {
+        const ejNombre = (f.ejecutores_lista||[]).find(e=>e.mail===ejMail)?.nombre || rec.ejecutorNombre || ejMail;
+        await sendEmail({
+          to: ejMail,
+          cc: catRespMails.filter(m=>m!==ejMail),
+          subject: `[Asturiano] Nueva fecha asignada — ${rec.numero}: ${rec.sector}`,
+          body: `Hola ${ejNombre},\n\nLa solicitud ${rec.numero} fue reabierta por el solicitante y tiene una nueva fecha de resolución asignada.\n\nSector: ${rec.sector}\nProblema: ${rec.sub}\nDescripción: ${rec.desc}\n\nNueva fecha inicio: ${fd(fechaInicioNueva)||"—"}\nNueva fecha cierre: ${fd(fechaCierreNueva)}\n${f.motivoActualizacion?"Motivo: "+f.motivoActualizacion+"\n":""}\n📅 Agregar al calendario: ${calLink}\n\n✅ Cuando completes: ${appUrl}?completar=${rec.id}\n\n— Sistema de Reclamos — Asturiano`
+        });
+      }
+    }
     // When marked as completada → set to esperando_validacion (directivo must approve first)
     if((f.estadoAvance==="completada"||f.estadoAvance==="esperando_validacion") && !["completada","esperando_validacion"].includes(rec.estadoAvance) && f.descripcionResolucion.trim()) {
       // Force state to esperando_validacion
@@ -1035,6 +1061,11 @@ Resolución: ${descripcion||"—"}`});
 
         // TAB RESOLUCIÓN
         tab==="resolucion" && h('div',null,
+          // Feedback del usuario si reabrió con calificación baja
+          rec.calificacion && rec.calificacion <= 3 && rec.motivoCalificacion && h('div',{style:{background:"#fef2f2",border:"2px solid #fca5a5",borderRadius:10,padding:"12px 14px",marginBottom:16}},
+            h('div',{style:{fontSize:12,fontWeight:700,color:"#dc2626",marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},"⚠️ El solicitante no quedó conforme — "+rec.calificacion+"⭐"),
+            h('div',{style:{fontSize:13,color:"#7f1d1d",lineHeight:1.5,fontStyle:"italic"}},"\""+rec.motivoCalificacion+"\""),
+            h('div',{style:{fontSize:11,color:"#94a3b8",marginTop:6}},"Solicitante: "+rec.nombre)),
           f.estadoAvance==="completada" && !f.descripcionResolucion && h('div',{style:{background:"#fef2f2",border:"1.5px solid #fecaca",borderRadius:8,padding:"10px 14px",marginBottom:12,fontSize:13,color:"#dc2626"}},"⚠️ Para marcar como completada debés describir qué se hizo."),
           h('div',{style:{marginBottom:14}},
             h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:f.estadoAvance==="completada"&&!f.descripcionResolucion?"#dc2626":"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},f.estadoAvance==="completada"?"¿Qué se hizo? *":"¿Qué se hizo?"),
@@ -1052,6 +1083,18 @@ Resolución: ${descripcion||"—"}`});
                 h('button',{onClick:()=>setF(p=>({...p,adjuntosResolucion:p.adjuntosResolucion.filter((_,idx)=>idx!==i)})),style:{background:"none",border:"none",cursor:"pointer",color:"#ef4444",fontSize:14,padding:0}},"✕")))),
             h('button',{onClick:()=>fileRef.current.click(),style:{padding:"8px 16px",borderRadius:8,border:"1.5px dashed #e2e8f0",background:"transparent",color:"#64748b",cursor:"pointer",fontSize:13}},"📎 Adjuntar foto / video")),
           !["completada","consolidada","esperando_validacion"].includes(f.estadoAvance) && h('div',{style:{marginTop:16,paddingTop:16,borderTop:"1.5px solid #f1f5f9"}},
+            // Nueva fecha de resolución (para casos reabiertos)
+            rec.reabierta && h('div',{style:{background:"#fff7ed",border:"1.5px solid #fed7aa",borderRadius:10,padding:14,marginBottom:16}},
+              h('div',{style:{fontSize:12,fontWeight:700,color:"#92400e",marginBottom:10}},"📅 Asignar nueva fecha de resolución"),
+              h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}},
+                h('div',null,
+                  h('label',{style:{display:"block",fontSize:10,fontWeight:600,color:"#374151",marginBottom:4,textTransform:"uppercase"}},"Nueva fecha inicio"),
+                  h('input',{type:"date",value:f.fechaInicioActualizada||"",onChange:e=>set("fechaInicioActualizada",e.target.value),min:new Date().toISOString().split("T")[0],style:{width:"100%",padding:"9px 12px",borderRadius:8,border:"1.5px solid #fed7aa",fontSize:13,outline:"none",boxSizing:"border-box"}})),
+                h('div',null,
+                  h('label',{style:{display:"block",fontSize:10,fontWeight:600,color:"#374151",marginBottom:4,textTransform:"uppercase"}},"Nueva fecha cierre *"),
+                  h('input',{type:"date",value:f.fechaCierreActualizada||"",onChange:e=>set("fechaCierreActualizada",e.target.value),min:f.fechaInicioActualizada||new Date().toISOString().split("T")[0],style:{width:"100%",padding:"9px 12px",borderRadius:8,border:"1.5px solid #fed7aa",fontSize:13,outline:"none",boxSizing:"border-box"}}))),
+              h('label',{style:{display:"block",fontSize:10,fontWeight:600,color:"#374151",marginBottom:4,textTransform:"uppercase"}},"Motivo del nuevo plazo *"),
+              h('textarea',{value:f.motivoActualizacion||"",onChange:e=>set("motivoActualizacion",e.target.value),rows:2,placeholder:"Explicá qué se va a hacer diferente esta vez...",style:{width:"100%",padding:"9px 12px",borderRadius:8,border:"1.5px solid #fed7aa",fontSize:13,outline:"none",boxSizing:"border-box",resize:"vertical"}})),
             h('button',{onClick:async()=>{
               if(!f.descripcionResolucion?.trim()){setSaveErr("La descripción de lo realizado es obligatoria para completar.");return;}
               if(!confirm("¿Marcar como completado y enviar al directivo para validación?")) return;
@@ -1623,7 +1666,7 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
     // Lista
     mainTab==="reclamos" && view==="lista" && h('div',{style:{padding:"0 24px 24px",overflowX:"auto"}},
       h('table',{style:{width:"100%",borderCollapse:"separate",borderSpacing:"0 5px"}},
-        h('thead',null,h('tr',null,...["Nº","Fecha","Solicitante","Sector","Detalle","Criticidad (socio→int)","Ejecutor","Acción","Estado","Cierre",""].map(hd=>
+        h('thead',null,h('tr',null,...["Nº","Fecha","Solicitante","Sector","Detalle","Criticidad (socio→int)","Ejecutor","Acción","Estado","Cierre","Calificación",""].map(hd=>
           h('th',{key:hd,style:{textAlign:"left",padding:"8px 10px",fontSize:11,color:"#94a3b8",fontWeight:600,letterSpacing:0.5,textTransform:"uppercase"}},hd)))),
         h('tbody',null,
           !filtrados.length && h('tr',null,h('td',{colSpan:12,style:{textAlign:"center",padding:40,color:"#94a3b8"}},"No hay solicitudes")),
@@ -1708,6 +1751,17 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
                 return h('span',{style:{display:"inline-block",padding:"3px 8px",borderRadius:6,fontSize:11,fontWeight:600,color:ee.color,background:ee.bg,whiteSpace:"nowrap"}},ee.label);
               })()),
               h('td',{style:{padding:"11px 10px",fontSize:11,color:"#64748b",whiteSpace:"nowrap"}},fd(r.fechaCierreConfirmada||r.fechaCierre)),
+              h('td',{style:{padding:"11px 10px",minWidth:110}},(() => {
+                const cal = r.calificacion;
+                if(!cal) return h('span',{style:{color:"#cbd5e1"}},"—");
+                const stars = "⭐".repeat(cal);
+                const buena = cal >= 4;
+                return h('div',{style:{display:"flex",flexDirection:"column",gap:4}},
+                  h('span',{style:{fontSize:13}},stars),
+                  !buena && h('button',{onClick:()=>setModal(r),
+                    style:{padding:"3px 8px",background:"#fef2f2",color:"#dc2626",border:"1.5px solid #fecaca",borderRadius:6,cursor:"pointer",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}},
+                    "⚠️ Gestionar"));
+              })()),
               h('td',{style:{padding:"11px 10px",borderRadius:"0 10px 10px 0"}},
                 h('button',{onClick:()=>setModal(r),style:{padding:"5px 12px",background:"#0f172a",color:"white",border:"none",borderRadius:7,cursor:"pointer",fontSize:12,fontWeight:600}},"Gestionar")));
           })))),
@@ -1870,15 +1924,19 @@ function CalificarView({recId, recs, setRecs, loaded}) {
     if(stars <= 3 && !motivo.trim()) return;
     setSending(true);
     const mailCfg = getMailConfig();
+    const esReabierta = stars <= 3;
     const updated = {...rec, calificacion:stars, motivoCalificacion:motivo,
-      estadoAvance: stars >= 4 ? "completada" : rec.estadoAvance,
-      comentarios:[...(rec.comentarios||[]),{texto:`Usuario calificó con ${stars}⭐${motivo?". Motivo: "+motivo:""}`,fecha:new Date().toISOString(),autor:"Sistema"}]};
+      estadoAvance: stars >= 4 ? "completada" : "bajo_analisis",
+      reabierta: esReabierta ? true : rec.reabierta,
+      descripcionResolucion: esReabierta ? "" : rec.descripcionResolucion,
+      comentarios:[...(rec.comentarios||[]),{texto:`Usuario calificó con ${stars}⭐${motivo?". Qué salió mal: "+motivo:""}`,fecha:new Date().toISOString(),autor:"Sistema"}]};
     await sbUpsert(updated);
     setRecs(prev=>prev.map(r=>r.id===recId?updated:r));
     const respMail = getResponsableMail(rec.cat) || NOTIFY_EMAIL;
+    const appUrl2 = window.location.href.split("?")[0];
     await sendEmail({to:[respMail, mailCfg.directivo].filter(Boolean),
-      subject:`[Asturiano] ⭐ Calificación ${stars}/5 — ${rec.numero}`,
-      body:`El solicitante calificó con ${stars}⭐. Sector: ${rec.sector}. ${motivo?"Comentario: "+motivo+"\n":""}Solicitante: ${rec.nombre}`});
+      subject:`[Asturiano] ${esReabierta?"⚠️ Solicitud reabierta":"⭐"} Calificación ${stars}/5 — ${rec.numero}`,
+      body:`El solicitante calificó con ${stars}⭐.\n\nSector: ${rec.sector}\nSolicitante: ${rec.nombre}${motivo?"\n\n❌ Qué salió mal:\n\""+motivo+"\"":""}\n${esReabierta?"\nLa solicitud fue reabierta automáticamente. Ingresá al panel para asignar una nueva fecha:\n"+appUrl2:""}`});
     setSending(false);
     setDone(true);
   };
@@ -2362,6 +2420,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
+
 
 
 
