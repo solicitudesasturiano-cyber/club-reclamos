@@ -1288,6 +1288,7 @@ function ModalProyecto({proyecto, onClose, onSave, ejecutores, recs}) {
   const [nuevoAvance,setNuevoAvance] = useState("");
   const [nuevaAlerta,setNuevaAlerta] = useState("");
   const [tab,setTab] = useState("info");
+  const [modalSolicitud,setModalSolicitud] = useState(null);
   const set=(k,v)=>setF(p=>({...p,[k]:v}));
   const aS=()=>({width:"100%",padding:"10px 14px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:14,outline:"none",boxSizing:"border-box"});
 
@@ -1332,7 +1333,7 @@ function ModalProyecto({proyecto, onClose, onSave, ejecutores, recs}) {
           estProj && h('span',{style:{padding:"3px 10px",borderRadius:20,fontSize:12,fontWeight:600,color:estProj.color,background:"rgba(255,255,255,0.2)"}},"● "+estProj.label),
           h('button',{onClick:onClose,style:{background:"none",border:"none",color:"rgba(255,255,255,0.7)",fontSize:22,cursor:"pointer"}},"✕"))),
       h('div',{style:{display:"flex",gap:4,padding:"10px 16px 0",borderBottom:"1px solid #e2e8f0"}},
-        ...[["info","📋 Info"],["avances","📈 Avances"],["personas","👥 Personas"],["reclamos","🔗 Reclamos"]].map(([id,lbl])=>
+        ...[["info","📋 Info"],["avances","📈 Avances"],["personas","👥 Personas"],["solicitudes","🔗 Solicitudes"]].map(([id,lbl])=>
           h('button',{key:id,onClick:()=>setTab(id),style:tabStyle(id)},lbl))),
       h('div',{style:{padding:"18px 22px"}},
 
@@ -1401,22 +1402,34 @@ function ModalProyecto({proyecto, onClose, onSave, ejecutores, recs}) {
                 h('option',{value:""},"+ Agregar empleado..."),
                 ...(ejecutores||[]).map(e=>h('option',{key:e.mail,value:e.nombre+" ("+e.mail+")"},e.nombre)))))),
 
-        // TAB RECLAMOS
-        tab==="reclamos" && h('div',null,
-          h('div',{style:{fontSize:13,color:"#64748b",marginBottom:12}},"Reclamos vinculados a este proyecto. Cuando el proyecto avanza, los usuarios reciben notificaciones."),
+        // TAB SOLICITUDES
+        tab==="solicitudes" && h('div',null,
+          h('div',{style:{fontSize:13,color:"#64748b",marginBottom:12}},"Solicitudes vinculadas a este proyecto. Al completar el proyecto, los solicitantes son notificados."),
+          !(f.reclamosVinculados||[]).length && h('div',{style:{textAlign:"center",padding:"30px 0",color:"#94a3b8",fontSize:13}},"Sin solicitudes vinculadas aún"),
           h('div',{style:{display:"flex",flexDirection:"column",gap:8,marginBottom:12}},
             ...(f.reclamosVinculados||[]).map((num,i)=>{
               const r=recs.find(x=>x.numero===num);
-              return h('div',{key:i,style:{display:"flex",justifyContent:"space-between",alignItems:"center",background:"#f8fafc",borderRadius:8,padding:"8px 12px"}},
-                h('div',null,
-                  h('div',{style:{fontFamily:"monospace",fontSize:12,fontWeight:700,color:"#7c3aed"}},num),
-                  r && h('div',{style:{fontSize:12,color:"#64748b"}},r.sector+" — "+r.desc?.slice(0,50))),
-                h('button',{onClick:()=>set("reclamosVinculados",(f.reclamosVinculados||[]).filter((_,idx)=>idx!==i)),style:{background:"none",border:"none",cursor:"pointer",color:"#ef4444",fontSize:14}},"✕"));
+              return h('div',{key:i,style:{background:"#f8fafc",borderRadius:10,padding:"12px 14px",border:"1.5px solid #e2e8f0"}},
+                h('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}},
+                  h('div',{style:{flex:1}},
+                    h('div',{style:{display:"flex",alignItems:"center",gap:8,marginBottom:4}},
+                      h('span',{style:{fontFamily:"monospace",fontSize:12,fontWeight:700,color:"#7c3aed"}},num),
+                      r && h('span',{style:{fontSize:11,padding:"1px 7px",borderRadius:10,background:(PRIS.find(p=>p.id===(r.criticidad||r.pri))?.color||"#94a3b8")+"22",color:(PRIS.find(p=>p.id===(r.criticidad||r.pri))?.color||"#94a3b8"),fontWeight:600}},(PRIS.find(p=>p.id===(r.criticidad||r.pri))?.label)||"")),
+                    r && h('div',{style:{fontSize:12,color:"#1e293b",fontWeight:600,marginBottom:2}},r.sector),
+                    r && h('div',{style:{fontSize:12,color:"#64748b"}},r.sub),
+                    r && h('div',{style:{fontSize:11,color:"#94a3b8",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:320}},r.desc)),
+                  h('div',{style:{display:"flex",gap:6,alignItems:"center",flexShrink:0,marginLeft:8}},
+                    r && h('button',{onClick:()=>setModalSolicitud(r),
+                      style:{padding:"4px 10px",background:"#0f172a",color:"white",border:"none",borderRadius:6,cursor:"pointer",fontSize:11,fontWeight:600,whiteSpace:"nowrap"}},"Gestionar"),
+                    h('button',{onClick:()=>set("reclamosVinculados",(f.reclamosVinculados||[]).filter((_,idx)=>idx!==i)),
+                      style:{background:"none",border:"none",cursor:"pointer",color:"#ef4444",fontSize:14,padding:"2px 4px"}},"✕"))));
             })),
           h('div',{style:{display:"flex",gap:8}},
             h('input',{id:"inputRecProj",placeholder:"Número de solicitud (Ej: R-123456)",style:{...aS(),flex:1}}),
             h('button',{onClick:()=>{const inp=document.getElementById("inputRecProj");const v=(inp?.value||"").trim().toUpperCase();if(v&&!(f.reclamosVinculados||[]).includes(v)){set("reclamosVinculados",[...(f.reclamosVinculados||[]),v]);if(inp)inp.value="";}},
-              style:{padding:"9px 16px",background:"#7c3aed",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontWeight:600}},"+ Vincular"))),
+              style:{padding:"9px 16px",background:"#7c3aed",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontWeight:600}},"+ Vincular")),
+          // Modal gestión inline
+          modalSolicitud && h(EditModal,{rec:modalSolicitud,onClose:()=>setModalSolicitud(null),onSave:async u=>{await onSave(f);setModalSolicitud(null);},ejecutores})),
 
         h('div',{style:{display:"flex",gap:10,marginTop:20}},
           h('button',{onClick:onClose,style:{flex:1,padding:"12px",background:"#f1f5f9",color:"#64748b",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:600}},"Cancelar"),
@@ -1434,28 +1447,90 @@ function ProyectosTab({recs, onUpdate, ejecutores}) {
   },[]);
 
   const saveProyecto=async(p)=>{
+    const proyectoAnterior = proyectos.find(x=>x.id===p.id);
     const lista=proyectos.find(x=>x.id===p.id)?proyectos.map(x=>x.id===p.id?p:x):[p,...proyectos];
     setProyectos(lista);
     ls.set("proyectos",lista);
+    const appUrl=window.location.href.split("?")[0];
+
+    // Detectar si la fecha fin cambió más de 7 días
+    const fechaFinAnterior = proyectoAnterior?.fechaFin;
+    const fechaFinNueva = p.fechaFin;
+    let fechaExtendidaMas7 = false;
+    if(fechaFinAnterior && fechaFinNueva && fechaFinNueva !== fechaFinAnterior) {
+      const diffDias = (new Date(fechaFinNueva) - new Date(fechaFinAnterior)) / 86400000;
+      if(diffDias > 7) fechaExtendidaMas7 = true;
+    }
+
+    // Parsear ejecutores del proyecto (formato "Nombre (mail)")
+    const ejsProyecto = (p.empleados||[]).map(e=>{
+      const match = e.match(/^(.+)\s+\(([^)]+)\)$/);
+      return match ? {nombre:match[1].trim(), mail:match[2].trim()} : {nombre:e, mail:""};
+    }).filter(ej=>ej.mail);
+
     // Update linked reclamos with project data
     for(const num of (p.reclamosVinculados||[])){
       const rec=recs.find(r=>r.numero===num);
-      if(rec){
-        await onUpdate({
-          ...rec,
-          estadoAvance:"vinculado_proyecto",
-          proyectoVinculado:p.id,
-          proyectoTitulo:p.titulo,
-          // Copy dates and description from project
-          fechaInicioEsperado: p.fechaInicio||rec.fechaInicioEsperado,
-          fechaCierre: p.fechaFin||rec.fechaCierre,
-          fechaCierreConfirmada: p.fechaFin||rec.fechaCierreConfirmada,
-          descripcionProyecto: p.descripcion,
-          comentarios:[...(rec.comentarios||[]),{
-            texto:`Vinculado al proyecto "${p.titulo}". Fechas actualizadas automáticamente según el proyecto.`,
-            fecha:new Date().toISOString(),autor:"Sistema"
-          }]
-        },rec);
+      if(!rec) continue;
+
+      const esNuevaVinculacion = rec.proyectoVinculado !== p.id;
+
+      // Autopopular ejecutores desde el proyecto
+      let ejecutores_lista = rec.ejecutores_lista || [];
+      let ejecutorMail = rec.ejecutorMail || "";
+      let ejecutorNombre = rec.ejecutorNombre || "";
+      if(ejsProyecto.length > 0) {
+        ejecutores_lista = ejsProyecto.map(ej=>({
+          ...ej,
+          confirmado: false, rechazado: false, fechaConfirmacion: null
+        }));
+        ejecutorMail = ejsProyecto[0].mail;
+        ejecutorNombre = ejsProyecto.map(e=>e.nombre).join(", ");
+      }
+
+      const recActualizado = {
+        ...rec,
+        estadoAvance:"vinculado_proyecto",
+        proyectoVinculado:p.id,
+        proyectoTitulo:p.titulo,
+        fechaInicioEsperado: p.fechaInicio||rec.fechaInicioEsperado,
+        fechaCierre: p.fechaFin||rec.fechaCierre,
+        fechaCierreConfirmada: p.fechaFin||rec.fechaCierreConfirmada,
+        descripcionProyecto: p.descripcion,
+        ejecutores_lista,
+        ejecutorMail,
+        ejecutorNombre,
+        comentarios:[...(rec.comentarios||[]),{
+          texto:`Vinculado al proyecto "${p.titulo}". Fechas y ejecutores actualizados automáticamente.`,
+          fecha:new Date().toISOString(),autor:"Sistema"
+        }]
+      };
+      await onUpdate(recActualizado, rec);
+
+      // Email al solicitante al vincular por primera vez
+      if(esNuevaVinculacion && rec.email) {
+        await sendEmail({to:rec.email,
+          subject:`[Asturiano] Tu solicitud fue vinculada al proyecto "${p.titulo}" — ${rec.numero}`,
+          body:`Hola ${rec.nombre},\n\nTu solicitud ${rec.numero} (${rec.sector}) fue vinculada a un proyecto integral del club.\n\n` +
+          `📋 PROYECTO: ${p.titulo}\n` +
+          (p.descripcion?`📝 Descripción: ${p.descripcion}\n`:"") +
+          (p.objetivo?`🎯 Objetivo: ${p.objetivo}\n`:"") +
+          (p.fechaInicio?`📅 Inicio previsto: ${new Date(p.fechaInicio).toLocaleDateString("es-AR")}\n`:"") +
+          (p.fechaFin?`🏁 Resolución prevista: ${new Date(p.fechaFin).toLocaleDateString("es-AR")}\n`:"") +
+          (p.proximosPasos?`\n⏭️ Próximos pasos: ${p.proximosPasos}\n`:"") +
+          `\nTu problema será resuelto como parte de este proyecto. Te notificaremos cuando haya avances o cuando se complete.\n\nPodés seguir el estado de tu solicitud:\n${appUrl}?seguimiento=${rec.numero}\n\n— Equipo de Intendencia Asturiano`
+        });
+      }
+
+      // Email si fecha se extendió más de 7 días
+      if(!esNuevaVinculacion && fechaExtendidaMas7 && rec.email) {
+        await sendEmail({to:rec.email,
+          subject:`[Asturiano] Actualización de fecha — Proyecto "${p.titulo}" — ${rec.numero}`,
+          body:`Hola ${rec.nombre},\n\nEl proyecto "${p.titulo}", al que está vinculada tu solicitud ${rec.numero} (${rec.sector}), tiene una nueva fecha estimada de resolución.\n\n` +
+          `📅 Fecha anterior: ${new Date(fechaFinAnterior).toLocaleDateString("es-AR")}\n` +
+          `🏁 Nueva fecha estimada: ${new Date(fechaFinNueva).toLocaleDateString("es-AR")}\n\n` +
+          `Lamentamos el inconveniente. Te avisaremos cuando el proyecto sea completado.\n\nSeguí el estado de tu solicitud:\n${appUrl}?seguimiento=${rec.numero}\n\n— Equipo de Intendencia Asturiano`
+        });
       }
     }
   };
@@ -1634,7 +1709,7 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
         h('button',{onClick:checkAlerts,disabled:checking,style:{padding:"8px 14px",background:checking?"#475569":"#f97316",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600}},checking?"Verificando...":"⚠️ Revisar alertas"))),
     // Main tabs: Reclamos | Proyectos
     h('div',{style:{display:"flex",gap:4,padding:"0 24px",background:"#0f172a",borderBottom:"2px solid rgba(255,255,255,0.1)"}},
-      ...[["reclamos","📋 Reclamos"],["proyectos","🏗️ Proyectos"]].map(([id,lbl])=>
+      ...[["reclamos","📋 Solicitudes"],["proyectos","🏗️ Proyectos"]].map(([id,lbl])=>
         h('button',{key:id,onClick:()=>setMainTab(id),
           style:{padding:"10px 18px",border:"none",background:"none",cursor:"pointer",fontSize:13,fontWeight:mainTab===id?700:500,
             color:mainTab===id?"white":"rgba(255,255,255,0.5)",borderBottom:mainTab===id?"2px solid #3b82f6":"2px solid transparent",marginBottom:-2}},lbl))),
@@ -2203,12 +2278,6 @@ function App() {
     setRecs(prev=>prev.map(r=>r.id===rec.id?rec:r));
     await sbUpsert(rec);
     const appUrl = window.location.href.split("?")[0];
-    // Notify user when linked to a project
-    if(rec.email && prevRec && rec.proyectoVinculadoId && rec.proyectoVinculadoId!==prevRec.proyectoVinculadoId) {
-      await sendEmail({to:rec.email,
-        subject:`[Asturiano] Tu solicitud fue vinculada a un proyecto — ${rec.numero}`,
-        body:`Hola ${rec.nombre},\n\nTu solicitud ${rec.numero} (${rec.sector}) fue vinculada al proyecto "${rec.proyectoTitulo}".\n\nEsto significa que el inconveniente que reportaste será resuelto como parte de una obra o proyecto mayor. Recibirás actualizaciones a medida que el proyecto avance.\n\nPodés seguir el estado de tu solicitud:\n${appUrl}?seguimiento=${rec.numero}\n\n— Equipo de Intendencia Asturiano`});
-    }
     // Notify user when fecha cierre confirmed changes
     if(rec.email && prevRec && rec.fechaCierreConfirmada && prevRec.fechaCierreConfirmada && rec.fechaCierreConfirmada!==prevRec.fechaCierreConfirmada) {
       await sendEmail({to:rec.email,
@@ -2420,6 +2489,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
+
 
 
 
