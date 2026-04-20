@@ -2714,6 +2714,12 @@ function App() {
       );
     }
     // Resolution email is handled by notifResolucionAuto in EditModal save
+    // Notificar al solicitante cuando se marca sin_resolucion por primera vez
+    if(rec.email && rec.estadoAvance === "sin_resolucion" && prevRec && prevRec.estadoAvance !== "sin_resolucion" && rec.justificacionDemora?.trim()) {
+      await sendEmail({to:rec.email,
+        subject:`[Asturiano] Tu solicitud está registrada — ${rec.numero}`,
+        body:`Hola ${rec.nombre},\n\nTu solicitud fue registrada pero requiere más tiempo del habitual para su resolución.\n\nNúmero: ${rec.numero}\nSector: ${rec.sector}\n\nMotivo: ${rec.justificacionDemora}\n\nPodés seguir el estado en tiempo real:\n${seguimientoUrl}\n\nTe avisaremos cuando haya novedades.\n\n— Equipo de Intendencia Asturiano`});
+    }
   };
 
   const handleRechazar = async motivo => {
@@ -2909,3 +2915,4 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
+
