@@ -219,6 +219,7 @@ function buildGCalReminderLink({titulo, desc, fechaFin}) {
 // ── HELPERS ────────────────────────────────────────────────────────────────
 const fd  = iso => iso ? new Date(iso).toLocaleDateString("es-AR",{day:"2-digit",month:"2-digit",year:"numeric"}) : "—";
 const fdt = iso => iso ? new Date(iso).toLocaleString("es-AR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}) : "—";
+const hoy = () => { const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); };
 
 function getTiming(r) {
   if (["completada","consolidada","sin_resolucion","vinculado_proyecto"].includes(r.estadoAvance)) return null;
@@ -1114,13 +1115,13 @@ Resolución: ${descripcion||"—"}`});
                   h('div',{style:{fontSize:12,color:"#92400e",fontWeight:600,marginBottom:8}},"📅 Actualizar fechas (requiere motivo)"),
                   h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}},
                     h('div',null,h('label',{style:{display:"block",fontSize:10,fontWeight:600,color:"#374151",marginBottom:4,textTransform:"uppercase"}},"Nueva fecha inicio"),h('input',{type:"date",value:f.fechaInicioActualizada,onChange:e=>set("fechaInicioActualizada",e.target.value),style:aS()})),
-                    h('div',null,h('label',{style:{display:"block",fontSize:10,fontWeight:600,color:"#374151",marginBottom:4,textTransform:"uppercase"}},"Nueva fecha cierre"),h('input',{type:"date",value:f.fechaCierreActualizada,onChange:e=>set("fechaCierreActualizada",e.target.value),min:f.fechaInicioActualizada||f.fechaInicioEsperado||new Date().toISOString().split("T")[0],style:aS()}))),
+                    h('div',null,h('label',{style:{display:"block",fontSize:10,fontWeight:600,color:"#374151",marginBottom:4,textTransform:"uppercase"}},"Nueva fecha cierre"),h('input',{type:"date",value:f.fechaCierreActualizada,onChange:e=>set("fechaCierreActualizada",e.target.value),min:f.fechaInicioActualizada||f.fechaInicioEsperado||hoy(),style:aS()}))),
                   (f.fechaInicioActualizada||f.fechaCierreActualizada) && h('div',null,
                     h('label',{style:{display:"block",fontSize:10,fontWeight:600,color:"#374151",marginBottom:4,textTransform:"uppercase"}},"Motivo del cambio *"),
                     h('textarea',{value:f.motivoActualizacion,onChange:e=>set("motivoActualizacion",e.target.value),rows:2,placeholder:"Explicá el motivo del cambio de fechas...",style:{...aS(),resize:"vertical"}}))))
               : h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}},
-                  h('div',null,h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Inicio esperado *"),h('input',{type:"date",value:f.fechaInicioEsperado,onChange:e=>set("fechaInicioEsperado",e.target.value),min:new Date().toISOString().split("T")[0],style:aS()})),
-                  h('div',null,h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Cierre esperado *"),h('input',{type:"date",value:f.fechaCierre,onChange:e=>set("fechaCierre",e.target.value),min:f.fechaInicioEsperado||new Date().toISOString().split("T")[0],style:aS()}))),
+                  h('div',null,h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Inicio esperado *"),h('input',{type:"date",value:f.fechaInicioEsperado,onChange:e=>set("fechaInicioEsperado",e.target.value),min:hoy(),style:aS()})),
+                  h('div',null,h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Cierre esperado *"),h('input',{type:"date",value:f.fechaCierre,onChange:e=>set("fechaCierre",e.target.value),min:f.fechaInicioEsperado||hoy(),style:aS()}))),
           f.fechaInicioEsperado && f.fechaCierre && (new Date(f.fechaCierre)-new Date(f.fechaInicioEsperado))/86400000 > 30 && h('div',{style:{background:"#fff7ed",border:"1.5px solid #fed7aa",borderRadius:8,padding:"8px 12px",marginBottom:8,fontSize:12,color:"#92400e"}},"⚠️ Esta tarea tiene más de 30 días de duración. Asegurate de que sea necesario."),
 
           // Same-day: show time fields
@@ -1245,10 +1246,10 @@ Resolución: ${descripcion||"—"}`});
               h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}},
                 h('div',null,
                   h('label',{style:{display:"block",fontSize:10,fontWeight:600,color:"#374151",marginBottom:4,textTransform:"uppercase"}},"Nueva fecha inicio"),
-                  h('input',{type:"date",value:f.fechaInicioActualizada||"",onChange:e=>set("fechaInicioActualizada",e.target.value),min:new Date().toISOString().split("T")[0],style:{width:"100%",padding:"9px 12px",borderRadius:8,border:"1.5px solid #fed7aa",fontSize:13,outline:"none",boxSizing:"border-box"}})),
+                  h('input',{type:"date",value:f.fechaInicioActualizada||"",onChange:e=>set("fechaInicioActualizada",e.target.value),min:hoy(),style:{width:"100%",padding:"9px 12px",borderRadius:8,border:"1.5px solid #fed7aa",fontSize:13,outline:"none",boxSizing:"border-box"}})),
                 h('div',null,
                   h('label',{style:{display:"block",fontSize:10,fontWeight:600,color:"#374151",marginBottom:4,textTransform:"uppercase"}},"Nueva fecha cierre *"),
-                  h('input',{type:"date",value:f.fechaCierreActualizada||"",onChange:e=>set("fechaCierreActualizada",e.target.value),min:f.fechaInicioActualizada||new Date().toISOString().split("T")[0],style:{width:"100%",padding:"9px 12px",borderRadius:8,border:"1.5px solid #fed7aa",fontSize:13,outline:"none",boxSizing:"border-box"}}))),
+                  h('input',{type:"date",value:f.fechaCierreActualizada||"",onChange:e=>set("fechaCierreActualizada",e.target.value),min:f.fechaInicioActualizada||hoy(),style:{width:"100%",padding:"9px 12px",borderRadius:8,border:"1.5px solid #fed7aa",fontSize:13,outline:"none",boxSizing:"border-box"}}))),
               h('label',{style:{display:"block",fontSize:10,fontWeight:600,color:"#374151",marginBottom:4,textTransform:"uppercase"}},"Motivo del nuevo plazo *"),
               h('textarea',{value:f.motivoActualizacion||"",onChange:e=>set("motivoActualizacion",e.target.value),rows:2,placeholder:"Explicá qué se va a hacer diferente esta vez...",style:{width:"100%",padding:"9px 12px",borderRadius:8,border:"1.5px solid #fed7aa",fontSize:13,outline:"none",boxSizing:"border-box",resize:"vertical"}})),
             h('button',{onClick:async()=>{
@@ -1575,7 +1576,7 @@ function ModalProyecto({proyecto, onClose, onSave, ejecutores, recs}) {
                 ...SECTORES_TODOS.map(s=>h('option',{key:s,value:s},s)))),
             h('div',null,h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Presupuesto estimado ($)"),h('input',{value:f.presupuesto,onChange:e=>set("presupuesto",e.target.value),type:"number",placeholder:"0",style:aS()}))),
           h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}},
-            h('div',null,h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Fecha inicio estimada"),h('input',{value:f.fechaInicio,onChange:e=>set("fechaInicio",e.target.value),type:"date",min:new Date().toISOString().split("T")[0],style:aS()})),
+            h('div',null,h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Fecha inicio estimada"),h('input',{value:f.fechaInicio,onChange:e=>set("fechaInicio",e.target.value),type:"date",min:hoy(),style:aS()})),
             h('div',null,h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Fecha fin estimada"),h('input',{value:f.fechaFin,onChange:e=>set("fechaFin",e.target.value),type:"date",style:aS()}))),
           h('div',{style:{marginBottom:12}},h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Estado"),
             h('div',{style:{display:"flex",gap:6,flexWrap:"wrap"}},
@@ -2820,4 +2821,5 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
+
 
