@@ -700,6 +700,7 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs}) {
     reclamosHijos:rec.reclamosHijos||[],
     proyectoVinculadoId:rec.proyectoVinculadoId||null,
     proyectoTitulo:rec.proyectoTitulo||"",
+    justificacionDemora:rec.justificacionDemora||"",
   });
   const [saveErr,setSaveErr] = useState("");
   const [sending,setSending] = useState(false);
@@ -743,6 +744,18 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs}) {
         }
       }
       if(!f.criticidad) { setSaveErr("Debés asignar una criticidad."); return; }
+    }
+    // Validar justificación de demora: obligatoria si sin_resolucion O fecha cierre >21 días desde creación
+    const diasDesdeCreacion = rec.createdAt ? (pld(f.fechaCierre||"") - new Date(rec.createdAt)) / 86400000 : 0;
+    const esSinResolucion = f.estadoAvance === "sin_resolucion";
+    const esDemoraLarga = !!(f.fechaCierre && diasDesdeCreacion > 21);
+    const requiereJustificacion = (esSinResolucion || esDemoraLarga) && !isVinculado && !isConsolidando;
+    if(requiereJustificacion && !f.justificacionDemora?.trim()) {
+      setSaveErr(esSinResolucion
+        ? "Debés explicar el motivo por el cual no se puede resolver en este momento."
+        : "La fecha de cierre supera los 21 días desde la creación. Debés justificar el motivo.");
+      setTab("gestion");
+      return;
     }
     setSending(true);
     const comentarios=[...(rec.comentarios||[])];
@@ -1160,6 +1173,21 @@ Resolución: ${descripcion||"—"}`});
             h('button',{onClick:()=>set("estadoAvance", f.estadoAvance==="sin_resolucion"?"bajo_analisis":"sin_resolucion"),
               style:{padding:"8px 14px",borderRadius:8,border:f.estadoAvance==="sin_resolucion"?"2px solid #be185d":"2px solid #e2e8f0",background:f.estadoAvance==="sin_resolucion"?"#fdf2f8":"white",color:f.estadoAvance==="sin_resolucion"?"#be185d":"#64748b",cursor:"pointer",fontSize:12,fontWeight:600}},
               f.estadoAvance==="sin_resolucion"?"✓ Sin resolución temporaria — click para quitar":"Marcar como sin resolución temporaria")),
+          // Campo justificación: obligatorio si sin_resolucion O fecha cierre >21 días
+          (()=>{
+            const diasDesdeCreacion = rec.createdAt ? (pld(f.fechaCierre||"") - new Date(rec.createdAt)) / 86400000 : 0;
+            const esSinRes = f.estadoAvance === "sin_resolucion";
+            const esDemoraLarga = !!(f.fechaCierre && diasDesdeCreacion > 21);
+            if(!esSinRes && !esDemoraLarga) return null;
+            const label = esSinRes
+              ? "Motivo por el que no se puede resolver ahora *"
+              : "Motivo por el que la resolución requiere más de 21 días *";
+            return h('div',{style:{marginBottom:14,background:esSinRes?"#fdf2f8":"#fff7ed",border:`1.5px solid ${esSinRes?"#f9a8d4":"#fed7aa"}`,borderRadius:10,padding:12}},
+              h('label',{style:{display:"block",fontSize:11,fontWeight:700,color:esSinRes?"#be185d":"#92400e",marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},label),
+              h('textarea',{value:f.justificacionDemora,onChange:e=>set("justificacionDemora",e.target.value),rows:3,
+                placeholder:esSinRes?"Explicá qué está bloqueando la resolución (ej: esperando proveedor, pendiente de aprobación, etc.)":"Explicá por qué esta solicitud requiere más tiempo del habitual...",
+                style:{width:"100%",padding:"9px 12px",borderRadius:8,border:`1.5px solid ${esSinRes?"#f9a8d4":"#fed7aa"}`,fontSize:13,outline:"none",boxSizing:"border-box",resize:"vertical",background:"white"}}));
+          })(),
           h('div',{style:{marginBottom:14}},
             h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},"Criticidad (intendencia)"),
             h('div',{style:{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6}},
@@ -2669,22 +2697,15 @@ function App() {
     const seguimientoUrl = appUrl+"?seguimiento="+rec.numero;
     // Notificar al usuario cuando intendencia confirma fecha de resolución por primera vez
     if(rec.email && rec.fechaCierreConfirmada && prevRec && !prevRec.fechaCierreConfirmada){
+      const _diasDesdeCreacion = rec.createdAt ? (pld(rec.fechaCierreConfirmada) - new Date(rec.createdAt)) / 86400000 : 0;
+      const _esSinResolucion = rec.estadoAvance === "sin_resolucion";
+      const _esDemoraLarga = _diasDesdeCreacion > 21;
+      const _mailBody = (_esSinResolucion || _esDemoraLarga)
+        ? `Hola ${rec.nombre},\n\nTu solicitud fue registrada pero requiere más tiempo del habitual para su resolución.\n\nNúmero: ${rec.numero}\nSector: ${rec.sector}\nFecha tentativa de resolución: ${fd(rec.fechaCierreConfirmada)}\n\nMotivo: ${rec.justificacionDemora||"—"}\n\nPodés seguir el estado en tiempo real:\n${seguimientoUrl}\n\nTe avisaremos cuando esté resuelto.\n\n— Equipo de Intendencia Asturiano`
+        : `Hola ${rec.nombre},\n\nTu solicitud fue asignada y está siendo atendida por nuestro equipo.\n\nNúmero: ${rec.numero}\nSector: ${rec.sector}\nFecha tentativa de resolución: ${fd(rec.fechaCierreConfirmada)}\n\nSeguí el estado en tiempo real:\n${seguimientoUrl}\n\nTe avisaremos cuando esté resuelto.\n\n— Equipo de Intendencia Asturiano`;
       await sendEmail({to:rec.email,
-        subject:`[Asturiano] Tu solicitud está siendo atendido — ${rec.numero}`,
-        body:`Hola ${rec.nombre},
-
-Tu solicitud fue asignada y está siendo atendido por nuestro equipo.
-
-Número: ${rec.numero}
-Sector: ${rec.sector}
-Fecha tentativa de resolución: ${fd(rec.fechaCierreConfirmada)}
-
-Seguí el estado en tiempo real:
-${seguimientoUrl}
-
-Te avisaremos cuando esté resuelto.
-
-— Equipo de Intendencia Asturiano`});
+        subject:`[Asturiano] Tu solicitud está siendo atendida — ${rec.numero}`,
+        body: _mailBody});
       await notifHijos(
         `[Asturiano] Tu solicitud está siendo atendida — {numero}`,
         hijo=>`Hola ${hijo.nombre},\n\nTu solicitud ${hijo.numero} (${hijo.sector}) está siendo atendida por nuestro equipo junto con otra solicitud sobre el mismo problema.\n\nFecha tentativa de resolución: ${fd(rec.fechaCierreConfirmada)}\n\nSeguí el estado:\n${appUrl}?seguimiento=${hijo.numero}\n\n— Equipo de Intendencia Asturiano`
@@ -2886,6 +2907,5 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
-
 
 
