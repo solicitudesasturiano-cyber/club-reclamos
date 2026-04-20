@@ -196,6 +196,14 @@ function buildGCalLink({titulo, desc, fechaInicio, fechaFin, horaInicio, horaFin
   return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(titulo)}&dates=${dates}&details=${encodeURIComponent(desc)}`;
 }
 
+function buildGCalReminderLink({titulo, desc, fechaFin}) {
+  const e = (fechaFin||"").replace(/-/g,"");
+  const endDateObj = new Date(fechaFin);
+  endDateObj.setDate(endDateObj.getDate()+1);
+  const eNext = endDateObj.toISOString().split("T")[0].replace(/-/g,"");
+  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(titulo)}&dates=${e}/${eNext}&details=${encodeURIComponent(desc)}`;
+}
+
 // ── HELPERS ────────────────────────────────────────────────────────────────
 const fd  = iso => iso ? new Date(iso).toLocaleDateString("es-AR",{day:"2-digit",month:"2-digit",year:"numeric"}) : "—";
 const fdt = iso => iso ? new Date(iso).toLocaleString("es-AR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}) : "—";
@@ -2805,7 +2813,6 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
-
 
 
 
