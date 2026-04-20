@@ -655,9 +655,9 @@ function EditModal({rec, onClose, onSave, ejecutores}) {
     }
     // Skip executor/date validation when linked to a project OR when consolidating
     const isVinculado = f.estadoAvance==="vinculado_proyecto" || f.proyectoVinculadoId;
-    const isConsolidando = (f.reclamosHijos||[]).length > 0;
+    const isConsolidando = (f.reclamosHijos||[]).length > 0 || (rec.reclamosHijos||[]).length > 0 || f.estadoAvance==="consolidada";
     // Validate required fields for assignment (only if not linked to project and not consolidating)
-    if(!isVinculado && !isConsolidando && (tab==="asignacion" || tab==="gestion")) {
+    if(!isVinculado && !isConsolidando) {
       if(!f.ejecutorMail) { setSaveErr("Debés asignar un ejecutor antes de guardar."); return; }
       if(f.ejecutorMail && !f.nuevoComentario.trim() && !rec.comentarios?.some(c=>c.autor==="Intendencia")) { setSaveErr("El comentario para el ejecutor es obligatorio."); setTab("gestion"); return; }
       if(!f.fechaInicioEsperado && !rec.fechaInicioOriginal) { setSaveErr("La fecha de inicio es obligatoria."); return; }
@@ -2741,6 +2741,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
+
 
 
 
