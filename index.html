@@ -344,69 +344,88 @@ async function sendEmail({to, cc, subject, body, htmlBody}) {
 }
 
 // ── DUPLICATE DETECTION ──────────────────────────────────────────────────────
+const STOPWORDS = new Set(["que","los","las","del","una","hay","por","con","muy","esta","esto","estan","para","como","mas","sin","son","sus","fue","ser","han","pero","bien","mal","hay","tiene","hay","ahi","aca","solo","todo","toda","todos"]);
+
+function tokenizar(texto) {
+  return (texto||"").toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+    .replace(/[^a-z0-9\s]/g,"")
+    .split(/\s+/)
+    .filter(w => w.length > 2 && !STOPWORDS.has(w));
+}
+
+function similitudJaccard(a, b) {
+  const setA = new Set(tokenizar(a));
+  const setB = new Set(tokenizar(b));
+  if(!setA.size || !setB.size) return 0;
+  const interseccion = [...setA].filter(x => setB.has(x)).length;
+  const union = new Set([...setA, ...setB]).size;
+  return interseccion / union;
+}
+
+// Sinónimos del dominio del club para mejorar detección semántica
+const SINONIMOS = [
+  ["sucio","sucia","sucios","sucias","limpieza","limpiar","higiene","olor","viciado","olores","hedor","peste"],
+  ["roto","rota","rotos","rotas","rompió","rompio","quebrado","quebrada","daño","dano","daños","danos","deteriorado","deteriorada"],
+  ["gotea","gotera","pérdida","perdida","perdidas","filtración","filtracion","humedad","mojado","mojada","agua"],
+  ["oscuro","oscura","luz","luces","iluminación","iluminacion","foco","focos","fundido","fundida","apagado","apagada"],
+  ["frío","frio","calor","temperatura","climatización","climatizacion","aire","ventilación","ventilacion","calefacción","calefaccion"],
+  ["atascado","atascada","tapado","tapada","cañería","caneria","desagüe","desague","cloaca"],
+  ["pintura","pared","paredes","humedad","manchas","mancha","descascarado","descascarada"],
+];
+
+function expandirTokens(tokens) {
+  const expandidos = new Set(tokens);
+  for(const tok of tokens) {
+    for(const grupo of SINONIMOS) {
+      if(grupo.includes(tok)) {
+        grupo.forEach(s => expandidos.add(s));
+        break;
+      }
+    }
+  }
+  return expandidos;
+}
+
+function similitudSemantica(a, b) {
+  const tokA = tokenizar(a);
+  const tokB = tokenizar(b);
+  const setA = expandirTokens(tokA);
+  const setB = expandirTokens(tokB);
+  if(!setA.size || !setB.size) return 0;
+  const interseccion = [...setA].filter(x => setB.has(x)).length;
+  const union = new Set([...setA, ...setB]).size;
+  return interseccion / union;
+}
+
 async function detectarDuplicados(nuevoRec, todosRecs) {
-  // Candidatos: todas las solicitudes abiertas excepto la misma
   const candidatos = todosRecs.filter(r =>
     r.id !== nuevoRec.id &&
     !["completada","consolidada","vinculado_proyecto"].includes(r.estadoAvance) &&
-    r.desc && r.desc.trim().length > 10
+    r.desc && r.desc.trim().length > 3
   );
-  if (candidatos.length === 0) return [];
+  if(!candidatos.length) return [];
 
-  try {
-    const prompt = `Sos un asistente que detecta solicitudes duplicadas en un sistema de gestión de un club.
+  const UMBRAL = 0.20;
+  const similares = [];
 
-NUEVA SOLICITUD [${nuevoRec.numero}]:
-Sector: ${nuevoRec.sector}
-Descripción: "${nuevoRec.desc}"
-
-SOLICITUDES EXISTENTES ABIERTAS:
-${candidatos.map((r,i)=>`${i+1}. [${r.numero}] Sector: ${r.sector} | Descripción: "${r.desc}"`).join("\n")}
-
-Tu tarea: identificar si alguna solicitud existente describe EL MISMO PROBLEMA FÍSICO o situación que la nueva, aunque usen palabras distintas.
-
-REGLAS:
-- Evaluá el SIGNIFICADO de las descripciones, no las palabras exactas. Sinónimos y frases distintas pueden referirse al mismo problema.
-- El sector es una señal de apoyo: si coincide, aumenta la confianza.
-- El tipo de problema (categoría) NO importa — ignoralo completamente.
-- Solo reportá si estás seguro de que es el mismo problema.
-- Si tenés dudas, NO lo incluyas.
-
-EJEMPLOS DE DUPLICADOS OBVIOS (aunque usen palabras distintas):
-- "las mesas están muy sucias" = "hay que limpiar las mesas" → mismo problema
-- "mal olor en el salón" = "aire viciado" = "huele mal" → mismo problema  
-- "canilla rota" = "la canilla gotea" = "pérdida de agua en grifo" → mismo problema
-- "luz fundida" = "no funciona la iluminación" = "está oscuro" → mismo problema
-
-EJEMPLOS DE NO DUPLICADOS:
-- "la pileta tiene una gotera" ≠ "la pileta está sucia" → problemas distintos
-- "sillas rotas" ≠ "mesas sucias" → problemas distintos aunque mismo sector
-
-Respondé SOLO con JSON válido, sin texto adicional:
-{"similares": [{"numero": "X-XXX-XXX", "razon": "explicación concreta de por qué es el mismo problema", "sectorCoincide": true/false}]}
-Si no hay similares: {"similares": []}`;
-
-    const resp = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 400,
-        messages: [{role:"user", content: prompt}]
-      })
-    });
-    const data = await resp.json();
-    const text = (data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("");
-    const parsed = JSON.parse(text.replace(/```json|```/g,"").trim());
-    // Solo retornar alta confianza, agregar descExistente para mostrar en UI
-    return (parsed.similares||[]).map(s => {
-      const existing = candidatos.find(r=>r.numero===s.numero);
-      return {...s, similitud:"alta", descExistente: existing?.desc||""};
-    });
-  } catch(e) {
-    console.error("Duplicate detection error:", e);
-    return [];  // En caso de error, no mostrar falsos positivos
+  for(const r of candidatos) {
+    const scoreDesc = similitudSemantica(nuevoRec.desc, r.desc);
+    const sectorCoincide = nuevoRec.sector === r.sector;
+    const scoreFinal = scoreDesc * 0.8 + (sectorCoincide ? 0.2 : 0);
+    console.log(`Dup check ${nuevoRec.numero} vs ${r.numero}: desc=${scoreDesc.toFixed(2)} sector=${sectorCoincide} final=${scoreFinal.toFixed(2)}`);
+    if(scoreFinal >= UMBRAL) {
+      similares.push({
+        numero: r.numero,
+        similitud: "alta",
+        razon: `Descripción similar (${(scoreDesc*100).toFixed(0)}% coincidencia)${sectorCoincide?" · mismo sector":""}`,
+        descExistente: r.desc,
+        sectorCoincide,
+        _score: scoreFinal
+      });
+    }
   }
+  return similares.sort((a,b) => b._score - a._score);
 }
 
 // ── REACT HELPERS ──────────────────────────────────────────────────────────
@@ -2453,7 +2472,6 @@ function App() {
     const recsFrescos = await sbGetAll();
     setRecs(recsFrescos);
     const duplicados = await detectarDuplicados(rec, recsFrescos);
-    console.log("Duplicate detection result:", duplicados);
     const recConDups = duplicados.length > 0 ? {...rec, posiblesDuplicados: duplicados} : rec;
     setRecs(prev=>[recConDups,...prev.filter(r=>r.id!==rec.id)]);
     await sbUpsert(recConDups);
