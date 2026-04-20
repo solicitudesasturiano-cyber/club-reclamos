@@ -600,7 +600,9 @@ function FormularioSocio({onSubmit, reclamos}) {
               t.icon+" "+t.label)))),
         // Nombre
         h('div',{style:{marginBottom:12}},lbl("Nombre y apellido *",err.nombre),h('input',{value:f.nombre,onChange:e=>set("nombre",e.target.value),placeholder:"Tu nombre completo",style:iS(err.nombre)})),
-        h('div',{style:{marginBottom:12}},lbl("Email *",err.email),h('input',{value:f.email,onChange:e=>set("email",e.target.value),placeholder:"Para recibir novedades y seguimiento",style:iS(err.email),type:"email"})),
+        h('div',{style:{marginBottom:12}},lbl("Email *",err.email),h('input',{value:f.email,onChange:e=>set("email",e.target.value),placeholder:"Para recibir novedades y seguimiento",style:iS(err.email),type:"email"}),
+          /\@(hotmail|outlook|live|yahoo)\.(com|com\.ar)$/i.test(f.email) && h('div',{style:{marginTop:4,fontSize:12,color:"#dc2626",lineHeight:1.4}},
+            "⚠️ Los mails a "+f.email.split("@")[1]+" a veces llegan al spam. Revisá tu carpeta de spam y marcá el mail como \"No es spam\" para recibir las notificaciones correctamente.")),
         h('div',{style:{marginBottom:18}},
           lbl("WhatsApp (opcional)"),
           h('div',{style:{position:"relative"}},
@@ -2884,5 +2886,6 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
+
 
 
