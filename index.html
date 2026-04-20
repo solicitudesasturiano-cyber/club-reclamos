@@ -2715,6 +2715,7 @@ function App() {
     }
     // Resolution email is handled by notifResolucionAuto in EditModal save
     // Notificar al solicitante cuando se marca sin_resolucion por primera vez
+    console.log("sin_resolucion check:", rec.estadoAvance, prevRec?.estadoAvance, !!rec.justificacionDemora?.trim(), rec.email);
     if(rec.email && rec.estadoAvance === "sin_resolucion" && prevRec && prevRec.estadoAvance !== "sin_resolucion" && rec.justificacionDemora?.trim()) {
       await sendEmail({to:rec.email,
         subject:`[Asturiano] Tu solicitud está registrada — ${rec.numero}`,
@@ -2915,4 +2916,5 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
+
 
