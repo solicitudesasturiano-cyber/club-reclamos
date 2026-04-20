@@ -170,13 +170,7 @@ function buildGCalLink({titulo, desc, fechaInicio, fechaFin, horaInicio, horaFin
   const isSameDay = fechaInicio && fechaFin && fechaInicio === fechaFin;
   const s = (fechaInicio||"").replace(/-/g,"");
   const e = (fechaFin||fechaInicio||"").replace(/-/g,"");
-function buildGCalReminderLink({titulo, desc, fechaFin}) {
-  const e = (fechaFin||"").replace(/-/g,"");
-  const endDateObj = new Date(fechaFin);
-  endDateObj.setDate(endDateObj.getDate()+1);
-  const eNext = endDateObj.toISOString().split("T")[0].replace(/-/g,"");
-  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(titulo)}&dates=${e}/${eNext}&details=${encodeURIComponent(desc)}`;
-}
+
   let dates;
   if(isSameDay && horaInicio) {
     // Evento con hora: formato YYYYMMDDTHHMMSS
@@ -2811,6 +2805,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
+
 
 
 
