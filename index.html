@@ -612,7 +612,7 @@ function PantallaRechazo({onConfirm}) {
 }
 
 // ── MODAL GESTIÓN ──────────────────────────────────────────────────────────
-function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo}) {
+  function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs}) {
   const [tab,setTab] = useState("gestion");
   const yaFueAsignado = !!(rec.ejecutorMailOriginal || rec.fechaInicioOriginal);
   const [f,setF] = useState({
@@ -807,28 +807,39 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo}) {
     if(hijosNuevos.length > 0) {
       const appUrl = window.location.href.split("?")[0];
       for(const num of hijosNuevos) {
-        const hijo = recs.find(r=>r.numero===num);
-        if(!hijo) continue;
+        const hijoRec = (recs||[]).find(r=>r.numero===num);
+        if(!hijoRec) continue;
+        const esPadre = !!(savedRec.ejecutorMail || savedRec.fechaCierreConfirmada);
+        const padre = esPadre ? savedRec : hijoRec;
+        const hijo = esPadre ? hijoRec : savedRec;
         const hijoUpd = {...hijo,
           estadoAvance: "consolidada",
-          reclamoPadre: savedRec.numero,
-          ejecutorMail: savedRec.ejecutorMail||"",
-          ejecutorNombre: savedRec.ejecutorNombre||"",
-          ejecutorConfirmado: savedRec.ejecutorConfirmado||false,
-          ejecutores_lista: savedRec.ejecutores_lista||[],
-          fechaInicioEsperado: savedRec.fechaInicioEsperado||"",
-          fechaCierre: savedRec.fechaCierre||"",
-          fechaCierreConfirmada: savedRec.fechaCierreConfirmada||"",
-          criticidad: savedRec.criticidad||hijo.criticidad,
-          descripcionResolucion: savedRec.descripcionResolucion||"",
+          reclamoPadre: padre.numero,
+          ejecutorMail: padre.ejecutorMail||"",
+          ejecutorNombre: padre.ejecutorNombre||"",
+          ejecutorConfirmado: padre.ejecutorConfirmado||false,
+          ejecutores_lista: padre.ejecutores_lista||[],
+          fechaInicioEsperado: padre.fechaInicioEsperado||"",
+          fechaCierre: padre.fechaCierre||"",
+          fechaCierreConfirmada: padre.fechaCierreConfirmada||"",
+          criticidad: padre.criticidad||hijo.criticidad,
+          descripcionResolucion: padre.descripcionResolucion||"",
           posiblesDuplicados: [],
-          comentarios:[...(hijo.comentarios||[]),{texto:`Consolidada como sub-ticket de ${savedRec.numero}. Será resuelta en conjunto.`,fecha:new Date().toISOString(),autor:"Sistema"}]
+          comentarios:[...(hijo.comentarios||[]),{texto:`Consolidada como sub-ticket de ${padre.numero}. Será resuelta en conjunto.`,fecha:new Date().toISOString(),autor:"Sistema"}]
         };
+        if(!esPadre) {
+          const padreUpd = {...hijoRec,
+            reclamosHijos:[...new Set([...(hijoRec.reclamosHijos||[]), savedRec.numero])],
+            comentarios:[...(hijoRec.comentarios||[]),{texto:`Sub-ticket ${savedRec.numero} consolidado bajo esta solicitud.`,fecha:new Date().toISOString(),autor:"Sistema"}]
+          };
+          await sbUpsert(padreUpd);
+          if(onUpdateHijo) await onUpdateHijo(padreUpd);
+        }
         await sbUpsert(hijoUpd);
         if(onUpdateHijo) await onUpdateHijo(hijoUpd);
         if(hijo.email) await sendEmail({to:hijo.email,
           subject:`[Asturiano] Tu solicitud fue consolidada — ${hijo.numero}`,
-          body:`Hola ${hijo.nombre},\n\nTu solicitud ${hijo.numero} (${hijo.sector}) fue consolidada con otra solicitud sobre el mismo problema.\n\nAmbas serán resueltas juntas.${savedRec.fechaCierreConfirmada?"\n\nFecha estimada de resolución: "+fd(savedRec.fechaCierreConfirmada):""}${savedRec.ejecutorNombre?"\nEquipo asignado: "+savedRec.ejecutorNombre:""}\n\nSeguí el estado:\n${appUrl}?seguimiento=${hijo.numero}\n\n— Equipo de Intendencia Asturiano`});
+          body:`Hola ${hijo.nombre},\n\nTu solicitud ${hijo.numero} (${hijo.sector}) fue consolidada con otra solicitud sobre el mismo problema.\n\nAmbas serán resueltas juntas.${padre.fechaCierreConfirmada?"\n\nFecha estimada de resolución: "+fd(padre.fechaCierreConfirmada):""}${padre.ejecutorNombre?"\nEquipo asignado: "+padre.ejecutorNombre:""}\n\nSeguí el estado:\n${appUrl}?seguimiento=${hijo.numero}\n\n— Equipo de Intendencia Asturiano`});
       }
     }
     // Si está reabierta y se asignó nueva fecha → notificar al ejecutor
@@ -2023,7 +2034,7 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
           })))),
     mainTab==="reclamos" && view==="kanban" && h(Kanban,{recs:filtrados,onEdit:setModal}),
     mainTab==="proyectos" && h(ProyectosTab,{recs,onUpdate,ejecutores}),
-    modal && h(EditModal,{rec:modal,onClose:()=>setModal(null),onSave:async u=>{await onUpdate(u,modal);setModal(null);},ejecutores,onUpdateHijo:async u=>{await onUpdate(u,u);}}),
+    modal && h(EditModal,{rec:modal,onClose:()=>setModal(null),onSave:async u=>{await onUpdate(u,modal);setModal(null);},ejecutores,onUpdateHijo:async u=>{await onUpdate(u,u);},recs}),
     showCfg && h(PanelConfig,{onClose:()=>setShowCfg(false),onSaveEjecutores:ejs=>{setEjecutores(ejs);setShowCfg(false);}}),
     modalDup && h(ModalDuplicado,{
       hijo: modalDup.hijo,
