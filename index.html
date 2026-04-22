@@ -1330,7 +1330,7 @@ Resolución: ${descripcion||"—"}`});
                 ...(ls.get("proyectos")||[]).map(p=>h('option',{key:p.id,value:p.id},p.titulo))),
               f.proyectoTitulo && h('div',{style:{marginTop:6,fontSize:12,color:"#5b21b6",fontWeight:600}},"✅ Vinculado a: "+f.proyectoTitulo)))),
           // Comentario para el ejecutor — al final de la tab asignación
-          f.tipoEjecutor !== "tercero" && h('div',{style:{marginTop:16,paddingTop:16,borderTop:"1.5px solid #f1f5f9",marginBottom:8}},
+          tab==="asignacion" && f.tipoEjecutor !== "tercero" && h('div',{style:{marginTop:16,paddingTop:16,borderTop:"1.5px solid #f1f5f9",marginBottom:8}},
             h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:!f.ejecutorMail||f.nuevoComentario.trim()?"#374151":"#dc2626",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Comentario para el ejecutor *"),
             h('div',{style:{fontSize:11,color:"#64748b",marginBottom:6}},"Este comentario le llegará al ejecutor en el email de asignación."),
             h('textarea',{value:f.nuevoComentario,onChange:e=>set("nuevoComentario",e.target.value),rows:3,placeholder:"Describí qué debe hacer el ejecutor, cómo acceder al lugar, herramientas necesarias, etc...",style:{...aS(),resize:"vertical",border:f.ejecutorMail&&!f.nuevoComentario.trim()?"2px solid #ef4444":undefined}})),
@@ -2998,7 +2998,6 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
-
 
 
 
