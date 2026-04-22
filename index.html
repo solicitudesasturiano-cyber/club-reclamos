@@ -999,19 +999,16 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs}) {
     }
     // When marked as completada → set to esperando_validacion (directivo must approve first)
     if((f.estadoAvance==="completada"||f.estadoAvance==="esperando_validacion") && !["completada","esperando_validacion"].includes(rec.estadoAvance) && f.descripcionResolucion.trim()) {
-      // Force state to esperando_validacion
-      savedRec = {...savedRec, estadoAvance:"esperando_validacion"};
-      // Update state to esperando_validacion instead of completada until directivo approves
-      const recEspera = {...savedRec};
-      await sbUpsert(recEspera);
-      setRecs(prev=>prev.map(r=>r.id===recEspera.id?recEspera:r));
-      // Notify directivos
+      const appUrl2 = window.location.href.split("?")[0];
+      savedRec = {...savedRec, estadoAvance:"esperando_validacion", fechaEnvioValidacion: new Date().toISOString()};
+      await sbUpsert(savedRec);
+      setRecs(prev=>prev.map(r=>r.id===savedRec.id?savedRec:r));
       const dirMails = getDirectivos(savedRec.cat).map(d=>d.mail).filter(Boolean);
       const respMail = getResponsableMail(savedRec.cat);
       if(dirMails.length) {
         await sendEmail({to:dirMails, cc:[respMail].filter(Boolean),
-          subject:`[Asturiano]  Tarea completada — pendiente validación — ${savedRec.numero}`,
-          body:`La tarea ${savedRec.numero} fue marcada como completada y requiere tu validación.\n\nSector: ${savedRec.sector}\nEjecutor: ${savedRec.ejecutorNombre||"—"}\nResolución: ${savedRec.descripcionResolucion||"—"}\n\nAprobar: ${window.location.href.split("?")[0]}?validar=${savedRec.id}\nRechazar: ${window.location.href.split("?")[0]}?rechazar_validacion=${savedRec.id}`});
+          subject:`[Asturiano] Revisá antes de notificar al cliente — ${savedRec.numero}: ${savedRec.sector}`,
+          body:`Hola,\n\nLa tarea ${savedRec.numero} fue marcada como completada. Revisala antes de que se notifique al cliente.\n\nSector: ${savedRec.sector}\nProblema: ${savedRec.sub}\nEjecutor: ${savedRec.ejecutorNombre||"—"}\nDescripción de lo realizado: ${savedRec.descripcionResolucion||"—"}\n\n¿Estás de acuerdo con la resolución?\n\n✅ Estoy de acuerdo (se notifica al cliente): ${appUrl2}?validar=${savedRec.id}\n❌ No estoy de acuerdo (se reabre para retrabajar): ${appUrl2}?rechazar_validacion=${savedRec.id}\n\nSi no respondés en 2 días, el cliente será notificado automáticamente.\n\n— Sistema de Reclamos — Asturiano`});
       }
     }
     setSending(false);
@@ -2006,8 +2003,26 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
         await sendEmail({to:[r.ejecutorMail], subject:`[Asturiano]  Tu tarea empieza hoy — ${r.numero}`, body:`Hola ${r.ejecutorNombre},\n\nLa tarea ${r.numero} debería iniciarse hoy.\n\nSector: ${r.sector}\nDescripción: ${r.desc}\n\nCuando termines confirmá la resolución:\n${appUrl}?completar=${r.id}`});
         enviados++;
       }
-    }
 
+      // CASO 5: Directivo no accionó en 2 días → notificar cliente automáticamente
+      if(r.estadoAvance === "esperando_validacion" && r.fechaEnvioValidacion && !diasOverride) {
+        const diasEsperando = (new Date() - new Date(r.fechaEnvioValidacion)) / 86400000;
+        if(diasEsperando >= 2) {
+          const updated = {...r, estadoAvance:"completada",
+            comentarios:[...(r.comentarios||[]),{texto:"Directivo no accionó en 2 días. Cliente notificado automáticamente.",fecha:new Date().toISOString(),autor:"Sistema"}]};
+          await sbUpsert(updated);
+          actualizados = actualizados.map(x=>x.id===r.id?updated:x);
+          // Notificar al cliente
+          const appUrl2 = window.location.href.split("?")[0];
+          const msgsCat = {infraestructura:"nuestro equipo de obras revisó y resolvió el inconveniente",mantenimiento:"nuestro equipo de mantenimiento preventivo atendió el problema",limpieza:"nuestro equipo de limpieza atendió la situación",preparacion:"el espacio fue preparado correctamente",servicios:"nuestro equipo de atención al socio gestionó tu consulta",cuotas:"nuestro equipo administrativo resolvió tu consulta"};
+          const msgCat2 = msgsCat[r.cat]||"nuestro equipo atendió y resolvió el inconveniente";
+          if(r.email) await sendEmail({to:r.email,
+            subject:`[Asturiano] Tu solicitud fue resuelta — ${r.numero}`,
+            body:`Hola ${r.nombre},\n\nNos alegra informarte que el inconveniente que reportaste en ${r.sector} fue resuelto. ${msgCat2}.\n\n${r.descripcionResolucion?"Lo que se hizo:\n"+r.descripcionResolucion+"\n\n":""}Cuando tengas un momento, evaluá si la solicitud fue resuelta correctamente y calificá la atención:\n${appUrl2}?calificar=${r.id}\n\nGracias por ayudarnos a mejorar el club.\n\n— Equipo de Intendencia Asturiano`});
+          enviados++;
+        }
+      }
+    }
     if(!diasOverride) setRecs(actualizados);
     alert(enviados>0?`✅ Se enviaron ${enviados} notificaciones.`:"ℹ️ Sin alertas pendientes en este momento.");
     setChecking(false);
@@ -2316,9 +2331,11 @@ function CompletarView({recId, recs, setRecs, loaded}) {
 function RechazarValidacionView({recId, recs, setRecs, loaded}) {
   const rec = recs.find(r=>r.id===Number(recId));
   const [motivo,setMotivo] = useState("");
-  const [err,setErr] = useState(false);
+  const [nuevaFecha,setNuevaFecha] = useState("");
+  const [err,setErr] = useState("");
   const [done,setDone] = useState(false);
   const [sending,setSending] = useState(false);
+  const hoyStr = () => { const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); };
 
   if(!loaded) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:18}},"Cargando...");
   if(!rec) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
@@ -2328,26 +2345,29 @@ function RechazarValidacionView({recId, recs, setRecs, loaded}) {
     h('div',{style:{background:"white",borderRadius:20,padding:40,maxWidth:420,width:"100%",textAlign:"center"}},
       h('div',{style:{fontSize:64,marginBottom:16}},"🔄"),
       h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:24,color:"#0f172a",margin:"0 0 12px"}},"Solicitud reabierta"),
-      h('p',{style:{color:"#64748b",fontSize:15,lineHeight:1.6}},"La solicitud fue reabierta. El responsable fue notificado con tu comentario."),
+      h('p',{style:{color:"#64748b",fontSize:15,lineHeight:1.6}},"El responsable fue notificado para retrabajar la resolución."),
       h('p',{style:{color:"#94a3b8",fontSize:13,marginTop:16}},"Podés cerrar esta ventana.")));
 
   const submit = async () => {
-    if(!motivo.trim()){setErr(true);return;}
+    if(!motivo.trim()){ setErr("El motivo es obligatorio."); return; }
+    if(!nuevaFecha){ setErr("La nueva fecha de resolución es obligatoria."); return; }
     setSending(true);
     const appUrl = window.location.href.split("?")[0];
-    const updated = {...rec, estadoAvance:"bajo_analisis",
-      descripcionResolucion:"",
-      comentarios:[...(rec.comentarios||[]),{texto:`Directivo rechazó la resolución. Motivo: ${motivo}`,fecha:new Date().toISOString(),autor:"Directivo"}]};
+    const updated = {...rec,
+      estadoAvance: rec.ejecutorConfirmado ? "iniciada" : "bajo_analisis",
+      descripcionResolucion: "",
+      fechaCierre: nuevaFecha,
+      fechaCierreActualizada: nuevaFecha,
+      motivoActualizacion: `Directivo no aprobó: ${motivo}`,
+      fechaEnvioValidacion: null,
+      comentarios:[...(rec.comentarios||[]),{texto:`Directivo no estuvo de acuerdo con la resolución. Motivo: ${motivo}. Nueva fecha: ${nuevaFecha}.`,fecha:new Date().toISOString(),autor:"Directivo"}]};
     await sbUpsert(updated);
     setRecs(prev=>prev.map(r=>r.id===rec.id?updated:r));
     const respMail = getResponsableMail(rec.cat);
-    if(respMail) await sendEmail({to:respMail,
-      subject:`[Asturiano]  Resolución rechazada por directivo — ${rec.numero}`,
-      body:`El directivo rechazó la resolución de la solicitud ${rec.numero} (${rec.sector}).
-
-Motivo: ${motivo}
-
-La solicitud fue reabierta. Las fechas originales se mantienen.`});
+    const dirMails = getDirectivos(rec.cat).map(d=>d.mail).filter(Boolean);
+    if(respMail) await sendEmail({to:respMail, cc:dirMails,
+      subject:`[Asturiano] El directivo no aprobó la resolución — ${rec.numero}: ${rec.sector}`,
+      body:`Hola,\n\nEl directivo revisó la tarea ${rec.numero} y consideró que la resolución no fue satisfactoria.\n\nSector: ${rec.sector}\nProblema: ${rec.sub}\nEjecutor: ${rec.ejecutorNombre||"—"}\n\nMotivo: ${motivo}\n\nNueva fecha de resolución asignada: ${nuevaFecha}\n\nPor favor gestioná nuevamente la solicitud.\n\n${appUrl}`});
     setSending(false); setDone(true);
   };
 
@@ -2361,11 +2381,15 @@ La solicitud fue reabierta. Las fechas originales se mantienen.`});
         h('div',{style:{background:"#f8fafc",borderRadius:10,padding:12,marginBottom:16,fontSize:13}},
           h('div',{style:{fontWeight:600,color:"#1e293b",marginBottom:4}},rec.sector+" — "+rec.sub),
           h('div',{style:{color:"#64748b",marginBottom:6}},rec.desc),
-          rec.descripcionResolucion && h('div',{style:{background:"#f0fdf4",borderRadius:8,padding:"8px 10px",fontSize:12,color:"#15803d"}},"Resolución: "+rec.descripcionResolucion)),
+          rec.descripcionResolucion && h('div',{style:{background:"#f0fdf4",borderRadius:8,padding:"8px 10px",fontSize:12,color:"#15803d"}},"Lo realizado: "+rec.descripcionResolucion)),
         h('div',{style:{marginBottom:16}},
-          h('label',{style:{display:"block",fontSize:12,fontWeight:600,color:err?"#dc2626":"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},"Motivo del rechazo *"),
-          h('textarea',{value:motivo,onChange:e=>{setMotivo(e.target.value);setErr(false);},rows:4,placeholder:"Explicá por qué la resolución no fue satisfactoria...",style:{width:"100%",padding:"10px 14px",borderRadius:8,border:err?"2px solid #ef4444":"1.5px solid #e2e8f0",fontSize:14,resize:"vertical",outline:"none",boxSizing:"border-box"}})),
-        h('button',{onClick:submit,disabled:sending,style:{width:"100%",padding:"14px",background:sending?"#94a3b8":"linear-gradient(135deg,#ef4444,#dc2626)",color:"white",border:"none",borderRadius:12,fontSize:15,fontWeight:700,cursor:"pointer"}},sending?"Enviando...":"🔄 Rechazar y reabrir solicitud"))));
+          h('label',{style:{display:"block",fontSize:12,fontWeight:600,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},"Motivo del rechazo *"),
+          h('textarea',{value:motivo,onChange:e=>{setMotivo(e.target.value);setErr("");},rows:4,placeholder:"Explicá qué no quedó bien y qué hay que corregir...",style:{width:"100%",padding:"10px 14px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:14,resize:"vertical",outline:"none",boxSizing:"border-box"}})),
+        h('div',{style:{marginBottom:16}},
+          h('label',{style:{display:"block",fontSize:12,fontWeight:600,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},"Nueva fecha de resolución *"),
+          h('input',{type:"date",value:nuevaFecha,onChange:e=>{setNuevaFecha(e.target.value);setErr("");},min:hoyStr(),style:{width:"100%",padding:"10px 14px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:14,outline:"none",boxSizing:"border-box"}})),
+        err && h('div',{style:{background:"#fef2f2",border:"1.5px solid #fecaca",borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:13,color:"#dc2626"}},err),
+        h('button',{onClick:submit,disabled:sending,style:{width:"100%",padding:"14px",background:sending?"#94a3b8":"linear-gradient(135deg,#ef4444,#dc2626)",color:"white",border:"none",borderRadius:12,fontSize:15,fontWeight:700,cursor:"pointer"}},sending?"Enviando...":"❌ No estoy de acuerdo — reabrir solicitud"))));
 }
 
 // ── CALIFICAR VIEW ────────────────────────────────────────────────────────
@@ -2915,5 +2939,6 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
+
 
 
