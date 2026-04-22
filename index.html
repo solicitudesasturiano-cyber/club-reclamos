@@ -1328,12 +1328,11 @@ Resolución: ${descripcion||"—"}`});
               },style:{width:"100%",padding:"9px 12px",borderRadius:8,border:"1.5px solid #ddd6fe",fontSize:13,outline:"none",background:"white"}},
                 h('option',{value:""},"— Sin vincular —"),
                 ...(ls.get("proyectos")||[]).map(p=>h('option',{key:p.id,value:p.id},p.titulo))),
-              f.proyectoTitulo && h('div',{style:{marginTop:6,fontSize:12,color:"#5b21b6",fontWeight:600}},"✅ Vinculado a: "+f.proyectoTitulo)))),
-          // Comentario para el ejecutor — al final de la tab asignación
-          tab==="asignacion" && f.tipoEjecutor !== "tercero" && h('div',{style:{marginTop:16,paddingTop:16,borderTop:"1.5px solid #f1f5f9",marginBottom:8}},
+              f.proyectoTitulo && h('div',{style:{marginTop:6,fontSize:12,color:"#5b21b6",fontWeight:600}},"✅ Vinculado a: "+f.proyectoTitulo))),
+          f.tipoEjecutor !== "tercero" && h('div',{style:{marginTop:16,paddingTop:16,borderTop:"1.5px solid #f1f5f9",marginBottom:8}},
             h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:!f.ejecutorMail||f.nuevoComentario.trim()?"#374151":"#dc2626",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Comentario para el ejecutor *"),
             h('div',{style:{fontSize:11,color:"#64748b",marginBottom:6}},"Este comentario le llegará al ejecutor en el email de asignación."),
-            h('textarea',{value:f.nuevoComentario,onChange:e=>set("nuevoComentario",e.target.value),rows:3,placeholder:"Describí qué debe hacer el ejecutor, cómo acceder al lugar, herramientas necesarias, etc...",style:{...aS(),resize:"vertical",border:f.ejecutorMail&&!f.nuevoComentario.trim()?"2px solid #ef4444":undefined}})),
+            h('textarea',{value:f.nuevoComentario,onChange:e=>set("nuevoComentario",e.target.value),rows:3,placeholder:"Describí qué debe hacer el ejecutor, cómo acceder al lugar, herramientas necesarias, etc...",style:{...aS(),resize:"vertical",border:f.ejecutorMail&&!f.nuevoComentario.trim()?"2px solid #ef4444":undefined}}))),
 
         // TAB RESOLUCIÓN
         tab==="resolucion" && h('div',null,
@@ -1398,7 +1397,7 @@ Resolución: ${descripcion||"—"}`});
         saveErr && h('div',{style:{background:"#fef2f2",border:"1.5px solid #fecaca",borderRadius:8,padding:"10px 14px",marginBottom:10,fontSize:13,color:"#dc2626"}},saveErr),
         h('div',{style:{display:"flex",gap:10,marginTop:4}},
           h('button',{onClick:onClose,style:{flex:1,padding:"12px",background:"#f1f5f9",color:"#64748b",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:600}},"Cancelar"),
-          h('button',{onClick:save,disabled:sending,style:{flex:2,padding:"12px",background:sending?"#94a3b8":"linear-gradient(135deg,#0f172a,#1e3a5f)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700}},sending?"Guardando...":"Guardar ✓")));
+          h('button',{onClick:save,disabled:sending,style:{flex:2,padding:"12px",background:sending?"#94a3b8":"linear-gradient(135deg,#0f172a,#1e3a5f)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700}},sending?"Guardando...":"Guardar ✓"))));
 }
 
 // ── PANEL CONFIG ───────────────────────────────────────────────────────────
@@ -2998,7 +2997,6 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
-
 
 
 
