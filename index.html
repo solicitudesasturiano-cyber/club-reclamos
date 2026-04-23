@@ -42,9 +42,9 @@ function getCatCfg(cat) {
 }
 async function loadConfig() {
   const [remote1, remote2] = await Promise.all([sbGetConfigById(1), sbGetConfigById(2)]);
-  if(remote1) { _cfgCache = remote1; ls.set("config_intendencia", remote1); if(remote1.ejecutores?.length) ls.set("ejecutores_intendencia", remote1.ejecutores); }
+  if(remote1) { _cfgCache = remote1; ls.set("config_intendencia", remote1); }
   else { _cfgCache = ls.get("config_intendencia") || ls.get("config") || {}; }
-  if(remote2) { _cfgCacheAdm = remote2; ls.set("config_administracion", remote2); if(remote2.ejecutores?.length) ls.set("ejecutores_administracion", remote2.ejecutores); }
+  if(remote2) { _cfgCacheAdm = remote2; ls.set("config_administracion", remote2); }
   else { _cfgCacheAdm = ls.get("config_administracion") || {}; }
 }
 function getDirectivos(cat) {
@@ -1249,7 +1249,7 @@ Resolución: ${descripcion||"—"}`});
               : h('div',{style:{display:"flex",flexDirection:"column",gap:6}},
                   h('input',{value:f.empresaNombre||"",onChange:e=>{set("empresaNombre",e.target.value);},placeholder:"Nombre empresa/proveedor",style:aS()}),
                   h('input',{value:f.empresaTelefono||"",onChange:e=>set("empresaTelefono",e.target.value),placeholder:"Teléfono/contacto",style:aS()}),
-                  h('button',{onClick:()=>{if(!f.empresaNombre.trim())return;const ej={nombre:f.empresaNombre,mail:"",telefono:f.empresaTelefono};const l=[...(f.ejecutores_lista||[]),ej];set("ejecutores_lista",l);set("ejecutorMail","tercero");set("ejecutorNombre",l.map(x=>x.nombre).join(", "));set("empresaNombre","");set("empresaTelefono","");},style:{padding:"7px 14px",background:"#0f172a",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600}},"+ Agregar")))),
+                  h('button',{onClick:()=>{if(!f.empresaNombre.trim())return;const ej={nombre:f.empresaNombre,mail:"",telefono:f.empresaTelefono};const l=[...(f.ejecutores_lista||[]),ej];set("ejecutores_lista",l);set("ejecutorMail","tercero");set("ejecutorNombre",l.map(x=>x.nombre).join(", "));set("empresaNombre","");set("empresaTelefono","");},style:{padding:"7px 14px",background:"#0f172a",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600}},"+ Agregar"))),
           !rec.ejecutorRechazado && rec.ejecutorConfirmado && h('div',{style:{background:"#f0fdf4",border:"1.5px solid #bbf7d0",borderRadius:10,padding:12,fontSize:13,color:"#15803d",fontWeight:600,marginBottom:12}},"✅ Confirmó el "+fdt(rec.fechaConfirmacion)),
           // Consolidación
           h('div',{style:{marginTop:12,background:"#f8fafc",borderRadius:10,padding:12}},
@@ -1409,12 +1409,9 @@ function PanelConfig({onClose, onSaveEjecutores, area}) {
   const save = async () => {
     ls.set(ejsKey,ejs);
     ls.set(lsKey,cfg);
-    // Persistir ejecutores dentro del cfg para disponibilidad cross-browser
-    const cfgConEjs = {...cfg, ejecutores: ejs};
-    if(area==="intendencia") _cfgCache = cfgConEjs;
-    if(area==="administracion") _cfgCacheAdm = cfgConEjs;
+    if(area==="intendencia") _cfgCache = cfg; // mantener cache para intendencia (default)
     if(onSaveEjecutores) onSaveEjecutores(ejs);
-    await sbSetConfigById(cfgId, cfgConEjs);
+    await sbSetConfigById(cfgId, cfg);
     const scriptUrl = cfg.scriptUrl || SCRIPT_URL;
     if(scriptUrl) {
       try {
@@ -1953,22 +1950,8 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
   },[]);
   // Ejecutores propios del área
   const ejsKey = "ejecutores_"+(area||"intendencia");
-  // Deriva ejecutores desde cfg de Supabase como fallback si localStorage está vacío
-  const getEjecutoresFallback = () => {
-    const cfg = area==="administracion" ? (_cfgCacheAdm||ls.get("config_administracion")||{}) : (_cfgCache||ls.get("config_intendencia")||{});
-    return cfg.ejecutores||[];
-  };
-  const [ejecutores, setEjecutores] = useState(()=>{
-    const fromLs = ls.get(ejsKey)||ls.get("ejecutores");
-    return fromLs?.length ? fromLs : getEjecutoresFallback();
-  });
-  useEffect(()=>{
-    const fromLs = ls.get(ejsKey)||ls.get("ejecutores");
-    if(fromLs?.length) { setEjecutores(fromLs); return; }
-    // Fallback: leer desde cfg en memoria (se carga desde Supabase al iniciar)
-    const fromCfg = getEjecutoresFallback();
-    if(fromCfg.length) setEjecutores(fromCfg);
-  },[area]);
+  const [ejecutores, setEjecutores] = useState(()=>ls.get(ejsKey)||ls.get("ejecutores")||[]);
+  useEffect(()=>{ const e=ls.get(ejsKey)||ls.get("ejecutores"); if(e) setEjecutores(e); },[area]);
   const [filtros,setFiltros] = useState({estado:"",cat:"",sector:"",q:""});
   const [modal,setModal] = useState(null);
   const [modalDup,setModalDup] = useState(null); // {hijo, padre}
@@ -3058,6 +3041,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
+
 
 
 
