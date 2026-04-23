@@ -2146,30 +2146,29 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
     // Lista
     mainTab==="reclamos" && view==="lista" && h('div',{style:{padding:"0 8px 24px",overflowX:"auto"}},
       h('table',{style:{width:"100%",borderCollapse:"separate",borderSpacing:"0 3px",fontSize:"11px"}},
-        h('thead',null,h('tr',null,...[["Nº","50px"],["Fecha","70px"],["Solicitante","90px"],["Sector","85px"],["Detalle","110px"],["Prioridad","75px"],["Responsable","85px"],["Ejecutor","85px"],["Acción","100px"],["Estado","85px"],["Cierre","70px"],["Calif.","55px"],["","55px"]].map(([hd,w])=>
+        h('thead',null,h('tr',null,...[["Nº / Fecha","90px"],["Solicitante","85px"],["Sector / Detalle","130px"],["Prioridad","70px"],["Responsable","85px"],["Ejecutor","85px"],["Acción","95px"],["Estado","85px"],["Cierre","65px"],["Calif.","50px"],["","50px"]].map(([hd,w])=>
           h('th',{key:hd,style:{textAlign:"left",padding:"6px 4px",fontSize:10,color:"#94a3b8",fontWeight:600,letterSpacing:0.3,textTransform:"uppercase",minWidth:w,maxWidth:w,whiteSpace:"nowrap",overflow:"hidden"}},hd)))),
         h('tbody',null,
-          !filtrados.length && h('tr',null,h('td',{colSpan:13,style:{textAlign:"center",padding:40,color:"#94a3b8"}},"No hay solicitudes")),
+          !filtrados.length && h('tr',null,h('td',{colSpan:11,style:{textAlign:"center",padding:40,color:"#94a3b8"}},"No hay solicitudes")),
           ...filtrados.map(r=>{
             const cat=CATS[r.cat]; const crit=PRIS.find(p=>p.id===(r.criticidad||r.pri));
             const est=ESTADOS.find(e=>e.id===r.estadoAvance); const t=getTiming(r);
             const esVinculado = r.estadoAvance==="vinculado_proyecto";
             return h('tr',{key:r.id,style:{background:esVinculado?"#f8f7ff":"white",boxShadow:"0 1px 3px rgba(0,0,0,0.06)",opacity:esVinculado?0.82:1}},
-              h('td',{style:{padding:"6px 6px",borderRadius:"10px 0 0 10px"}},
+              h('td',{style:{padding:"6px 4px",borderRadius:"10px 0 0 10px"}},
                 h('span',{style:{fontFamily:"monospace",fontSize:11,fontWeight:700,color:esVinculado?"#7c3aed":"#3b82f6"}},r.numero),
-                esVinculado && h('div',{style:{fontSize:10,color:"#7c3aed",fontWeight:600,marginTop:2,whiteSpace:"nowrap"}},
+                h('div',{style:{fontSize:10,color:"#94a3b8",marginTop:1}},fd(r.createdAt)),
+                esVinculado && h('div',{style:{fontSize:10,color:"#7c3aed",fontWeight:600,marginTop:1,whiteSpace:"nowrap"}},
                   "🏗️ "+(r.proyectoTitulo||"Proyecto")),
-                !esVinculado && r.reclamosHijos?.length > 0 && h('div',{style:{fontSize:10,color:"#8b5cf6",fontWeight:600,marginTop:2}},
+                !esVinculado && r.reclamosHijos?.length > 0 && h('div',{style:{fontSize:10,color:"#8b5cf6",fontWeight:600,marginTop:1}},
                   "🔗 "+r.reclamosHijos.length+" sub-ticket"+(r.reclamosHijos.length>1?"s":""))),
-              h('td',{style:{padding:"6px 6px",fontSize:11,color:"#64748b",whiteSpace:"nowrap"}},fd(r.createdAt)),
-              h('td',{style:{padding:"6px 6px",fontSize:12,maxWidth:110}},
+              h('td',{style:{padding:"6px 4px",fontSize:12,maxWidth:110}},
                 h('div',{style:{fontWeight:600,color:"#1e293b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},r.nombre||"—"),
                 h('div',{style:{fontSize:10,color:"#94a3b8"}},r.tipo||"")),
-              h('td',{style:{padding:"6px 6px",fontSize:12,fontWeight:500}},
-                h('div',{style:{fontWeight:500,color:"#1e293b"}},r.sector)),
-              h('td',{style:{padding:"6px 6px",fontSize:12}},
-                h('div',{style:{fontSize:11,color:"#64748b"}},cat?.icon+" "+(r.sub||""))),
-              h('td',{style:{padding:"6px 6px"}},
+              h('td',{style:{padding:"6px 4px",fontSize:11}},
+                h('div',{style:{fontWeight:600,color:"#1e293b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:130}},r.sector),
+                h('div',{style:{fontSize:10,color:"#64748b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:130}},cat?.icon+" "+(r.sub||""))),
+              h('td',{style:{padding:"6px 4px"}},
                 (() => {
                   const socio = PRIS.find(p=>p.id===r.pri);
                   const inte  = PRIS.find(p=>p.id===r.criticidad);
@@ -2180,7 +2179,7 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
                     h('span',{style:{color:"#94a3b8",fontSize:10}},"→"),
                     h(Badge,{color:inte?.color,label:inte?.label,sm:true}));
                 })()),
-              h('td',{style:{padding:"6px 6px",fontSize:11}},
+              h('td',{style:{padding:"6px 4px",fontSize:11}},
                 (() => {
                   const catCfg = getCatCfg(r.cat);
                   const resps = (catCfg.responsables||[]).filter(x=>x.nombre);
@@ -2194,7 +2193,7 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
                   return h('div',{style:{display:"flex",flexDirection:"column",gap:2}},
                     ...resps.map((rp,i)=>h('span',{key:i,style:{fontSize:11,color:"#374151",fontWeight:500,whiteSpace:"nowrap"}},abrev(rp.nombre))));
                 })()),
-              h('td',{style:{padding:"6px 6px",fontSize:11}},
+              h('td',{style:{padding:"6px 4px",fontSize:11}},
                 (() => {
                   const lista = r.ejecutores_lista||[];
                   if(lista.length === 0) {
@@ -2217,7 +2216,7 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
                         h('span',{style:{display:"inline-block",padding:"1px 6px",borderRadius:4,fontSize:10,fontWeight:700,color,background:bg}},icon));
                     }));
                 })()),
-              h('td',{style:{padding:"6px 6px",minWidth:100}},(() => {
+              h('td',{style:{padding:"6px 4px",minWidth:100}},(() => {
                 // Si está vinculado a proyecto → mostrar solo eso
                 if(esVinculado) return h('div',{style:{display:"flex",flexDirection:"column",gap:3}},
                   h(Badge,{color:"#7c3aed",label:"🏗️ En proyecto",sm:true}),
@@ -2258,13 +2257,13 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
                     }},
                     "🔍 "+dups.length+" posible"+(dups.length>1?"s":"")+" duplicado"+(dups.length>1?"s":"")));
               })()),
-              h('td',{style:{padding:"6px 6px"}},(() => {
+              h('td',{style:{padding:"6px 4px"}},(() => {
                 const ee = getEstadoEjecucion(r);
                 if(!ee) return h('span',{style:{color:"#cbd5e1",fontSize:11}},"—");
                 return h('span',{style:{display:"inline-block",padding:"3px 8px",borderRadius:6,fontSize:11,fontWeight:600,color:ee.color,background:ee.bg,whiteSpace:"nowrap"}},ee.label);
               })()),
-              h('td',{style:{padding:"6px 6px",fontSize:11,color:"#64748b",whiteSpace:"nowrap"}},fd(r.fechaCierreConfirmada||r.fechaCierre)),
-              h('td',{style:{padding:"6px 6px",minWidth:70}},(() => {
+              h('td',{style:{padding:"6px 4px",fontSize:11,color:"#64748b",whiteSpace:"nowrap"}},fd(r.fechaCierreConfirmada||r.fechaCierre)),
+              h('td',{style:{padding:"6px 4px",minWidth:70}},(() => {
                 const cal = r.calificacion;
                 if(!cal) return h('span',{style:{color:"#cbd5e1"}},"—");
                 const stars = "⭐".repeat(cal);
@@ -2275,7 +2274,7 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
                     style:{padding:"3px 8px",background:"#fef2f2",color:"#dc2626",border:"1.5px solid #fecaca",borderRadius:6,cursor:"pointer",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}},
                     "⚠️ Gestionar"));
               })()),
-              h('td',{style:{padding:"6px 6px",borderRadius:"0 10px 10px 0"}},
+              h('td',{style:{padding:"6px 4px",borderRadius:"0 10px 10px 0"}},
                 h('button',{onClick:()=>setModal(r),style:{padding:"4px 10px",background:"#0f172a",color:"white",border:"none",borderRadius:7,cursor:"pointer",fontSize:11,fontWeight:600}},"Gestionar")));
           })))),
     mainTab==="reclamos" && view==="kanban" && h(Kanban,{recs:filtrados,onEdit:setModal}),
@@ -3042,6 +3041,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
+
 
 
 
