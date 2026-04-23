@@ -27,24 +27,25 @@ const ESCALADO = {
   baja:    { dias: 5 },
 };
 
-// Cache de config — se carga desde Supabase al iniciar, fallback a localStorage
-let _cfgCache = null;
-function getMailConfig() {
-  const cfg = _cfgCache || ls.get("config") || {};
+// Cache de config por área
+let _cfgCache = null;      // intendencia (id=1)
+let _cfgCacheAdm = null;   // administracion (id=2)
+
+function getMailConfig(area) {
+  const cfg = (area==="administracion" ? _cfgCacheAdm : _cfgCache) || ls.get("config_"+(area||"intendencia")) || ls.get("config") || {};
   return { scriptUrl: cfg.scriptUrl || SCRIPT_URL, categorias: cfg.categorias || {} };
 }
 function getCatCfg(cat) {
-  const cfg = _cfgCache || ls.get("config") || {};
+  const area = CATS_ADMINISTRACION.includes(cat) ? "administracion" : "intendencia";
+  const cfg = (area==="administracion" ? _cfgCacheAdm : _cfgCache) || ls.get("config_"+area) || ls.get("config") || {};
   return (cfg.categorias || {})[cat] || { responsables: [], directivos: [] };
 }
 async function loadConfig() {
-  const remote = await sbGetConfig();
-  if(remote) {
-    _cfgCache = remote;
-    ls.set("config", remote); // sync a localStorage como backup
-  } else {
-    _cfgCache = ls.get("config") || {};
-  }
+  const [remote1, remote2] = await Promise.all([sbGetConfigById(1), sbGetConfigById(2)]);
+  if(remote1) { _cfgCache = remote1; ls.set("config_intendencia", remote1); }
+  else { _cfgCache = ls.get("config_intendencia") || ls.get("config") || {}; }
+  if(remote2) { _cfgCacheAdm = remote2; ls.set("config_administracion", remote2); }
+  else { _cfgCacheAdm = ls.get("config_administracion") || {}; }
 }
 function getDirectivos(cat) {
   return getCatCfg(cat).directivos || [];
@@ -64,7 +65,8 @@ function diasDesde(isoDate) {
   if (window._diasDesdeOverride) return window._diasDesdeOverride;
   return (new Date() - new Date(isoDate)) / 86400000;
 }
-const ADMIN_PASSWORD = "intendencia2024";
+const PASS_INTENDENCIA = "intendencia2026";
+const PASS_ADMINISTRACION = "administracion2026";
 const SUPABASE_URL   = "https://pltfqosqinzufvjpiddr.supabase.co";
 const SUPABASE_KEY   = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBsdGZxb3NxaW56dWZ2anBpZGRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1MjA4NDksImV4cCI6MjA5MTA5Njg0OX0.d-EMCtfVqi6LvtbEdTBvH_ZaXiFJD6oXukPvMpbobXQ";
 const SCRIPT_URL     = "https://script.google.com/macros/s/AKfycbzZh2AxTboR13rjJeUdXSdO7jjUPkZcIPoeWFYUZynkyWkP6LjNbqQxVxpPIvT26Kh6/exec";
@@ -145,6 +147,10 @@ function getSubcategorias(cat, sector) {
   const grupo = getGrupo(sector);
   return catSubs[grupo] || catSubs.interiores || ["Otro"];
 }
+
+// Categorías por área
+const CATS_INTENDENCIA = ["infraestructura","mantenimiento","limpieza","preparacion"];
+const CATS_ADMINISTRACION = ["servicios","cuotas"];
 
 const CATS = {
   infraestructura:{id:"infraestructura",label:"Obras",icon:"🏗️",resp:{nombre:"— Por configurar —",mail:""}},
@@ -336,24 +342,27 @@ async function sbGetAll() {
   } catch(e) { console.error("sbGetAll error:", e); return []; }
 }
 
-async function sbGetConfig() {
+async function sbGetConfig() { return sbGetConfigById(1); }
+async function sbSetConfig(cfg) { return sbSetConfigById(1, cfg); }
+
+async function sbGetConfigById(id) {
   try {
-    const r = await fetch(SUPABASE_URL+"/rest/v1/reclamos?id=eq.0&select=data", {headers: SB_HEADERS});
+    const r = await fetch(SUPABASE_URL+"/rest/v1/reclamos?id=eq."+id+"&select=data", {headers: SB_HEADERS});
     const rows = await r.json();
     if(Array.isArray(rows) && rows.length > 0 && rows[0].data) return rows[0].data;
     return null;
-  } catch(e) { console.error("sbGetConfig error:", e); return null; }
+  } catch(e) { console.error("sbGetConfigById error:", e); return null; }
 }
 
-async function sbSetConfig(cfg) {
+async function sbSetConfigById(id, cfg) {
   try {
     const r = await fetch(SUPABASE_URL+"/rest/v1/reclamos", {
       method: "POST",
       headers: {...SB_HEADERS, "Prefer":"resolution=merge-duplicates,return=minimal"},
-      body: JSON.stringify({id: 0, data: {...cfg, id: 0}}),
+      body: JSON.stringify({id, data: {...cfg, id}}),
     });
-    console.log("sbSetConfig status:", r.status);
-  } catch(e) { console.error("sbSetConfig error:", e); }
+    console.log("sbSetConfigById status:", r.status, "id:", id);
+  } catch(e) { console.error("sbSetConfigById error:", e); }
 }
 
 async function sbUpsert(rec) {
@@ -1372,7 +1381,7 @@ function PersonList({list, onRemove, onAdd}) {
       h('button',{onClick:add,style:{padding:"9px 14px",background:"#0f172a",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:600,width:"100%"}},"+ Agregar")));
 }
 
-function PanelConfig({onClose, onSaveEjecutores}) {
+function PanelConfig({onClose, onSaveEjecutores, area}) {
   const defaultCfg = {scriptUrl:"",categorias:{}};
   const [ejs,setEjs] = useState([]);
   const [cfg,setCfg] = useState(defaultCfg);
@@ -1382,33 +1391,34 @@ function PanelConfig({onClose, onSaveEjecutores}) {
   const [scriptUnlocked,setScriptUnlocked] = useState(false);
   const [scriptPassErr,setScriptPassErr] = useState(false);
   const SCRIPT_PASS = "solicitudes2026";
+  // Cada área tiene su propio id en Supabase: 1=intendencia, 2=administracion
+  const cfgId = area==="administracion" ? 2 : 1;
+  const lsKey = "config_"+area;
+  const ejsKey = "ejecutores_"+area;
 
   useEffect(()=>{
-    // Cargar config desde Supabase primero, fallback a localStorage
     (async()=>{
-      const remote = await sbGetConfig();
-      const base = remote || ls.get("config") || {};
-      setEjs(ls.get("ejecutores")||[]);
+      const remote = await sbGetConfigById(cfgId);
+      const base = remote || ls.get(lsKey) || {};
+      setEjs(ls.get(ejsKey)||[]);
       setCfg({...defaultCfg,...base});
-      if(remote) { _cfgCache = remote; ls.set("config", remote); }
+      if(remote) { ls.set(lsKey, remote); }
     })();
   },[]);
 
   const save = async () => {
-    ls.set("ejecutores",ejs);
-    ls.set("config",cfg);
-    _cfgCache = cfg;
+    ls.set(ejsKey,ejs);
+    ls.set(lsKey,cfg);
+    if(area==="intendencia") _cfgCache = cfg; // mantener cache para intendencia (default)
     if(onSaveEjecutores) onSaveEjecutores(ejs);
-    // Guardar config en Supabase
-    await sbSetConfig(cfg);
-    // Sync config to Apps Script for automatic escalation
+    await sbSetConfigById(cfgId, cfg);
     const scriptUrl = cfg.scriptUrl || SCRIPT_URL;
     if(scriptUrl) {
       try {
         await fetch(scriptUrl, {
           method:"POST",
           headers:{"Content-Type":"text/plain"},
-          body: JSON.stringify({type:"syncConfig", config:cfg})
+          body: JSON.stringify({type:"syncConfig", config:cfg, area})
         });
       } catch(e) { console.log("Config sync warning:", e); }
     }
@@ -1932,12 +1942,16 @@ function ProyectosTab({recs, onUpdate, ejecutores}) {
     modal!==null && h(ModalProyecto,{proyecto:modal.id?modal:null,onClose:()=>setModal(null),onSave:saveProyecto,ejecutores,recs}));
 }
 
-function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
+function PanelAdmin({recs, onUpdate, onRefresh, area}) {
   // Auto-refresh every 30 seconds
   useEffect(()=>{
     const interval = setInterval(()=>{ if(onRefresh) onRefresh(); }, 30000);
     return ()=>clearInterval(interval);
   },[]);
+  // Ejecutores propios del área
+  const ejsKey = "ejecutores_"+(area||"intendencia");
+  const [ejecutores, setEjecutores] = useState(()=>ls.get(ejsKey)||ls.get("ejecutores")||[]);
+  useEffect(()=>{ const e=ls.get(ejsKey)||ls.get("ejecutores"); if(e) setEjecutores(e); },[area]);
   const [filtros,setFiltros] = useState({estado:"",cat:"",sector:"",q:""});
   const [modal,setModal] = useState(null);
   const [modalDup,setModalDup] = useState(null); // {hijo, padre}
@@ -1953,6 +1967,11 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
     if(filtros.estado&&r.estadoAvance!==filtros.estado) return false;
     if(filtros.cat&&r.cat!==filtros.cat) return false;
     if(filtros.sector&&r.sector!==filtros.sector) return false;
+    if(filtros.responsable){
+      const catCfg = getCatCfg(r.cat);
+      const tieneResp = (catCfg.responsables||[]).some(rp=>rp.mail===filtros.responsable);
+      if(!tieneResp) return false;
+    }
     if(filtros.q){const q=filtros.q.toLowerCase();if(!r.numero.toLowerCase().includes(q)&&!r.desc?.toLowerCase().includes(q)&&!r.sector.toLowerCase().includes(q))return false;}
     return true;
   }).sort((a,b)=>{
@@ -2074,7 +2093,7 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
     // Header
     h('div',{style:{background:"#0f172a",padding:"14px 24px",display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10}},
       h('div',null,
-        h('div',{style:{fontSize:11,color:"#60a5fa",letterSpacing:2,textTransform:"uppercase"}},"Panel de Gestión — Asturiano"),
+        h('div',{style:{fontSize:11,color:"#60a5fa",letterSpacing:2,textTransform:"uppercase"}},"Panel de "+(area==="administracion"?"Administración":"Intendencia")+" — Asturiano"),
         h('h1',{style:{fontFamily:"'Playfair Display',serif",color:"white",fontSize:22,margin:0}},"Intendencia — Asturiano")),
       h('div',{style:{display:"flex",gap:8}},
         h('button',{onClick:()=>setShowCfg(true),style:{padding:"8px 14px",background:"rgba(255,255,255,0.1)",color:"white",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600}},"⚙️ Configuración"),
@@ -2098,8 +2117,20 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
         h('option',{value:""},"Todos los estados"),
         ...ESTADOS.map(e=>h('option',{key:e.id,value:e.id},e.label))),
       h('select',{value:filtros.cat,onChange:e=>sf("cat",e.target.value),style:aS()},
-        h('option',{value:""},"Todas las categorías"),
-        ...Object.values(CATS).map(c=>h('option',{key:c.id,value:c.id},c.label))),
+        h('option',{value:""},"Todos los tipos"),
+        ...Object.values(CATS).filter(c=>(area==="administracion" ? CATS_ADMINISTRACION : CATS_INTENDENCIA).includes(c.id)).map(c=>h('option',{key:c.id,value:c.id},c.label))),
+      h('select',{value:filtros.responsable||"",onChange:e=>sf("responsable",e.target.value),style:aS()},
+        h('option',{value:""},"Todos los responsables"),
+        ...(()=>{
+          const cats = area==="administracion" ? CATS_ADMINISTRACION : CATS_INTENDENCIA;
+          const cfg = area==="administracion" ? (_cfgCacheAdm||ls.get("config_administracion")||{}) : (_cfgCache||ls.get("config_intendencia")||{});
+          const resps = new Map();
+          cats.forEach(cat=>{
+            const catCfg = (cfg.categorias||{})[cat]||{};
+            (catCfg.responsables||[]).forEach(r=>{ if(r.nombre&&r.mail) resps.set(r.mail,r.nombre); });
+          });
+          return [...resps.entries()].map(([mail,nombre])=>h('option',{key:mail,value:mail},nombre));
+        })()),
       h('select',{value:filtros.sector,onChange:e=>sf("sector",e.target.value),style:aS()},
         h('option',{value:""},"Todos los sectores"),
         ...SECTORES_TODOS.map(s=>h('option',{key:s,value:s},s))),
@@ -2115,30 +2146,30 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
     // Lista
     mainTab==="reclamos" && view==="lista" && h('div',{style:{padding:"0 24px 24px",overflowX:"auto"}},
       h('table',{style:{width:"100%",borderCollapse:"separate",borderSpacing:"0 5px"}},
-        h('thead',null,h('tr',null,...["Nº","Fecha","Solicitante","Sector","Detalle","Criticidad (socio→int)","Ejecutor","Acción","Estado","Cierre","Calificación",""].map(hd=>
-          h('th',{key:hd,style:{textAlign:"left",padding:"8px 10px",fontSize:11,color:"#94a3b8",fontWeight:600,letterSpacing:0.5,textTransform:"uppercase"}},hd)))),
+        h('thead',null,h('tr',null,...[["Nº","60px"],["Fecha","75px"],["Solicitante","100px"],["Sector","90px"],["Detalle","120px"],["Prioridad","80px"],["Responsable","90px"],["Ejecutor","90px"],["Acción","110px"],["Estado","90px"],["Cierre","75px"],["Calif.","60px"],["","60px"]].map(([hd,w])=>
+          h('th',{key:hd,style:{textAlign:"left",padding:"6px 6px",fontSize:10,color:"#94a3b8",fontWeight:600,letterSpacing:0.3,textTransform:"uppercase",minWidth:w,maxWidth:w,whiteSpace:"nowrap",overflow:"hidden"}},hd)))),
         h('tbody',null,
-          !filtrados.length && h('tr',null,h('td',{colSpan:12,style:{textAlign:"center",padding:40,color:"#94a3b8"}},"No hay solicitudes")),
+          !filtrados.length && h('tr',null,h('td',{colSpan:13,style:{textAlign:"center",padding:40,color:"#94a3b8"}},"No hay solicitudes")),
           ...filtrados.map(r=>{
             const cat=CATS[r.cat]; const crit=PRIS.find(p=>p.id===(r.criticidad||r.pri));
             const est=ESTADOS.find(e=>e.id===r.estadoAvance); const t=getTiming(r);
             const esVinculado = r.estadoAvance==="vinculado_proyecto";
             return h('tr',{key:r.id,style:{background:esVinculado?"#f8f7ff":"white",boxShadow:"0 1px 3px rgba(0,0,0,0.06)",opacity:esVinculado?0.82:1}},
-              h('td',{style:{padding:"11px 10px",borderRadius:"10px 0 0 10px"}},
+              h('td',{style:{padding:"6px 6px",borderRadius:"10px 0 0 10px"}},
                 h('span',{style:{fontFamily:"monospace",fontSize:11,fontWeight:700,color:esVinculado?"#7c3aed":"#3b82f6"}},r.numero),
                 esVinculado && h('div',{style:{fontSize:10,color:"#7c3aed",fontWeight:600,marginTop:2,whiteSpace:"nowrap"}},
                   "🏗️ "+(r.proyectoTitulo||"Proyecto")),
                 !esVinculado && r.reclamosHijos?.length > 0 && h('div',{style:{fontSize:10,color:"#8b5cf6",fontWeight:600,marginTop:2}},
                   "🔗 "+r.reclamosHijos.length+" sub-ticket"+(r.reclamosHijos.length>1?"s":""))),
-              h('td',{style:{padding:"11px 10px",fontSize:11,color:"#64748b",whiteSpace:"nowrap"}},fd(r.createdAt)),
-              h('td',{style:{padding:"11px 10px",fontSize:12,maxWidth:110}},
+              h('td',{style:{padding:"6px 6px",fontSize:11,color:"#64748b",whiteSpace:"nowrap"}},fd(r.createdAt)),
+              h('td',{style:{padding:"6px 6px",fontSize:12,maxWidth:110}},
                 h('div',{style:{fontWeight:600,color:"#1e293b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},r.nombre||"—"),
                 h('div',{style:{fontSize:10,color:"#94a3b8"}},r.tipo||"")),
-              h('td',{style:{padding:"11px 10px",fontSize:12,fontWeight:500}},
+              h('td',{style:{padding:"6px 6px",fontSize:12,fontWeight:500}},
                 h('div',{style:{fontWeight:500,color:"#1e293b"}},r.sector)),
-              h('td',{style:{padding:"11px 10px",fontSize:12}},
+              h('td',{style:{padding:"6px 6px",fontSize:12}},
                 h('div',{style:{fontSize:11,color:"#64748b"}},cat?.icon+" "+(r.sub||""))),
-              h('td',{style:{padding:"11px 10px"}},
+              h('td',{style:{padding:"6px 6px"}},
                 (() => {
                   const socio = PRIS.find(p=>p.id===r.pri);
                   const inte  = PRIS.find(p=>p.id===r.criticidad);
@@ -2149,7 +2180,21 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
                     h('span',{style:{color:"#94a3b8",fontSize:10}},"→"),
                     h(Badge,{color:inte?.color,label:inte?.label,sm:true}));
                 })()),
-              h('td',{style:{padding:"11px 10px",fontSize:11}},
+              h('td',{style:{padding:"6px 6px",fontSize:11}},
+                (() => {
+                  const catCfg = getCatCfg(r.cat);
+                  const resps = (catCfg.responsables||[]).filter(x=>x.nombre);
+                  if(!resps.length) return h('span',{style:{color:"#cbd5e1"}},"—");
+                  // Abreviar nombre: primera palabra + inicial del apellido
+                  const abrev = n => {
+                    const parts = n.trim().split(" ");
+                    if(parts.length === 1) return parts[0];
+                    return parts[0]+" "+parts[parts.length-1][0]+".";
+                  };
+                  return h('div',{style:{display:"flex",flexDirection:"column",gap:2}},
+                    ...resps.map((rp,i)=>h('span',{key:i,style:{fontSize:11,color:"#374151",fontWeight:500,whiteSpace:"nowrap"}},abrev(rp.nombre))));
+                })()),
+              h('td',{style:{padding:"6px 6px",fontSize:11}},
                 (() => {
                   const lista = r.ejecutores_lista||[];
                   if(lista.length === 0) {
@@ -2172,7 +2217,7 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
                         h('span',{style:{display:"inline-block",padding:"1px 6px",borderRadius:4,fontSize:10,fontWeight:700,color,background:bg}},icon));
                     }));
                 })()),
-              h('td',{style:{padding:"11px 10px",minWidth:150}},(() => {
+              h('td',{style:{padding:"6px 6px",minWidth:100}},(() => {
                 // Si está vinculado a proyecto → mostrar solo eso
                 if(esVinculado) return h('div',{style:{display:"flex",flexDirection:"column",gap:3}},
                   h(Badge,{color:"#7c3aed",label:"🏗️ En proyecto",sm:true}),
@@ -2213,13 +2258,13 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
                     }},
                     "🔍 "+dups.length+" posible"+(dups.length>1?"s":"")+" duplicado"+(dups.length>1?"s":"")));
               })()),
-              h('td',{style:{padding:"11px 10px"}},(() => {
+              h('td',{style:{padding:"6px 6px"}},(() => {
                 const ee = getEstadoEjecucion(r);
                 if(!ee) return h('span',{style:{color:"#cbd5e1",fontSize:11}},"—");
                 return h('span',{style:{display:"inline-block",padding:"3px 8px",borderRadius:6,fontSize:11,fontWeight:600,color:ee.color,background:ee.bg,whiteSpace:"nowrap"}},ee.label);
               })()),
-              h('td',{style:{padding:"11px 10px",fontSize:11,color:"#64748b",whiteSpace:"nowrap"}},fd(r.fechaCierreConfirmada||r.fechaCierre)),
-              h('td',{style:{padding:"11px 10px",minWidth:110}},(() => {
+              h('td',{style:{padding:"6px 6px",fontSize:11,color:"#64748b",whiteSpace:"nowrap"}},fd(r.fechaCierreConfirmada||r.fechaCierre)),
+              h('td',{style:{padding:"6px 6px",minWidth:70}},(() => {
                 const cal = r.calificacion;
                 if(!cal) return h('span',{style:{color:"#cbd5e1"}},"—");
                 const stars = "⭐".repeat(cal);
@@ -2230,13 +2275,13 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
                     style:{padding:"3px 8px",background:"#fef2f2",color:"#dc2626",border:"1.5px solid #fecaca",borderRadius:6,cursor:"pointer",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}},
                     "⚠️ Gestionar"));
               })()),
-              h('td',{style:{padding:"11px 10px",borderRadius:"0 10px 10px 0"}},
-                h('button',{onClick:()=>setModal(r),style:{padding:"5px 12px",background:"#0f172a",color:"white",border:"none",borderRadius:7,cursor:"pointer",fontSize:12,fontWeight:600}},"Gestionar")));
+              h('td',{style:{padding:"6px 6px",borderRadius:"0 10px 10px 0"}},
+                h('button',{onClick:()=>setModal(r),style:{padding:"4px 10px",background:"#0f172a",color:"white",border:"none",borderRadius:7,cursor:"pointer",fontSize:11,fontWeight:600}},"Gestionar")));
           })))),
     mainTab==="reclamos" && view==="kanban" && h(Kanban,{recs:filtrados,onEdit:setModal}),
     mainTab==="proyectos" && h(ProyectosTab,{recs,onUpdate,ejecutores}),
     modal && h(EditModal,{rec:modal,onClose:()=>setModal(null),onSave:async u=>{await onUpdate(u,modal);setModal(null);},ejecutores,onUpdateHijo:async u=>{await onUpdate(u,u);},recs}),
-    showCfg && h(PanelConfig,{onClose:()=>setShowCfg(false),onSaveEjecutores:ejs=>{setEjecutores(ejs);setShowCfg(false);}}),
+    showCfg && h(PanelConfig,{onClose:()=>setShowCfg(false),onSaveEjecutores:ejs=>{setEjecutores(ejs);setShowCfg(false);},area}),
     modalDup && h(ModalConsolidacion,{
       hijo: modalDup.hijo,
       candidatos: modalDup.candidatos,
@@ -2285,13 +2330,17 @@ function PanelAdmin({recs, onUpdate, ejecutores, setEjecutores, onRefresh}) {
 }
 
 // ── LOGIN ──────────────────────────────────────────────────────────────────
-function Login({onLogin}) {
+function Login({onLogin, area}) {
   const [p,setP] = useState(""); const [err,setErr] = useState(false);
-  const go = () => { if(p===ADMIN_PASSWORD){onLogin();}else{setErr(true);setTimeout(()=>setErr(false),2000);} };
+  const pass = area==="intendencia" ? PASS_INTENDENCIA : PASS_ADMINISTRACION;
+  const areaLabel = area==="intendencia" ? "Intendencia" : "Administración";
+  const areaIcon = area==="intendencia" ? "🔧" : "📊";
+  const go = () => { if(p===pass){onLogin();}else{setErr(true);setTimeout(()=>setErr(false),2000);} };
   return h('div',{style:{minHeight:"100vh",background:"#0f172a",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
     h('div',{style:{background:"white",borderRadius:20,padding:36,maxWidth:380,width:"100%",textAlign:"center"}},
-      h('div',{style:{fontSize:40,marginBottom:12}},"🏛️"),
-      h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:22,margin:"0 0 6px"}},"Panel de Gestión — Asturiano"),
+      h('div',{style:{fontSize:40,marginBottom:12}},areaIcon),
+      h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:22,margin:"0 0 6px"}},"Panel de "+areaLabel+" — Asturiano"),
+      h('div',{style:{background:"#fef9c3",border:"1.5px solid #fde047",borderRadius:8,padding:"8px 12px",marginBottom:16,fontSize:12,color:"#713f12"}},"🔒 Esta sección es de uso interno del club. Si sos socio, usá el formulario de solicitudes."),
       h('p',{style:{color:"#64748b",fontSize:14,marginBottom:24}},"Ingresá la contraseña para acceder"),
       h('input',{type:"password",value:p,onChange:e=>setP(e.target.value),onKeyDown:e=>e.key==="Enter"&&go(),placeholder:"Contraseña",
         style:{width:"100%",padding:"12px 14px",borderRadius:10,border:err?"2px solid #ef4444":"2px solid #e2e8f0",fontSize:15,outline:"none",marginBottom:12,boxSizing:"border-box"}}),
@@ -2566,10 +2615,11 @@ function App() {
     : "socio";
 
   const [view,setView]           = useState(_initView);
-  const [auth,setAuth]           = useState(sessionStorage.getItem('panelAuth')==='1');
   const [recs,setRecs]           = useState([]);
   const [ejecutores,setEjecutores] = useState([]);
   const [loaded,setLoaded]       = useState(false);
+  const [authInt, setAuthInt]    = useState(()=>sessionStorage.getItem('authInt')==='1');
+  const [authAdm, setAuthAdm]    = useState(()=>sessionStorage.getItem('authAdm')==='1');
 
   useEffect(()=>{
     (async()=>{
@@ -2708,7 +2758,7 @@ function App() {
       }
 
       setRecs(lista);
-      const ej=ls.get("ejecutores"); if(ej) setEjecutores(ej);
+      const ej=ls.get("ejecutores_intendencia")||ls.get("ejecutores"); if(ej) setEjecutores(ej);
       await loadConfig(); // Cargar config desde Supabase
       setLoaded(true);
     })();
@@ -2970,13 +3020,22 @@ function App() {
             h('a',{href:appUrl+"?calificar="+rec.id,style:{display:"inline-block",padding:"8px 20px",background:"#f97316",color:"white",borderRadius:8,fontSize:13,fontWeight:600,textDecoration:"none"}},"⭐ Calificar resolución")))));
   }
 
+  const navBtn = (v, label, active) => h('button',{onClick:()=>setView(v),style:{padding:"8px 16px",borderRadius:20,border:"none",background:active?"#0f172a":"rgba(255,255,255,0.9)",color:active?"white":"#374151",cursor:"pointer",fontSize:13,fontWeight:600,boxShadow:"0 2px 12px rgba(0,0,0,0.2)"}},label);
+
+  const recsFiltrados = (area) => recs.filter(r => area==="intendencia"
+    ? CATS_INTENDENCIA.includes(r.cat)
+    : CATS_ADMINISTRACION.includes(r.cat));
+
   return h('div',null,
     h('div',{style:{position:"fixed",bottom:20,right:20,zIndex:999,display:"flex",gap:8}},
-      h('button',{onClick:()=>setView("socio"),style:{padding:"8px 16px",borderRadius:20,border:"none",background:view==="socio"?"#3b82f6":"rgba(255,255,255,0.9)",color:view==="socio"?"white":"#374151",cursor:"pointer",fontSize:13,fontWeight:600,boxShadow:"0 2px 12px rgba(0,0,0,0.2)"}},"📋 Formulario"),
-      h('button',{onClick:()=>setView("admin"),style:{padding:"8px 16px",borderRadius:20,border:"none",background:view==="admin"?"#0f172a":"rgba(255,255,255,0.9)",color:view==="admin"?"white":"#374151",cursor:"pointer",fontSize:13,fontWeight:600,boxShadow:"0 2px 12px rgba(0,0,0,0.2)"}},"⚙️ Panel")),
+      navBtn("socio","📋 Formulario", view==="socio"),
+      navBtn("intendencia","🔧 Intendencia", view==="intendencia"),
+      navBtn("administracion","📊 Administración", view==="administracion")),
     view==="socio" && h(FormularioSocio,{onSubmit:add,reclamos:recs}),
-    view==="admin" && !auth && h(Login,{onLogin:()=>{setAuth(true);sessionStorage.setItem('panelAuth','1');}}),
-    view==="admin" && auth && h(PanelAdmin,{recs,onUpdate:upd,ejecutores,setEjecutores,onRefresh:()=>sbGetAll().then(setRecs)}));
+    view==="intendencia" && !authInt && h(Login,{area:"intendencia",onLogin:()=>{setAuthInt(true);sessionStorage.setItem('authInt','1');}}),
+    view==="intendencia" && authInt && h(PanelAdmin,{recs:recsFiltrados("intendencia"),onUpdate:upd,onRefresh:()=>sbGetAll().then(setRecs),area:"intendencia"}),
+    view==="administracion" && !authAdm && h(Login,{area:"administracion",onLogin:()=>{setAuthAdm(true);sessionStorage.setItem('authAdm','1');}}),
+    view==="administracion" && authAdm && h(PanelAdmin,{recs:recsFiltrados("administracion"),onUpdate:upd,onRefresh:()=>sbGetAll().then(setRecs),area:"administracion"}));
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
