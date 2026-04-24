@@ -536,6 +536,7 @@ function similitudSemantica(a, b) {
 async function detectarDuplicados(nuevoRec, todosRecs) {
   const candidatos = todosRecs.filter(r =>
     r.id !== nuevoRec.id &&
+    !r.esRecurrente &&  // excluir tickets recurrentes
     !["completada","consolidada","vinculado_proyecto"].includes(r.estadoAvance) &&
     r.desc && r.desc.trim().length > 3
   );
@@ -1867,6 +1868,319 @@ function ModalProyecto({proyecto, onClose, onSave, ejecutores, recs}) {
           h('button',{onClick:save,style:{flex:2,padding:"12px",background:"linear-gradient(135deg,#7c3aed,#5b21b6)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700}},"Guardar proyecto ✓")))));
 }
 
+}
+
+// ── RECURRENCIAS ────────────────────────────────────────────────────────────
+
+async function sbGetRecurrencias() {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/recurrencias?select=*&order=created_at.desc`, {
+      headers: {"apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`}
+    });
+    return await r.json();
+  } catch(e) { console.error("sbGetRecurrencias:", e); return []; }
+}
+
+async function sbUpsertRecurrencia(rec) {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/recurrencias`, {
+      method: "POST",
+      headers: {"apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`,
+        "Content-Type": "application/json", "Prefer": "resolution=merge-duplicates,return=representation"},
+      body: JSON.stringify({id: rec.id, data: rec})
+    });
+    return await r.json();
+  } catch(e) { console.error("sbUpsertRecurrencia:", e); }
+}
+
+async function sbDeleteRecurrencia(id) {
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/recurrencias?id=eq.${id}`, {
+      method: "DELETE",
+      headers: {"apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`}
+    });
+  } catch(e) { console.error("sbDeleteRecurrencia:", e); }
+}
+
+const RECURRENCIA_EMPTY = {
+  nombre:"", cat:"", sector:"", sub:"", criticidad:"media",
+  ejecutorMail:"", ejecutorNombre:"", comentario:"",
+  patron:"semanal", // "diario"|"semanal"|"quincenal"|"mensual"|"personalizado"
+  intervaloDias:7, diasSemana:[], diaMes:1,
+  fechaInicio:"", leadTimeDias:2,
+  periodosExclusion:[], // [{desde:"MM-DD", hasta:"MM-DD"}]
+  activa:true, fechaFin:""
+};
+
+function RecurrenciasTab({area, ejecutores, recs}) {
+  const [lista, setLista] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [modal, setModal] = useState(null); // null | "nuevo" | recurrencia
+  const [confirmDel, setConfirmDel] = useState(null);
+  const cats = area==="administracion" ? CATS_ADMINISTRACION : CATS_INTENDENCIA;
+
+  useEffect(()=>{ cargar(); },[]);
+
+  const cargar = async () => {
+    setLoading(true);
+    const rows = await sbGetRecurrencias();
+    // Filtrar solo las de esta área
+    const filtradas = (rows||[]).map(r=>r.data).filter(r=>r && cats.includes(r.cat));
+    setLista(filtradas);
+    setLoading(false);
+  };
+
+  const guardar = async (rec) => {
+    await sbUpsertRecurrencia(rec);
+    await cargar();
+    setModal(null);
+  };
+
+  const toggleActiva = async (rec) => {
+    await sbUpsertRecurrencia({...rec, activa: !rec.activa});
+    await cargar();
+  };
+
+  const eliminar = async (rec) => {
+    await sbDeleteRecurrencia(rec.id);
+    await cargar();
+    setConfirmDel(null);
+  };
+
+  const PATRON_LABEL = {diario:"Diario",semanal:"Semanal",quincenal:"Quincenal",mensual:"Mensual",personalizado:"Personalizado (N días)"};
+  const DIAS_SEMANA = ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
+
+  if(loading) return h('div',{style:{padding:40,textAlign:"center",color:"#94a3b8"}},"Cargando recurrencias...");
+
+  return h('div',{style:{padding:"20px 24px"}},
+    // Header
+    h('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}},
+      h('div',null,
+        h('div',{style:{fontSize:18,fontWeight:700,color:"#0f172a"}},"Tareas recurrentes"),
+        h('div',{style:{fontSize:13,color:"#64748b",marginTop:2}},"Tickets que se generan automáticamente según una frecuencia definida")),
+      h('button',{onClick:()=>setModal("nuevo"),
+        style:{padding:"10px 20px",background:"#0f172a",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:700}},
+        "+ Nueva recurrencia")),
+
+    // Lista
+    lista.length === 0
+      ? h('div',{style:{textAlign:"center",padding:60,color:"#94a3b8",fontSize:14}},"No hay recurrencias configuradas aún.")
+      : h('div',{style:{display:"flex",flexDirection:"column",gap:12}},
+          ...lista.map(rec => {
+            const crit = rec.criticidad||"media";
+            const critColor = {urgente:"#ef4444",alta:"#f97316",media:"#eab308",baja:"#22c55e"}[crit]||"#64748b";
+            const ticketsGenerados = recs.filter(r=>r.recurrenciaId===rec.id).length;
+            return h('div',{key:rec.id,
+              style:{background:"white",borderRadius:12,padding:"16px 20px",border:`1.5px solid ${rec.activa?"#e2e8f0":"#f1f5f9"}`,
+                borderLeft:`4px solid ${rec.activa?"#8b5cf6":"#cbd5e1"}`,opacity:rec.activa?1:0.6}},
+              h('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:8}},
+                h('div',{style:{flex:1}},
+                  h('div',{style:{display:"flex",alignItems:"center",gap:8,marginBottom:6}},
+                    h('span',{style:{fontWeight:700,fontSize:15,color:"#1e293b"}},rec.nombre),
+                    h('span',{style:{padding:"2px 8px",borderRadius:20,fontSize:11,fontWeight:700,color:critColor,background:critColor+"22"}},crit.toUpperCase()),
+                    !rec.activa && h('span',{style:{padding:"2px 8px",borderRadius:20,fontSize:11,fontWeight:700,color:"#64748b",background:"#f1f5f9"}},"PAUSADA")),
+                  h('div',{style:{fontSize:12,color:"#64748b",display:"flex",gap:16,flexWrap:"wrap"}},
+                    h('span',null,CATS[rec.cat]?.label||rec.cat," — ",rec.sector),
+                    h('span',{style:{color:"#8b5cf6",fontWeight:600}},
+                      rec.patron==="personalizado" ? `Cada ${rec.intervaloDias} días`
+                      : rec.patron==="semanal" && rec.diasSemana?.length ? `Semanal: ${(rec.diasSemana||[]).map(d=>DIAS_SEMANA[d]).join(", ")}`
+                      : PATRON_LABEL[rec.patron]||rec.patron),
+                    h('span',null,"Lead: ",rec.leadTimeDias," día"+(rec.leadTimeDias!==1?"s":"")),
+                    rec.ejecutorNombre && h('span',null,"Ejecutor: ",rec.ejecutorNombre),
+                    h('span',{style:{color:"#94a3b8"}},ticketsGenerados," ticket"+(ticketsGenerados!==1?"s":"")+" generado"+(ticketsGenerados!==1?"s":"")))),
+                h('div',{style:{display:"flex",gap:6}},
+                  h('button',{onClick:()=>toggleActiva(rec),
+                    style:{padding:"6px 12px",background:rec.activa?"#fff7ed":"#f0fdf4",color:rec.activa?"#c2410c":"#15803d",border:`1.5px solid ${rec.activa?"#fed7aa":"#bbf7d0"}`,borderRadius:7,cursor:"pointer",fontSize:12,fontWeight:600}},
+                    rec.activa?"Pausar":"Activar"),
+                  h('button',{onClick:()=>setModal(rec),
+                    style:{padding:"6px 12px",background:"#f8fafc",color:"#0f172a",border:"1.5px solid #e2e8f0",borderRadius:7,cursor:"pointer",fontSize:12,fontWeight:600}},
+                    "Editar"),
+                  h('button',{onClick:()=>setConfirmDel(rec),
+                    style:{padding:"6px 12px",background:"#fef2f2",color:"#dc2626",border:"1.5px solid #fecaca",borderRadius:7,cursor:"pointer",fontSize:12,fontWeight:600}},
+                    "Eliminar"))));
+          })),
+
+    // Modal crear/editar
+    modal && h(RecurrenciaModal,{
+      rec: modal==="nuevo" ? {...RECURRENCIA_EMPTY, id: Date.now()} : modal,
+      onSave: guardar,
+      onClose: ()=>setModal(null),
+      ejecutores, cats
+    }),
+
+    // Confirm delete
+    confirmDel && h('div',{style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2000}},
+      h('div',{style:{background:"white",borderRadius:16,padding:28,maxWidth:380,width:"100%",margin:"0 16px"}},
+        h('div',{style:{fontSize:16,fontWeight:700,color:"#1e293b",marginBottom:8}},"Eliminar recurrencia"),
+        h('div',{style:{fontSize:14,color:"#64748b",marginBottom:20}},"Se eliminará \"",confirmDel.nombre,"\". Los tickets ya generados no se borran."),
+        h('div',{style:{display:"flex",gap:10}},
+          h('button',{onClick:()=>eliminar(confirmDel),style:{flex:1,padding:"10px",background:"#dc2626",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontWeight:700}},"Eliminar"),
+          h('button',{onClick:()=>setConfirmDel(null),style:{flex:1,padding:"10px",background:"#f1f5f9",color:"#374151",border:"none",borderRadius:8,cursor:"pointer"}},"Cancelar")))));
+}
+
+function RecurrenciaModal({rec: recInit, onSave, onClose, ejecutores, cats}) {
+  const [f, setF] = useState(recInit);
+  const [saving, setSaving] = useState(false);
+  const set = (k,v) => setF(p=>({...p,[k]:v}));
+  const DIAS_SEMANA = ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
+
+  const toggleDiaSemana = (i) => {
+    const current = f.diasSemana||[];
+    set("diasSemana", current.includes(i) ? current.filter(d=>d!==i) : [...current,i]);
+  };
+
+  const addExclusion = () => set("periodosExclusion", [...(f.periodosExclusion||[]), {desde:"01-01",hasta:"01-31"}]);
+  const removeExclusion = (i) => set("periodosExclusion", (f.periodosExclusion||[]).filter((_,idx)=>idx!==i));
+  const updateExclusion = (i,k,v) => set("periodosExclusion", (f.periodosExclusion||[]).map((p,idx)=>idx===i?{...p,[k]:v}:p));
+
+  const save = async () => {
+    if(!f.nombre.trim()) return alert("El nombre es obligatorio");
+    if(!f.cat) return alert("La categoría es obligatoria");
+    if(!f.sector.trim()) return alert("El sector es obligatorio");
+    if(!f.fechaInicio) return alert("La fecha de inicio es obligatoria");
+    setSaving(true);
+    await onSave(f);
+    setSaving(false);
+  };
+
+  const inputStyle = {width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:8,fontSize:13,outline:"none",boxSizing:"border-box"};
+  const labelStyle = {fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4};
+  const sectionStyle = {marginBottom:20};
+
+  const catOptions = cats.map(c=>CATS[c]).filter(Boolean);
+
+  return h('div',{style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",display:"flex",alignItems:"flex-start",justifyContent:"center",zIndex:1500,padding:"20px 16px",overflowY:"auto"}},
+    h('div',{style:{background:"white",borderRadius:16,maxWidth:580,width:"100%",overflow:"hidden",boxShadow:"0 20px 60px rgba(0,0,0,0.3)"}},
+      h('div',{style:{background:"#0f172a",padding:"18px 24px",display:"flex",justifyContent:"space-between",alignItems:"center"}},
+        h('div',{style:{color:"white",fontSize:16,fontWeight:700}}, recInit.nombre ? "Editar recurrencia" : "Nueva recurrencia"),
+        h('button',{onClick:onClose,style:{background:"none",border:"none",color:"rgba(255,255,255,0.6)",fontSize:20,cursor:"pointer",padding:0}},"×")),
+      h('div',{style:{padding:24,maxHeight:"80vh",overflowY:"auto"}},
+
+        // Nombre
+        h('div',{style:sectionStyle},
+          h('label',{style:labelStyle},"Nombre de la tarea *"),
+          h('input',{value:f.nombre,onChange:e=>set("nombre",e.target.value),placeholder:"Ej: Limpieza de piletas",style:inputStyle})),
+
+        // Categoría + Sector
+        h('div',{style:{...sectionStyle,display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}},
+          h('div',null,
+            h('label',{style:labelStyle},"Categoría *"),
+            h('select',{value:f.cat,onChange:e=>set("cat",e.target.value),style:inputStyle},
+              h('option',{value:""},"Seleccionar..."),
+              ...catOptions.map(c=>h('option',{key:c.id,value:c.id},c.label)))),
+          h('div',null,
+            h('label',{style:labelStyle},"Tipo / subtipo"),
+            h('input',{value:f.sub,onChange:e=>set("sub",e.target.value),placeholder:"Ej: Limpieza general",style:inputStyle}))),
+
+        // Sector + Criticidad
+        h('div',{style:{...sectionStyle,display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}},
+          h('div',null,
+            h('label',{style:labelStyle},"Sector *"),
+            h('input',{value:f.sector,onChange:e=>set("sector",e.target.value),placeholder:"Ej: Piscina",style:inputStyle})),
+          h('div',null,
+            h('label',{style:labelStyle},"Criticidad"),
+            h('select',{value:f.criticidad,onChange:e=>set("criticidad",e.target.value),style:inputStyle},
+              h('option',{value:"urgente"},"Urgente"),
+              h('option',{value:"alta"},"Alta"),
+              h('option',{value:"media"},"Media"),
+              h('option',{value:"baja"},"Baja")))),
+
+        // Ejecutor
+        h('div',{style:sectionStyle},
+          h('label',{style:labelStyle},"Ejecutor (opcional)"),
+          h('select',{value:f.ejecutorMail,onChange:e=>{
+            const ej=ejecutores.find(x=>x.mail===e.target.value);
+            setF(p=>({...p,ejecutorMail:e.target.value,ejecutorNombre:ej?.nombre||""}));
+          },style:inputStyle},
+            h('option',{value:""},"Sin ejecutor asignado"),
+            ...(ejecutores||[]).map(e=>h('option',{key:e.mail,value:e.mail},e.nombre||e.mail)))),
+
+        // Instrucciones
+        h('div',{style:sectionStyle},
+          h('label',{style:labelStyle},"Instrucciones para el ejecutor"),
+          h('textarea',{value:f.comentario,onChange:e=>set("comentario",e.target.value),
+            rows:2,placeholder:"Qué debe hacer, cómo acceder, herramientas necesarias...",
+            style:{...inputStyle,resize:"vertical"}})),
+
+        // Separador
+        h('div',{style:{borderTop:"2px solid #f1f5f9",marginBottom:20}}),
+        h('div',{style:{fontSize:13,fontWeight:700,color:"#0f172a",marginBottom:16}},"Frecuencia"),
+
+        // Patrón
+        h('div',{style:sectionStyle},
+          h('label',{style:labelStyle},"Patrón de repetición"),
+          h('select',{value:f.patron,onChange:e=>set("patron",e.target.value),style:inputStyle},
+            h('option',{value:"diario"},"Diario"),
+            h('option',{value:"semanal"},"Semanal (días específicos)"),
+            h('option',{value:"quincenal"},"Cada 2 semanas"),
+            h('option',{value:"mensual"},"Mensual (día del mes)"),
+            h('option',{value:"personalizado"},"Personalizado (cada N días)"))),
+
+        // Opciones según patrón
+        f.patron==="semanal" && h('div',{style:sectionStyle},
+          h('label',{style:labelStyle},"Días de la semana"),
+          h('div',{style:{display:"flex",gap:6,flexWrap:"wrap"}},
+            ...DIAS_SEMANA.map((d,i)=>h('button',{key:i,
+              onClick:()=>toggleDiaSemana(i),
+              style:{padding:"6px 12px",borderRadius:20,fontSize:12,fontWeight:600,cursor:"pointer",border:"1.5px solid",
+                background:(f.diasSemana||[]).includes(i)?"#8b5cf6":"white",
+                color:(f.diasSemana||[]).includes(i)?"white":"#64748b",
+                borderColor:(f.diasSemana||[]).includes(i)?"#8b5cf6":"#e2e8f0"}},d)))),
+
+        f.patron==="mensual" && h('div',{style:sectionStyle},
+          h('label',{style:labelStyle},"Día del mes"),
+          h('select',{value:f.diaMes,onChange:e=>set("diaMes",Number(e.target.value)),style:{...inputStyle,width:"auto"}},
+            ...[...Array(28)].map((_,i)=>h('option',{key:i+1,value:i+1},i+1)))),
+
+        f.patron==="personalizado" && h('div',{style:sectionStyle},
+          h('label',{style:labelStyle},"Cada cuántos días"),
+          h('input',{type:"number",min:1,max:365,value:f.intervaloDias,onChange:e=>set("intervaloDias",Number(e.target.value)),style:{...inputStyle,width:100}})),
+
+        // Fechas
+        h('div',{style:{...sectionStyle,display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}},
+          h('div',null,
+            h('label',{style:labelStyle},"Primera ocurrencia *"),
+            h('input',{type:"date",value:f.fechaInicio,onChange:e=>set("fechaInicio",e.target.value),style:inputStyle})),
+          h('div',null,
+            h('label',{style:labelStyle},"Lead time (días antes)"),
+            h('input',{type:"number",min:0,max:30,value:f.leadTimeDias,onChange:e=>set("leadTimeDias",Number(e.target.value)),style:inputStyle})),
+          h('div',null,
+            h('label',{style:labelStyle},"Fecha de fin (opcional)"),
+            h('input',{type:"date",value:f.fechaFin||"",onChange:e=>set("fechaFin",e.target.value),style:inputStyle}))),
+
+        // Períodos de exclusión
+        h('div',{style:{borderTop:"2px solid #f1f5f9",marginBottom:20,marginTop:4}}),
+        h('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}},
+          h('div',{style:{fontSize:13,fontWeight:700,color:"#0f172a"}},"Períodos de exclusión"),
+          h('button',{onClick:addExclusion,
+            style:{padding:"5px 12px",background:"#f1f5f9",color:"#374151",border:"1.5px solid #e2e8f0",borderRadius:7,cursor:"pointer",fontSize:12,fontWeight:600}},
+            "+ Agregar período")),
+
+        (f.periodosExclusion||[]).length===0
+          ? h('div',{style:{fontSize:12,color:"#94a3b8",marginBottom:16}},"Sin períodos de exclusión")
+          : h('div',{style:{display:"flex",flexDirection:"column",gap:8,marginBottom:16}},
+              ...(f.periodosExclusion||[]).map((p,i)=>
+                h('div',{key:i,style:{display:"flex",gap:8,alignItems:"center",background:"#f8fafc",borderRadius:8,padding:"8px 12px"}},
+                  h('span',{style:{fontSize:12,color:"#64748b",whiteSpace:"nowrap"}},"Desde"),
+                  h('input',{type:"date",value:`2000-${p.desde}`,
+                    onChange:e=>updateExclusion(i,"desde",e.target.value.slice(5)),
+                    style:{...inputStyle,width:"auto",flex:1}}),
+                  h('span',{style:{fontSize:12,color:"#64748b",whiteSpace:"nowrap"}},"hasta"),
+                  h('input',{type:"date",value:`2000-${p.hasta}`,
+                    onChange:e=>updateExclusion(i,"hasta",e.target.value.slice(5)),
+                    style:{...inputStyle,width:"auto",flex:1}}),
+                  h('button',{onClick:()=>removeExclusion(i),
+                    style:{background:"none",border:"none",color:"#ef4444",cursor:"pointer",fontSize:18,padding:"0 4px",lineHeight:1}},
+                    "×")))),
+
+        // Botones
+        h('div',{style:{display:"flex",gap:10,paddingTop:8,borderTop:"2px solid #f1f5f9"}},
+          h('button',{onClick:onClose,style:{flex:1,padding:"11px",background:"#f1f5f9",color:"#374151",border:"none",borderRadius:8,cursor:"pointer",fontSize:14}},"Cancelar"),
+          h('button',{onClick:save,disabled:saving,
+            style:{flex:2,padding:"11px",background:saving?"#94a3b8":"linear-gradient(135deg,#0f172a,#1e3a5f)",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:14,fontWeight:700}},
+            saving?"Guardando...":"Guardar recurrencia")))));
+}
+
 function ProyectosTab({recs, onUpdate, ejecutores}) {
   const [proyectos,setProyectos] = useState([]);
   const [modal,setModal] = useState(null);
@@ -2174,7 +2488,7 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
         h('button',{onClick:checkAlerts,disabled:checking,style:{padding:"8px 14px",background:checking?"#475569":"#f97316",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600}},checking?"Verificando...":"⚠️ Revisar alertas"))),
     // Main tabs: Reclamos | Proyectos
     h('div',{style:{display:"flex",gap:4,padding:"0 24px",background:"#0f172a",borderBottom:"2px solid rgba(255,255,255,0.1)"}},
-      ...[["reclamos","📋 Solicitudes"],["proyectos","🏗️ Proyectos"]].map(([id,lbl])=>
+      ...[["reclamos","📋 Solicitudes"],["proyectos","🏗️ Proyectos"],["recurrencias","🔁 Recurrencias"]].map(([id,lbl])=>
         h('button',{key:id,onClick:()=>setMainTab(id),
           style:{padding:"10px 18px",border:"none",background:"none",cursor:"pointer",fontSize:13,fontWeight:mainTab===id?700:500,
             color:mainTab===id?"white":"rgba(255,255,255,0.5)",borderBottom:mainTab===id?"2px solid #3b82f6":"2px solid transparent",marginBottom:-2}},lbl))),
@@ -2226,12 +2540,16 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
             const cat=CATS[r.cat]; const crit=PRIS.find(p=>p.id===(r.criticidad||r.pri));
             const est=ESTADOS.find(e=>e.id===r.estadoAvance); const t=getTiming(r);
             const esVinculado = r.estadoAvance==="vinculado_proyecto";
-            return h('tr',{key:r.id,style:{background:esVinculado?"#f8f7ff":"white",boxShadow:"0 1px 3px rgba(0,0,0,0.06)",opacity:esVinculado?0.82:1}},
+            const esRecurrente = !!r.esRecurrente;
+            const rowBg = esVinculado?"#f8f7ff":esRecurrente?"#faf5ff":"white";
+            return h('tr',{key:r.id,style:{background:rowBg,boxShadow:"0 1px 3px rgba(0,0,0,0.06)",opacity:esVinculado?0.82:1}},
               h('td',{style:{padding:"6px 4px",borderRadius:"10px 0 0 10px"}},
-                h('span',{style:{fontFamily:"monospace",fontSize:11,fontWeight:700,color:esVinculado?"#7c3aed":"#3b82f6"}},r.numero),
+                h('span',{style:{fontFamily:"monospace",fontSize:11,fontWeight:700,color:esVinculado?"#7c3aed":esRecurrente?"#8b5cf6":"#3b82f6"}},r.numero),
                 h('div',{style:{fontSize:10,color:"#94a3b8",marginTop:1}},fd(r.createdAt)),
                 esVinculado && h('div',{style:{fontSize:10,color:"#7c3aed",fontWeight:600,marginTop:1,whiteSpace:"nowrap"}},
                   "🏗️ "+(r.proyectoTitulo||"Proyecto")),
+                esRecurrente && h('div',{style:{fontSize:10,color:"#8b5cf6",fontWeight:600,marginTop:1,whiteSpace:"nowrap"}},
+                  "🔁 "+(r.recurrenciaNombre||"Recurrente")),
                 !esVinculado && r.reclamosHijos?.length > 0 && h('div',{style:{fontSize:10,color:"#8b5cf6",fontWeight:600,marginTop:1}},
                   "🔗 "+r.reclamosHijos.length+" sub-ticket"+(r.reclamosHijos.length>1?"s":""))),
               h('td',{style:{padding:"6px 4px",fontSize:12,maxWidth:110}},
@@ -2351,6 +2669,7 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
           })))),
     mainTab==="reclamos" && view==="kanban" && h(Kanban,{recs:filtrados,onEdit:setModal}),
     mainTab==="proyectos" && h(ProyectosTab,{recs,onUpdate,ejecutores}),
+    mainTab==="recurrencias" && h(RecurrenciasTab,{area,ejecutores,recs}),
     modal && h(EditModal,{rec:modal,onClose:()=>setModal(null),onSave:async u=>{await onUpdate(u,modal);setModal(null);},ejecutores,onUpdateHijo:async u=>{await onUpdate(u,u);},recs}),
     showCfg && h(PanelConfig,{onClose:()=>setShowCfg(false),onSaveEjecutores:ejs=>{setEjecutores(ejs);setShowCfg(false);},area}),
     modalDup && h(ModalConsolidacion,{
@@ -3386,6 +3705,5 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
-
 
 
