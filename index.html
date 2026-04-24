@@ -1046,9 +1046,33 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs}) {
       const dirMails = getDirectivos(savedRec.cat).map(d=>d.mail).filter(Boolean);
       const respMail = getResponsableMail(savedRec.cat);
       if(dirMails.length) {
+        const verUrl = `${appUrl2}?validar=${savedRec.id}`;
+        const htmlBody = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+          <div style="background:#0f172a;padding:20px 24px;border-radius:12px 12px 0 0">
+            <div style="color:#93c5fd;font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-bottom:4px">Sistema de Reclamos</div>
+            <div style="color:white;font-size:18px;font-weight:700">Tarea completada — requiere tu validacion</div>
+          </div>
+          <div style="background:white;padding:24px;border-radius:0 0 12px 12px;border:1px solid #e2e8f0">
+            <table style="width:100%;font-size:14px;margin-bottom:16px">
+              <tr><td style="padding:4px 0;color:#64748b;width:130px">Numero:</td><td style="font-weight:700;font-family:monospace;color:#3b82f6">${savedRec.numero}</td></tr>
+              <tr><td style="padding:4px 0;color:#64748b">Sector:</td><td style="font-weight:600">${savedRec.sector}</td></tr>
+              <tr><td style="padding:4px 0;color:#64748b">Problema:</td><td>${savedRec.sub}</td></tr>
+              <tr><td style="padding:4px 0;color:#64748b">Ejecutor:</td><td>${savedRec.ejecutorNombre||'—'}</td></tr>
+            </table>
+            <div style="background:#f0fdf4;border-left:4px solid #16a34a;border-radius:0 8px 8px 0;padding:12px 14px;margin-bottom:20px">
+              <div style="font-size:11px;color:#16a34a;font-weight:700;text-transform:uppercase;margin-bottom:4px">Lo que se hizo</div>
+              <div style="color:#14532d;font-size:14px">${savedRec.descripcionResolucion||'—'}</div>
+            </div>
+            <div style="text-align:center">
+              <a href="${verUrl}" style="display:inline-block;padding:14px 32px;background:#2563eb;color:white;text-decoration:none;border-radius:10px;font-weight:700;font-size:15px">Ver solicitud y validar</a>
+            </div>
+            <p style="color:#94a3b8;font-size:12px;text-align:center;margin-top:16px">Si no respondés en 2 dias, el cliente sera notificado automaticamente.</p>
+          </div>
+        </div>`;
         await sendEmail({to:dirMails, cc:[respMail].filter(Boolean),
-          subject:`[Asturiano] Revisá antes de notificar al cliente — ${savedRec.numero}: ${savedRec.sector}`,
-          body:`Hola,\n\nLa tarea ${savedRec.numero} fue marcada como completada. Revisala antes de que se notifique al cliente.\n\nSector: ${savedRec.sector}\nProblema: ${savedRec.sub}\nEjecutor: ${savedRec.ejecutorNombre||"—"}\nDescripción de lo realizado: ${savedRec.descripcionResolucion||"—"}\n\n¿Estás de acuerdo con la resolución?\n\n✅ Estoy de acuerdo (se notifica al cliente): ${appUrl2}?validar=${savedRec.id}\n❌ No estoy de acuerdo (se reabre para retrabajar): ${appUrl2}?rechazar_validacion=${savedRec.id}\n\nSi no respondés en 2 días, el cliente será notificado automáticamente.\n\n— Sistema de Reclamos — Asturiano`});
+          subject:`[Asturiano] Tarea completada — ${savedRec.numero}: ${savedRec.sector}`,
+          htmlBody,
+          body:`Hola,\n\nLa tarea ${savedRec.numero} fue marcada como completada.\n\nSector: ${savedRec.sector}\nProblema: ${savedRec.sub}\nEjecutor: ${savedRec.ejecutorNombre||"—"}\nLo que se hizo: ${savedRec.descripcionResolucion||"—"}\n\nVer y validar: ${verUrl}\n\nSi no respondés en 2 días, el cliente será notificado automáticamente.\n\n— Sistema de Reclamos — Asturiano`});
       }
     }
     setSending(false);
@@ -3249,7 +3273,6 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
-
 
 
 
