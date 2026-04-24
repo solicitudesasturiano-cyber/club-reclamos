@@ -271,8 +271,8 @@ function getAccionRequerida(r) {
   }
   if (r.ejecutorRechazado) return {label:"❌ Reasignar ejecutor", color:"#dc2626", bg:"#fef2f2"};
   // "Esperando confirmación" ya lo muestra el badge — no repetir
-  if (r.estadoAvance === "sin_resolucion") return {label:"🟡 Sin resolución — en seguimiento", color:"#d97706", bg:"#fffbeb"};
-  if (r.estadoAvance === "esperando_validacion") return {label:"🔵 Esperando validación directivo", color:"#6d28d9", bg:"#f5f3ff"};
+  if (r.estadoAvance === "esperando_validacion") return {label:"Esperando validacion directivo", color:"#6d28d9", bg:"#f5f3ff"};
+  if (r.estadoAvance === "sin_resolucion") return {label:"Sin resolucion — en seguimiento", color:"#d97706", bg:"#fffbeb"};
   return null;
 }
 
@@ -286,6 +286,10 @@ function getEstadoEjecucion(r) {
   const cierreStr = r.fechaOriginalCierre || r.fechaCierre;
   const cierre = cierreStr ? pld(cierreStr) : null;
   if (cierre) cierre.setHours(0,0,0,0);
+
+  // Esperando validacion directivo
+  if (r.estadoAvance === "esperando_validacion")
+    return { label: "Esperando validacion directivo", color: "#6d28d9", bg: "#f5f3ff" };
 
   // Completada
   if (r.estadoAvance === "completada")
@@ -432,6 +436,33 @@ async function sbClearAll() {
 }
 
 // ── EMAIL ──────────────────────────────────────────────────────────────────
+function buildAdjuntosHTML(adjuntos, titulo) {
+  if (!adjuntos || !adjuntos.length) return '';
+  const items = adjuntos.filter(a => a.url);
+  if (!items.length) return '';
+  const imgs = items.filter(a => a.tipo && a.tipo.startsWith('image/'));
+  const videos = items.filter(a => a.tipo && a.tipo.startsWith('video/'));
+  const otros = items.filter(a => !a.tipo || (!a.tipo.startsWith('image/') && !a.tipo.startsWith('video/')));
+  let html = `<div style="margin-top:12px;margin-bottom:8px">
+    <div style="font-size:11px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">${titulo}</div>`;
+  if (imgs.length) {
+    html += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px">';
+    imgs.forEach(a => {
+      html += `<a href="${a.url}" target="_blank" style="display:inline-block;border-radius:8px;overflow:hidden;border:1px solid #e2e8f0">
+        <img src="${a.url}" style="width:120px;height:90px;object-fit:cover;display:block" alt="${a.nombre||'foto'}" />
+      </a>`;
+    });
+    html += '</div>';
+  }
+  if (videos.length || otros.length) {
+    [...videos, ...otros].forEach(a => {
+      html += `<a href="${a.url}" target="_blank" style="display:inline-block;padding:6px 12px;background:#f1f5f9;border-radius:6px;font-size:12px;color:#3b82f6;text-decoration:none;margin-right:6px;margin-bottom:4px">${a.nombre||'archivo'}</a>`;
+    });
+  }
+  html += '</div>';
+  return html;
+}
+
 async function sendEmail({to, cc, subject, body, htmlBody, icsData}) {
   const cfg = ls.get("config") || {};
   const url = cfg.scriptUrl || SCRIPT_URL;
@@ -1046,6 +1077,10 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs}) {
       const dirMails = getDirectivos(savedRec.cat).map(d=>d.mail).filter(Boolean);
       const respMail = getResponsableMail(savedRec.cat);
       if(dirMails.length) {
+        const adjSolicitante = (savedRec.adjuntos||[]).filter(a=>a.url);
+        const adjEjecutor = (savedRec.adjuntosResolucion||[]).filter(a=>a.url);
+        const htmlAdjSol = buildAdjuntosHTML(adjSolicitante, 'Fotos del solicitante');
+        const htmlAdjEj = buildAdjuntosHTML(adjEjecutor, 'Fotos / evidencia del ejecutor');
         const verUrl = `${appUrl2}?validar=${savedRec.id}`;
         const htmlBody = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
           <div style="background:#0f172a;padding:20px 24px;border-radius:12px 12px 0 0">
@@ -1053,17 +1088,27 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs}) {
             <div style="color:white;font-size:18px;font-weight:700">Tarea completada — requiere tu validacion</div>
           </div>
           <div style="background:white;padding:24px;border-radius:0 0 12px 12px;border:1px solid #e2e8f0">
-            <table style="width:100%;font-size:14px;margin-bottom:16px">
+            <div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;padding-bottom:6px;border-bottom:2px solid #f1f5f9">1. Solicitud original</div>
+            <table style="width:100%;font-size:14px;margin-bottom:12px">
               <tr><td style="padding:4px 0;color:#64748b;width:130px">Numero:</td><td style="font-weight:700;font-family:monospace;color:#3b82f6">${savedRec.numero}</td></tr>
               <tr><td style="padding:4px 0;color:#64748b">Sector:</td><td style="font-weight:600">${savedRec.sector}</td></tr>
               <tr><td style="padding:4px 0;color:#64748b">Problema:</td><td>${savedRec.sub}</td></tr>
-              <tr><td style="padding:4px 0;color:#64748b">Ejecutor:</td><td>${savedRec.ejecutorNombre||'—'}</td></tr>
+              <tr><td style="padding:4px 0;color:#64748b">Solicitante:</td><td>${savedRec.nombre||'—'}</td></tr>
+              <tr><td style="padding:4px 0;color:#64748b">Descripcion:</td><td>${savedRec.desc||'—'}</td></tr>
             </table>
-            <div style="background:#f0fdf4;border-left:4px solid #16a34a;border-radius:0 8px 8px 0;padding:12px 14px;margin-bottom:20px">
+            ${htmlAdjSol}
+            <div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin:16px 0 10px;padding-bottom:6px;border-bottom:2px solid #f1f5f9">2. Asignacion</div>
+            <table style="width:100%;font-size:14px;margin-bottom:12px">
+              <tr><td style="padding:4px 0;color:#64748b;width:130px">Ejecutor:</td><td style="font-weight:600">${savedRec.ejecutorNombre||'—'}</td></tr>
+              <tr><td style="padding:4px 0;color:#64748b">Periodo:</td><td>${savedRec.fechaInicioEsperado||savedRec.fechaInicioOriginal||'—'} al ${savedRec.fechaCierreConfirmada||savedRec.fechaCierre||'—'}</td></tr>
+            </table>
+            <div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin:16px 0 10px;padding-bottom:6px;border-bottom:2px solid #f1f5f9">3. Resolucion del ejecutor</div>
+            <div style="background:#f0fdf4;border-left:4px solid #16a34a;border-radius:0 8px 8px 0;padding:12px 14px;margin-bottom:12px">
               <div style="font-size:11px;color:#16a34a;font-weight:700;text-transform:uppercase;margin-bottom:4px">Lo que se hizo</div>
               <div style="color:#14532d;font-size:14px">${savedRec.descripcionResolucion||'—'}</div>
             </div>
-            <div style="text-align:center">
+            ${htmlAdjEj}
+            <div style="text-align:center;margin-top:20px">
               <a href="${verUrl}" style="display:inline-block;padding:14px 32px;background:#2563eb;color:white;text-decoration:none;border-radius:10px;font-weight:700;font-size:15px">Ver solicitud y validar</a>
             </div>
             <p style="color:#94a3b8;font-size:12px;text-align:center;margin-top:16px">Si no respondés en 2 dias, el cliente sera notificado automaticamente.</p>
@@ -2601,6 +2646,13 @@ function ValidarDetalleView({recId, recs, setRecs, loaded, setView}) {
           h('div',{style:{background:"#f8fafc",borderRadius:8,padding:"10px 12px"}},
             h('div',{style:labelStyle},"Descripcion"),
             h('div',{style:{color:"#374151",fontSize:14,lineHeight:1.6}},rec.desc||"—"))),
+          (rec.adjuntos||[]).filter(a=>a.url).length>0 && h('div',{style:{marginTop:10}},
+            h('div',{style:{...labelStyle,marginBottom:8}},"Fotos del solicitante"),
+            h('div',{style:{display:"flex",flexWrap:"wrap",gap:8}},
+              ...(rec.adjuntos||[]).filter(a=>a.url).map((a,i)=>
+                a.tipo?.startsWith('image/')
+                  ? h('a',{key:i,href:a.url,target:"_blank"},h('img',{src:a.url,style:{width:110,height:80,objectFit:"cover",borderRadius:8,border:"1px solid #e2e8f0",display:"block"}}))
+                  : h('a',{key:i,href:a.url,target:"_blank",style:{display:"inline-block",padding:"6px 12px",background:"#f1f5f9",borderRadius:6,fontSize:12,color:"#2563eb",textDecoration:"none"}},a.nombre||"archivo")))),
 
         // SECCION 2: Asignacion del responsable
         h('div',{style:{marginBottom:20}},
@@ -3273,6 +3325,5 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
-
 
 
