@@ -705,7 +705,7 @@ function PantallaRechazo({onConfirm}) {
   const submit = () => { if(!motivo.trim()){setErr(true);return;} onConfirm(motivo.trim()); };
   return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
     h('div',{style:{background:"white",borderRadius:20,padding:36,maxWidth:460,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}},
-      h('div',{style:{fontSize:48,textAlign:"center",marginBottom:12}},"❌"),
+      h('div',{style:{fontSize:48,textAlign:"center",marginBottom:12}},"Error"),
       h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:24,color:"#0f172a",margin:"0 0 8px",textAlign:"center"}},"Rechazar tarea"),
       rec && h('div',{style:{background:"#f8fafc",borderRadius:12,padding:14,marginBottom:20,fontSize:13}},
         h('div',{style:{fontWeight:600,color:"#1e293b",marginBottom:4}},rec.numero+" — "+rec.sector),
@@ -2495,12 +2495,12 @@ function VerSolicitudPublica({recId, recs, loaded}) {
 
   if(!loaded) return h('div',{style:wrapStyle},
     h('div',{style:{color:"white",textAlign:"center",marginTop:80}},
-      h('div',{style:{fontSize:40,marginBottom:12}},"⏳"),
+      h('div',{style:{fontSize:40,marginBottom:12}},"Cargando..."),
       h('div',{style:{fontSize:16}},"Cargando solicitud...")));
 
   if(!rec) return h('div',{style:wrapStyle},
     h('div',{style:{color:"white",textAlign:"center",marginTop:80}},
-      h('div',{style:{fontSize:40,marginBottom:12}},"❌"),
+      h('div',{style:{fontSize:40,marginBottom:12}},"Error"),
       h('div',{style:{fontSize:16}},"Solicitud no encontrada.")));
 
   const crit = rec.criticidad||rec.pri||"media";
@@ -2559,13 +2559,13 @@ function VerSolicitudPublica({recId, recs, loaded}) {
             h('div',{style:{fontWeight:700,color:"#1e40af"}},rec.horaInicio+(rec.horaFin?" a "+rec.horaFin:"")))),
         // Comentario/instrucciones del responsable
         comentResp && h('div',{style:{background:"#eff6ff",borderLeft:"4px solid #3b82f6",borderRadius:"0 10px 10px 0",padding:"12px 14px",marginBottom:16}},
-          h('div',{style:{fontSize:11,color:"#3b82f6",fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}},"💬 Instrucciones"),
+          h('div',{style:{fontSize:11,color:"#3b82f6",fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}},"Instrucciones"),
           h('div',{style:{color:"#1e40af",fontSize:14,lineHeight:1.6}},comentResp)),
         // Botón completar si corresponde
         (rec.ejecutorMail && rec.estadoAvance!=="completada" && rec.estadoAvance!=="esperando_validacion") &&
           h('a',{href:window.location.href.split("?")[0]+"?completar="+rec.id,
             style:{display:"block",textAlign:"center",padding:"14px",background:"linear-gradient(135deg,#16a34a,#15803d)",color:"white",textDecoration:"none",borderRadius:10,fontWeight:700,fontSize:15,marginTop:8}},
-            "✅ Marcar como completada"),
+            "Marcar como completada"),
         h('div',{style:{textAlign:"center",marginTop:20,color:"#94a3b8",fontSize:12}},"Club Asturiano — Sistema de Reclamos"))));
 }
 
@@ -3129,6 +3129,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
+
 
 
 
