@@ -2819,6 +2819,17 @@ function VerSolicitudPublica({recId, recs, loaded}) {
         comentResp && h('div',{style:{background:"#eff6ff",borderLeft:"4px solid #3b82f6",borderRadius:"0 10px 10px 0",padding:"12px 14px",marginBottom:16}},
           h('div',{style:{fontSize:11,color:"#3b82f6",fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}},"Instrucciones"),
           h('div',{style:{color:"#1e40af",fontSize:14,lineHeight:1.6}},comentResp)),
+        // Resolución del ejecutor
+        rec.descripcionResolucion && h('div',{style:{background:"#f0fdf4",borderLeft:"4px solid #16a34a",borderRadius:"0 10px 10px 0",padding:"12px 14px",marginBottom:16}},
+          h('div',{style:{fontSize:11,color:"#16a34a",fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}},"Lo que se hizo"),
+          h('div',{style:{color:"#14532d",fontSize:14,lineHeight:1.6}},rec.descripcionResolucion),
+          (rec.adjuntosResolucion||[]).filter(a=>a.url).length>0 && h('div',{style:{marginTop:10}},
+            h('div',{style:{fontSize:11,color:"#16a34a",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}},"Fotos / evidencia"),
+            h('div',{style:{display:"flex",flexWrap:"wrap",gap:8}},
+              ...(rec.adjuntosResolucion||[]).filter(a=>a.url).map((a,i)=>
+                a.tipo?.startsWith('image/')
+                  ? h('a',{key:i,href:a.url,target:"_blank"},h('img',{src:a.url,style:{width:110,height:80,objectFit:"cover",borderRadius:8,border:"1px solid #bbf7d0",display:"block"}}))
+                  : h('a',{key:i,href:a.url,target:"_blank",style:{display:"inline-block",padding:"6px 12px",background:"#dcfce7",borderRadius:6,fontSize:12,color:"#15803d",textDecoration:"none"}},a.nombre||"archivo"))))),
         // Botón completar si corresponde
         (rec.ejecutorMail && rec.estadoAvance!=="completada" && rec.estadoAvance!=="esperando_validacion") &&
           h('a',{href:window.location.href.split("?")[0]+"?completar="+rec.id,
@@ -3368,4 +3379,5 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
+
 
