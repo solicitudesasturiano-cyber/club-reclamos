@@ -1910,6 +1910,80 @@ const RECURRENCIA_EMPTY = {
   activa:true, fechaFin:""
 };
 
+async function sbGetAll_reclamos() {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/reclamos?select=data`, {
+      headers: {"apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`}
+    });
+    const rows = await r.json();
+    return (rows||[]).map(x=>x.data).filter(Boolean);
+  } catch(e) { return []; }
+}
+
+function proximaOcurrenciaFrontend(rec, hoy) {
+  const inicio = pld(rec.fechaInicio);
+  inicio.setHours(0,0,0,0);
+  const patron = rec.patron;
+  const DIAS_SEM = (rec.diasSemana||[]);
+
+  for (let d = 0; d <= 60; d++) {
+    const fecha = new Date(hoy.getTime() + d * 86400000);
+    fecha.setHours(0,0,0,0);
+    if (fecha < inicio) continue;
+    let esOcurrencia = false;
+    if (patron === "diario") esOcurrencia = true;
+    else if (patron === "semanal") esOcurrencia = DIAS_SEM.includes((fecha.getDay()+6)%7);
+    else if (patron === "quincenal") esOcurrencia = Math.round((fecha-inicio)/86400000)%14===0;
+    else if (patron === "mensual") esOcurrencia = fecha.getDate()===(rec.diaMes||1);
+    else if (patron === "personalizado") esOcurrencia = Math.round((fecha-inicio)/86400000)%(rec.intervaloDias||7)===0;
+    if (esOcurrencia) return fecha;
+  }
+  return null;
+}
+
+async function crearTicketDesdeRecurrencia(rec, fechaOcurrencia) {
+  try {
+    const fechaStr = fechaOcurrencia.toISOString().split('T')[0];
+    const allRecs = await sbGetAll_reclamos();
+    const PREFIX = {infraestructura:"I",mantenimiento:"M",limpieza:"L",preparacion:"P",servicios:"S",cuotas:"C"};
+    const prefix = PREFIX[rec.cat]||"X";
+    const catRecs = allRecs.filter(r=>r.cat===rec.cat);
+    let maxNum = 0;
+    catRecs.forEach(r=>{
+      if(r.numero){const parts=r.numero.split("-");const n=parseInt(parts[parts.length-1],10);if(!isNaN(n)&&n>maxNum)maxNum=n;}
+    });
+    const seq = String(maxNum+1).padStart(3,"0");
+    const yr = String(new Date().getFullYear()).slice(-2);
+    const numero = `${prefix}-${yr}-REC-${seq}`;
+    const ticketId = Date.now();
+    const ticket = {
+      id: ticketId, numero, tipo:"empleado", nombre:"Sistema (Recurrencia)",
+      celular:"", email:"", sector:rec.sector, cat:rec.cat,
+      sub: rec.sub||rec.nombre, pri:rec.criticidad||"media", criticidad:rec.criticidad||"media",
+      desc: rec.nombre+(rec.comentario?"\n\nInstrucciones: "+rec.comentario:""),
+      ubicacion:"", estadoAvance:"bajo_analisis",
+      createdAt:new Date().toISOString(), updatedAt:new Date().toISOString(),
+      ejecutorMail:rec.ejecutorMail||"", ejecutorNombre:rec.ejecutorNombre||"",
+      ejecutorConfirmado:false, ejecutorRechazado:false,
+      nuevoComentario:rec.comentario||"",
+      fechaInicioEsperado:fechaStr, fechaCierre:fechaStr,
+      esRecurrente:true, recurrenciaId:rec.id, recurrenciaNombre:rec.nombre,
+      adjuntos:[], adjuntosResolucion:[], descripcionResolucion:"",
+      presupuesto:"", presupuestoDetalle:"", calificacion:null,
+      reabierta:false, posiblesDuplicados:[], duplicadosIgnorados:[], reclamosHijos:[],
+      comentarios:[{texto:"Ticket generado automáticamente por recurrencia: "+rec.nombre,
+        fecha:new Date().toISOString(),autor:"Sistema"}]
+    };
+    await fetch(`${SUPABASE_URL}/rest/v1/reclamos`, {
+      method:"POST",
+      headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,
+        "Content-Type":"application/json","Prefer":"return=minimal"},
+      body:JSON.stringify({id:ticketId, data:ticket})
+    });
+    console.log("Ticket recurrente creado desde frontend:", numero);
+  } catch(e) { console.error("crearTicketDesdeRecurrencia:", e); }
+}
+
 function RecurrenciasTab({area, ejecutores, recs}) {
   const [lista, setLista] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1930,6 +2004,22 @@ function RecurrenciasTab({area, ejecutores, recs}) {
 
   const guardar = async (rec) => {
     await sbUpsertRecurrencia(rec);
+    // Si es recurrencia nueva (o editada), verificar si la primera ocurrencia
+    // ya está dentro de la ventana del lead time → crear ticket ahora
+    if (rec.activa && rec.fechaInicio) {
+      const hoy = new Date(); hoy.setHours(0,0,0,0);
+      const fechaOcurrencia = proximaOcurrenciaFrontend(rec, hoy);
+      if (fechaOcurrencia) {
+        const diasFaltantes = Math.round((fechaOcurrencia - hoy) / 86400000);
+        if (diasFaltantes <= (rec.leadTimeDias||0)) {
+          const yaExiste = (await sbGetAll_reclamos()).some(r =>
+            r.recurrenciaId === rec.id &&
+            r.fechaInicioEsperado === fechaOcurrencia.toISOString().split('T')[0]
+          );
+          if (!yaExiste) await crearTicketDesdeRecurrencia(rec, fechaOcurrencia);
+        }
+      }
+    }
     await cargar();
     setModal(null);
   };
