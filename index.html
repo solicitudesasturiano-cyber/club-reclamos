@@ -2484,6 +2484,145 @@ function RechazarValidacionView({recId, recs, setRecs, loaded}) {
 }
 
 // ── CALIFICAR VIEW ────────────────────────────────────────────────────────
+function ValidarDetalleView({recId, recs, setRecs, loaded, setView}) {
+  const rec = recs.find(r=>r.id===recId);
+  const [sending, setSending] = useState(false);
+  const [done, setDone] = useState(null); // "aprobado" | "rechazado"
+  const [motivoRechazo, setMotivoRechazo] = useState("");
+  const [showRechazo, setShowRechazo] = useState(false);
+  const appUrl = window.location.href.split("?")[0];
+
+  const CATS={infraestructura:"Obras / Infraestructura",mantenimiento:"Mantenimiento Preventivo",limpieza:"Limpieza",preparacion:"Preparacion de espacios",servicios:"Servicios y Atencion",cuotas:"Cuotas y Aranceles"};
+  const CRIT_COLOR={urgente:"#ef4444",alta:"#f97316",media:"#eab308",baja:"#22c55e"};
+
+  const wrapStyle={minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"32px 16px"};
+  const cardStyle={background:"white",borderRadius:16,maxWidth:640,width:"100%",overflow:"hidden",boxShadow:"0 20px 60px rgba(0,0,0,0.4)"};
+  const secStyle=(color,bg)=>({background:bg,borderLeft:"4px solid "+color,borderRadius:"0 10px 10px 0",padding:"14px 16px",marginBottom:16});
+  const labelStyle={fontSize:11,color:"#94a3b8",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4};
+  const valStyle={fontWeight:600,color:"#1e293b",fontSize:14};
+
+  if(!loaded) return h('div',{style:wrapStyle},h('div',{style:{color:"white",textAlign:"center",marginTop:80}},h('div',{style:{fontSize:16}},"Cargando...")));
+  if(!rec) return h('div',{style:wrapStyle},h('div',{style:{color:"white",textAlign:"center",marginTop:80}},h('div',{style:{fontSize:16}},"Solicitud no encontrada.")));
+
+  const crit = rec.criticidad||rec.pri||"media";
+  const critColor = CRIT_COLOR[crit]||"#64748b";
+
+  // Comentario del responsable al ejecutor
+  const instrucciones = rec.nuevoComentario?.trim() || (() => {
+    if(!rec.comentarios?.length) return null;
+    for(let i=rec.comentarios.length-1;i>=0;i--) {
+      const a=rec.comentarios[i].autor||"";
+      if(["Intendencia","Administracion","Responsable"].includes(a)) return rec.comentarios[i].texto;
+    }
+    return null;
+  })();
+
+  const aprobar = async () => {
+    if(sending) return;
+    setSending(true);
+    const mensajes={infraestructura:"nuestro equipo de obras reviso y resolvio el inconveniente",mantenimiento:"nuestro equipo de mantenimiento preventivo atendio el problema",limpieza:"nuestro equipo de limpieza atendio la situacion",preparacion:"el espacio fue preparado correctamente",servicios:"nuestro equipo de atencion al socio gestionó tu consulta",cuotas:"nuestro equipo administrativo resolvio tu consulta"};
+    const msgCat=mensajes[rec.cat]||"nuestro equipo atendio y resolvio el inconveniente";
+    const updated={...rec,estadoAvance:"completada",fechaEnvioValidacion:rec.fechaEnvioValidacion,
+      comentarios:[...(rec.comentarios||[]),{texto:"Resolucion validada por directivo.",fecha:new Date().toISOString(),autor:"Directivo"}]};
+    await sbUpsert(updated);
+    setRecs(prev=>prev.map(r=>r.id===recId?updated:r));
+    if(rec.email) await sendEmail({to:rec.email,subject:`[Asturiano] Tu solicitud fue resuelta — ${rec.numero}`,
+      body:`Hola ${rec.nombre},\n\nNos alegra informarte que el inconveniente que reportaste en ${rec.sector} fue resuelto. ${msgCat}.\n\n${rec.descripcionResolucion?"Lo que se hizo:\n"+rec.descripcionResolucion+"\n\n":""}Cuando tengas un momento, califica la atencion:\n${appUrl}?calificar=${rec.id}\n\nGracias por ayudarnos a mejorar el club.\n\n— Equipo de Intendencia Asturiano`});
+    for(const num of (rec.reclamosHijos||[])) {
+      const hijo=recs.find(x=>x.numero===num);
+      if(hijo?.email) await sendEmail({to:hijo.email,subject:`[Asturiano] Tu solicitud fue resuelta — ${hijo.numero}`,
+        body:`Hola ${hijo.nombre},\n\nNos alegra informarte que el inconveniente que reportaste en ${hijo.sector} fue resuelto. ${msgCat}.\n\n${rec.descripcionResolucion?"Lo que se hizo:\n"+rec.descripcionResolucion+"\n\n":""}Cuando tengas un momento, califica la atencion:\n${appUrl}?calificar=${hijo.id}\n\nGracias.\n\n— Equipo de Intendencia Asturiano`});
+    }
+    setSending(false); setDone("aprobado");
+  };
+
+  const rechazar = async () => {
+    if(!motivoRechazo.trim()) return;
+    if(sending) return;
+    setSending(true);
+    const updated={...rec,estadoAvance:"bajo_analisis",reabierta:true,descripcionResolucion:"",ejecutorConfirmado:false,
+      comentarios:[...(rec.comentarios||[]),{texto:"Directivo rechazo la resolucion. Motivo: "+motivoRechazo,fecha:new Date().toISOString(),autor:"Directivo"}]};
+    await sbUpsert(updated);
+    setRecs(prev=>prev.map(r=>r.id===recId?updated:r));
+    const respMail=getResponsableMail(rec.cat)||NOTIFY_EMAIL;
+    await sendEmail({to:[respMail].filter(Boolean),subject:`[Asturiano] Resolucion rechazada — ${rec.numero}`,
+      body:`La resolucion del ticket ${rec.numero} fue rechazada por el directivo.\n\nMotivo: ${motivoRechazo}\n\nEl ticket fue reabierto y requiere nueva gestion.\n\n${appUrl}`});
+    setSending(false); setDone("rechazado");
+  };
+
+  if(done) return h('div',{style:wrapStyle},
+    h('div',{style:{...cardStyle,padding:40,textAlign:"center"}},
+      h('div',{style:{fontSize:48,marginBottom:16}},done==="aprobado"?"":""),
+      h('div',{style:{fontSize:22,fontWeight:700,color:done==="aprobado"?"#16a34a":"#dc2626",marginBottom:8}},
+        done==="aprobado"?"Resolucion aprobada":"Resolucion rechazada"),
+      h('div',{style:{color:"#64748b",fontSize:14}},
+        done==="aprobado"?"El solicitante fue notificado.":"El responsable fue notificado para regestionar.")));
+
+  return h('div',{style:wrapStyle},
+    h('div',{style:cardStyle},
+      h('div',{style:{background:"#0f172a",padding:"20px 24px"}},
+        h('div',{style:{color:"#93c5fd",fontSize:11,letterSpacing:2,textTransform:"uppercase",marginBottom:4}},"Sistema de Reclamos — Validacion Directivo"),
+        h('div',{style:{color:"white",fontSize:18,fontWeight:700}},rec.numero+" — "+rec.sector)),
+      h('div',{style:{padding:24}},
+
+        // SECCION 1: Solicitud original
+        h('div',{style:{marginBottom:20}},
+          h('div',{style:{fontSize:12,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:1,marginBottom:10,paddingBottom:6,borderBottom:"2px solid #f1f5f9"}},"1. Solicitud original"),
+          h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}},
+            h('div',{style:{background:"#f8fafc",borderRadius:8,padding:"10px 12px"}},h('div',{style:labelStyle},"Sector"),h('div',{style:valStyle},rec.sector)),
+            h('div',{style:{background:"#f8fafc",borderRadius:8,padding:"10px 12px"}},h('div',{style:labelStyle},"Tipo"),h('div',{style:valStyle},rec.sub)),
+            h('div',{style:{background:"#f8fafc",borderRadius:8,padding:"10px 12px"}},h('div',{style:labelStyle},"Solicitante"),h('div',{style:valStyle},(rec.tipo||"")+" — "+(rec.nombre||""))),
+            h('div',{style:{background:"#f8fafc",borderRadius:8,padding:"10px 12px"}},h('div',{style:labelStyle},"Prioridad"),
+              h('div',{style:{display:"inline-block",padding:"2px 10px",borderRadius:20,fontSize:12,fontWeight:700,background:critColor+"22",color:critColor}},crit.toUpperCase()))),
+          h('div',{style:{background:"#f8fafc",borderRadius:8,padding:"10px 12px"}},
+            h('div',{style:labelStyle},"Descripcion"),
+            h('div',{style:{color:"#374151",fontSize:14,lineHeight:1.6}},rec.desc||"—"))),
+
+        // SECCION 2: Asignacion del responsable
+        h('div',{style:{marginBottom:20}},
+          h('div',{style:{fontSize:12,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:1,marginBottom:10,paddingBottom:6,borderBottom:"2px solid #f1f5f9"}},"2. Asignacion del responsable"),
+          h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:instrucciones?10:0}},
+            h('div',{style:{background:"#f8fafc",borderRadius:8,padding:"10px 12px"}},h('div',{style:labelStyle},"Ejecutor"),h('div',{style:valStyle},rec.ejecutorNombre||"—")),
+            h('div',{style:{background:"#f8fafc",borderRadius:8,padding:"10px 12px"}},h('div',{style:labelStyle},"Periodo"),
+              h('div',{style:valStyle},fd(rec.fechaInicioEsperado||rec.fechaInicioOriginal)+" al "+fd(rec.fechaCierreConfirmada||rec.fechaCierre)))),
+          instrucciones && h('div',{style:{background:"#eff6ff",borderLeft:"3px solid #3b82f6",borderRadius:"0 8px 8px 0",padding:"10px 12px"}},
+            h('div',{style:labelStyle},"Instrucciones al ejecutor"),
+            h('div',{style:{color:"#1e40af",fontSize:14}},instrucciones))),
+
+        // SECCION 3: Resolucion del ejecutor
+        h('div',{style:{marginBottom:24}},
+          h('div',{style:{fontSize:12,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:1,marginBottom:10,paddingBottom:6,borderBottom:"2px solid #f1f5f9"}},"3. Resolucion del ejecutor"),
+          h('div',{style:{background:"#f0fdf4",borderLeft:"4px solid #16a34a",borderRadius:"0 10px 10px 0",padding:"12px 14px",marginBottom:rec.evidenciaUrl?10:0}},
+            h('div',{style:labelStyle},"Lo que se hizo"),
+            h('div',{style:{color:"#14532d",fontSize:14,lineHeight:1.6}},rec.descripcionResolucion||"Sin descripcion.")),
+          rec.evidenciaUrl && h('div',{style:{marginTop:8}},
+            h('a',{href:rec.evidenciaUrl,target:"_blank",style:{color:"#2563eb",fontSize:13,fontWeight:600}},"Ver evidencia / foto"))),
+
+        // BOTONES
+        !showRechazo && h('div',{style:{display:"flex",gap:12,flexWrap:"wrap"}},
+          h('button',{onClick:aprobar,disabled:sending,
+            style:{flex:2,padding:"14px",background:sending?"#94a3b8":"linear-gradient(135deg,#16a34a,#15803d)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:15,fontWeight:700}},
+            sending?"Procesando...":"Aprobar resolucion"),
+          h('button',{onClick:()=>setShowRechazo(true),disabled:sending,
+            style:{flex:1,padding:"14px",background:"#fef2f2",color:"#dc2626",border:"2px solid #fca5a5",borderRadius:10,cursor:"pointer",fontSize:15,fontWeight:700}},
+            "Rechazar")),
+
+        showRechazo && h('div',{style:{background:"#fef2f2",border:"1.5px solid #fca5a5",borderRadius:10,padding:16}},
+          h('div',{style:{fontWeight:700,color:"#dc2626",marginBottom:8,fontSize:14}},"Motivo del rechazo (obligatorio)"),
+          h('textarea',{value:motivoRechazo,onChange:e=>setMotivoRechazo(e.target.value),rows:3,
+            placeholder:"Que falta corregir o completar...",
+            style:{width:"100%",padding:10,border:"1.5px solid #fca5a5",borderRadius:8,fontSize:14,resize:"vertical",boxSizing:"border-box",marginBottom:10}}),
+          h('div',{style:{display:"flex",gap:10}},
+            h('button',{onClick:rechazar,disabled:sending||!motivoRechazo.trim(),
+              style:{flex:2,padding:"12px",background:sending||!motivoRechazo.trim()?"#94a3b8":"#dc2626",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:14,fontWeight:700}},
+              sending?"Procesando...":"Confirmar rechazo"),
+            h('button',{onClick:()=>setShowRechazo(false),
+              style:{flex:1,padding:"12px",background:"white",color:"#64748b",border:"1.5px solid #e2e8f0",borderRadius:8,cursor:"pointer",fontSize:14}},
+              "Cancelar"))),
+
+        h('div',{style:{textAlign:"center",marginTop:20,color:"#94a3b8",fontSize:11}},"Club Asturiano — Sistema de Reclamos"))));
+}
+
 function VerSolicitudPublica({recId, recs, loaded}) {
   const rec = recs.find(r=>r.id===recId);
   const CATS={infraestructura:"Obras / Infraestructura",mantenimiento:"Mantenimiento Preventivo",limpieza:"Limpieza",preparacion:"Preparación de espacios",servicios:"Servicios & Atención",cuotas:"Cuotas & Aranceles"};
@@ -2690,7 +2829,7 @@ function App() {
   const _rechValParam = _params.get("rechazar_validacion");
   const _verParam   = _params.get("ver");
   const _initView  = _segParam  ? "seguimiento_"+_segParam
-    : _valParam   ? "loading"
+    : _valParam   ? "validar_detalle_"+_valParam
     : _rechValParam ? "rechazar_val_"+_rechValParam
     : _compParam  ? "completar_"+_compParam
     : _calParam   ? "calificar_"+_calParam
@@ -2752,28 +2891,8 @@ function App() {
         ls.set("pendingRechazar",{id:rechazarId,rec:r,mail:rechazarMail});
         setView("rechazar");
       } else if(validarId){
-        const r=lista.find(r=>String(r.id)===validarId);
-        if(r){
-          const appUrl=window.location.href.split("?")[0];
-          const updated={...r,estadoAvance:"completada",
-            comentarios:[...(r.comentarios||[]),{texto:"Resolución validada por directivo.",fecha:new Date().toISOString(),autor:"Directivo"}]};
-          await sbUpsert(updated);
-          setRecs(lista.map(x=>x.id===updated.id?updated:x));
-          const mensajes={infraestructura:"nuestro equipo de obras revisó y resolvió el inconveniente",mantenimiento:"nuestro equipo de mantenimiento preventivo atendió el problema",limpieza:"nuestro equipo de limpieza atendió la situación",preparacion:"el espacio fue preparado correctamente",servicios:"nuestro equipo de atención al socio gestionó tu consulta",cuotas:"nuestro equipo administrativo resolvió tu consulta"};
-          const msgCat=mensajes[r.cat]||"nuestro equipo atendió y resolvió el inconveniente";
-          // Notificar al solicitante padre
-          if(r.email) await sendEmail({to:r.email,
-            subject:`[Asturiano]  Tu solicitud fue resuelta — ${r.numero}`,
-            body:`Hola ${r.nombre},\n\nNos alegra informarte que el inconveniente que reportaste en ${r.sector} fue resuelto. ${msgCat}.\n\n${r.descripcionResolucion?"Lo que se hizo:\n"+r.descripcionResolucion+"\n\n":""}Cuando tengas un momento, evaluá si la solicitud fue resuelta correctamente y calificá la atención. En caso de no estar conforme podés reabrir el ticket:\n${appUrl}?calificar=${r.id}\n\nGracias por ayudarnos a mejorar el club.\n\n— Equipo de Intendencia Asturiano`});
-          // Notificar a todos los hijos consolidados
-          for(const num of (r.reclamosHijos||[])) {
-            const hijo = lista.find(x=>x.numero===num);
-            if(hijo?.email) await sendEmail({to:hijo.email,
-              subject:`[Asturiano]  Tu solicitud fue resuelta — ${hijo.numero}`,
-              body:`Hola ${hijo.nombre},\n\nNos alegra informarte que el inconveniente que reportaste en ${hijo.sector} fue resuelto. ${msgCat}.\n\n${r.descripcionResolucion?"Lo que se hizo:\n"+r.descripcionResolucion+"\n\n":""}Cuando tengas un momento, evaluá si la solicitud fue resuelta correctamente y calificá la atención. En caso de no estar conforme podés reabrir el ticket:\n${appUrl}?calificar=${hijo.id}\n\nGracias por ayudarnos a mejorar el club.\n\n— Equipo de Intendencia Asturiano`});
-          }
-        }
-        setView("validar_ok");
+        // Ya no se procesa acá — se maneja en ValidarDetalleView
+        setView("validar_detalle_"+validarId);
       } else if(rechazarValId){
         setView("rechazar_val_"+rechazarValId);
       } else if(calendarId){
@@ -3032,6 +3151,7 @@ function App() {
   if(view && view.startsWith("completar_")) { return h(CompletarView,{recId:view.replace("completar_",""),recs,setRecs,loaded}); }
   if(view && view.startsWith("calificar_")) { return h(CalificarView,{recId:Number(view.replace("calificar_","")),recs,setRecs,loaded}); }
   if(view && view.startsWith("ver_")) { return h(VerSolicitudPublica,{recId:Number(view.replace("ver_","")),recs,loaded}); }
+  if(view && view.startsWith("validar_detalle_")) { return h(ValidarDetalleView,{recId:Number(view.replace("validar_detalle_","")),recs,setRecs,loaded,setView}); }
 
   if(view==="rechazar") return h(PantallaRechazo,{onConfirm:handleRechazar});
 
@@ -3129,7 +3249,6 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
-
 
 
 
