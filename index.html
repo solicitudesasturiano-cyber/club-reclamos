@@ -2484,6 +2484,91 @@ function RechazarValidacionView({recId, recs, setRecs, loaded}) {
 }
 
 // ── CALIFICAR VIEW ────────────────────────────────────────────────────────
+function VerSolicitudPublica({recId, recs, loaded}) {
+  const rec = recs.find(r=>r.id===recId);
+  const CATS={infraestructura:"Obras / Infraestructura",mantenimiento:"Mantenimiento Preventivo",limpieza:"Limpieza",preparacion:"Preparación de espacios",servicios:"Servicios & Atención",cuotas:"Cuotas & Aranceles"};
+  const CRIT_COLOR={urgente:"#ef4444",alta:"#f97316",media:"#eab308",baja:"#22c55e"};
+  const ESTADO_LABEL={"pendiente":"Pendiente","en_proceso":"En proceso","sin_resolucion":"Sin resolución temporal","esperando_validacion":"Esperando validación","completada":"Completada","bajo_analisis":"En revisión"};
+
+  const wrapStyle={minHeight:"100vh",background:"linear-gradient(135deg,#0f172a,#1e3a5f)",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"32px 16px"};
+  const cardStyle={background:"white",borderRadius:16,maxWidth:600,width:"100%",overflow:"hidden",boxShadow:"0 20px 60px rgba(0,0,0,0.4)"};
+
+  if(!loaded) return h('div',{style:wrapStyle},
+    h('div',{style:{color:"white",textAlign:"center",marginTop:80}},
+      h('div',{style:{fontSize:40,marginBottom:12}},"⏳"),
+      h('div',{style:{fontSize:16}},"Cargando solicitud...")));
+
+  if(!rec) return h('div',{style:wrapStyle},
+    h('div',{style:{color:"white",textAlign:"center",marginTop:80}},
+      h('div',{style:{fontSize:40,marginBottom:12}},"❌"),
+      h('div',{style:{fontSize:16}},"Solicitud no encontrada.")));
+
+  const crit = rec.criticidad||rec.pri||"media";
+  const critColor = CRIT_COLOR[crit]||"#64748b";
+  const fechaIni = rec.fechaInicioEsperado||rec.fechaInicioOriginal;
+  const fechaFin = rec.fechaCierreConfirmada||rec.fechaCierre;
+  const comentResp = (() => {
+    if(rec.nuevoComentario?.trim()) return rec.nuevoComentario;
+    if(rec.comentarios?.length) {
+      for(let i=rec.comentarios.length-1;i>=0;i--) {
+        const a=rec.comentarios[i].autor||"";
+        if(["Intendencia","Administración","Responsable"].includes(a)) return rec.comentarios[i].texto;
+      }
+    }
+    return null;
+  })();
+
+  return h('div',{style:wrapStyle},
+    h('div',{style:cardStyle},
+      h('div',{style:{background:"#0f172a",padding:"20px 24px"}},
+        h('div',{style:{color:"#93c5fd",fontSize:11,letterSpacing:2,textTransform:"uppercase",marginBottom:4}},"Sistema de Reclamos — Club Asturiano"),
+        h('div',{style:{color:"white",fontSize:20,fontWeight:700}},"Detalle de Solicitud")),
+      h('div',{style:{padding:24}},
+        // Header número + estado
+        h('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:8}},
+          h('span',{style:{fontFamily:"monospace",fontWeight:800,color:"#3b82f6",fontSize:22}},rec.numero),
+          h('span',{style:{padding:"4px 12px",borderRadius:20,fontSize:12,fontWeight:700,background:critColor+"22",color:critColor}},crit.toUpperCase())),
+        // Info básica
+        h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:20}},
+          h('div',{style:{background:"#f8fafc",borderRadius:10,padding:"12px 14px"}},
+            h('div',{style:{fontSize:11,color:"#94a3b8",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}},"Sector"),
+            h('div',{style:{fontWeight:700,color:"#1e293b"}},rec.sector)),
+          h('div',{style:{background:"#f8fafc",borderRadius:10,padding:"12px 14px"}},
+            h('div',{style:{fontSize:11,color:"#94a3b8",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}},"Tipo"),
+            h('div',{style:{fontWeight:600,color:"#374151"}},rec.sub)),
+          h('div',{style:{background:"#f8fafc",borderRadius:10,padding:"12px 14px"}},
+            h('div',{style:{fontSize:11,color:"#94a3b8",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}},"Área"),
+            h('div',{style:{fontWeight:600,color:"#374151"}},CATS[rec.cat]||rec.cat)),
+          h('div',{style:{background:"#f8fafc",borderRadius:10,padding:"12px 14px"}},
+            h('div',{style:{fontSize:11,color:"#94a3b8",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}},"Estado"),
+            h('div',{style:{fontWeight:600,color:"#374151"}},ESTADO_LABEL[rec.estadoAvance]||rec.estadoAvance))),
+        // Descripción
+        h('div',{style:{background:"#f8fafc",borderRadius:10,padding:"12px 14px",marginBottom:16}},
+          h('div',{style:{fontSize:11,color:"#94a3b8",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}},"Descripción"),
+          h('div',{style:{color:"#374151",fontSize:14,lineHeight:1.6}},rec.desc||"—")),
+        // Fechas
+        (fechaIni||fechaFin) && h('div',{style:{display:"flex",gap:12,marginBottom:16,flexWrap:"wrap"}},
+          fechaIni && h('div',{style:{background:"#eff6ff",borderRadius:10,padding:"10px 14px",flex:1}},
+            h('div',{style:{fontSize:11,color:"#93c5fd",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}},"Fecha inicio"),
+            h('div',{style:{fontWeight:700,color:"#1e40af"}},fd(fechaIni))),
+          fechaFin && h('div',{style:{background:"#eff6ff",borderRadius:10,padding:"10px 14px",flex:1}},
+            h('div',{style:{fontSize:11,color:"#93c5fd",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}},"Fecha cierre"),
+            h('div',{style:{fontWeight:700,color:"#1e40af"}},fd(fechaFin))),
+          rec.horaInicio && h('div',{style:{background:"#eff6ff",borderRadius:10,padding:"10px 14px",flex:1}},
+            h('div',{style:{fontSize:11,color:"#93c5fd",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}},"Horario"),
+            h('div',{style:{fontWeight:700,color:"#1e40af"}},rec.horaInicio+(rec.horaFin?" a "+rec.horaFin:"")))),
+        // Comentario/instrucciones del responsable
+        comentResp && h('div',{style:{background:"#eff6ff",borderLeft:"4px solid #3b82f6",borderRadius:"0 10px 10px 0",padding:"12px 14px",marginBottom:16}},
+          h('div',{style:{fontSize:11,color:"#3b82f6",fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}},"💬 Instrucciones"),
+          h('div',{style:{color:"#1e40af",fontSize:14,lineHeight:1.6}},comentResp)),
+        // Botón completar si corresponde
+        (rec.ejecutorMail && rec.estadoAvance!=="completada" && rec.estadoAvance!=="esperando_validacion") &&
+          h('a',{href:window.location.href.split("?")[0]+"?completar="+rec.id,
+            style:{display:"block",textAlign:"center",padding:"14px",background:"linear-gradient(135deg,#16a34a,#15803d)",color:"white",textDecoration:"none",borderRadius:10,fontWeight:700,fontSize:15,marginTop:8}},
+            "✅ Marcar como completada"),
+        h('div',{style:{textAlign:"center",marginTop:20,color:"#94a3b8",fontSize:12}},"Club Asturiano — Sistema de Reclamos"))));
+}
+
 function CalificarView({recId, recs, setRecs, loaded}) {
   const rec = recs.find(r=>r.id===recId);
   const [stars,setStars] = useState(0);
@@ -2603,11 +2688,13 @@ function App() {
   const _compParam  = _params.get("completar");
   const _valParam   = _params.get("validar");
   const _rechValParam = _params.get("rechazar_validacion");
+  const _verParam   = _params.get("ver");
   const _initView  = _segParam  ? "seguimiento_"+_segParam
     : _valParam   ? "loading"
     : _rechValParam ? "rechazar_val_"+_rechValParam
     : _compParam  ? "completar_"+_compParam
     : _calParam   ? "calificar_"+_calParam
+    : _verParam   ? "ver_"+_verParam
     : _params.get("confirmar") ? "loading"
     : _params.get("rechazar")  ? "loading"
     : _params.get("reabrir")   ? "loading"
@@ -2944,6 +3031,7 @@ function App() {
   if(view && view.startsWith("rechazar_val_")) { return h(RechazarValidacionView,{recId:view.replace("rechazar_val_",""),recs,setRecs,loaded}); }
   if(view && view.startsWith("completar_")) { return h(CompletarView,{recId:view.replace("completar_",""),recs,setRecs,loaded}); }
   if(view && view.startsWith("calificar_")) { return h(CalificarView,{recId:Number(view.replace("calificar_","")),recs,setRecs,loaded}); }
+  if(view && view.startsWith("ver_")) { return h(VerSolicitudPublica,{recId:Number(view.replace("ver_","")),recs,loaded}); }
 
   if(view==="rechazar") return h(PantallaRechazo,{onConfirm:handleRechazar});
 
@@ -3041,7 +3129,6 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
-
 
 
 
