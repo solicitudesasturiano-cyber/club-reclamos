@@ -2711,10 +2711,17 @@ function ValidarDetalleView({recId, recs, setRecs, loaded, setView}) {
         // SECCION 3: Resolucion del ejecutor
         h('div',{style:{marginBottom:24}},
           h('div',{style:{fontSize:12,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:1,marginBottom:10,paddingBottom:6,borderBottom:"2px solid #f1f5f9"}},"3. Resolucion del ejecutor"),
-          h('div',{style:{background:"#f0fdf4",borderLeft:"4px solid #16a34a",borderRadius:"0 10px 10px 0",padding:"12px 14px",marginBottom:rec.evidenciaUrl?10:0}},
+          h('div',{style:{background:"#f0fdf4",borderLeft:"4px solid #16a34a",borderRadius:"0 10px 10px 0",padding:"12px 14px",marginBottom:10}},
             h('div',{style:labelStyle},"Lo que se hizo"),
             h('div',{style:{color:"#14532d",fontSize:14,lineHeight:1.6}},rec.descripcionResolucion||"Sin descripcion.")),
-          rec.evidenciaUrl && h('div',{style:{marginTop:8}},
+          (rec.adjuntosResolucion||[]).filter(a=>a.url).length>0 && h('div',{style:{marginBottom:8}},
+            h('div',{style:{...labelStyle,marginBottom:8}},"Fotos / evidencia"),
+            h('div',{style:{display:"flex",flexWrap:"wrap",gap:8}},
+              ...(rec.adjuntosResolucion||[]).filter(a=>a.url).map((a,i)=>
+                a.tipo?.startsWith('image/')
+                  ? h('a',{key:i,href:a.url,target:"_blank"},h('img',{src:a.url,style:{width:120,height:90,objectFit:"cover",borderRadius:8,border:"1px solid #bbf7d0",display:"block"}}))
+                  : h('a',{key:i,href:a.url,target:"_blank",style:{display:"inline-block",padding:"8px 14px",background:"#dcfce7",borderRadius:8,fontSize:13,color:"#15803d",textDecoration:"none",fontWeight:600}},a.nombre||"Ver video")))),
+          rec.evidenciaUrl && h('div',{style:{marginTop:4}},
             h('a',{href:rec.evidenciaUrl,target:"_blank",style:{color:"#2563eb",fontSize:13,fontWeight:600}},"Ver evidencia / foto"))),
 
         // BOTONES
@@ -3379,5 +3386,6 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
+
 
 
