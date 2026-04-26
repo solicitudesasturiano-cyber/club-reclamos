@@ -1521,9 +1521,11 @@ function PanelConfig({onClose, onSaveEjecutores, area}) {
   const save = async () => {
     ls.set(ejsKey,ejs);
     ls.set(lsKey,cfg);
-    if(area==="intendencia") _cfgCache = cfg; // mantener cache para intendencia (default)
+    const cfgConEjs = {...cfg, ejecutores: ejs};
+    if(area==="intendencia") _cfgCache = cfgConEjs;
+    if(area==="administracion") _cfgCacheAdm = cfgConEjs;
     if(onSaveEjecutores) onSaveEjecutores(ejs);
-    await sbSetConfigById(cfgId, cfg);
+    await sbSetConfigById(cfgId, cfgConEjs);
     const scriptUrl = cfg.scriptUrl || SCRIPT_URL;
     if(scriptUrl) {
       try {
