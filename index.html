@@ -42,10 +42,16 @@ function getCatCfg(cat) {
 }
 async function loadConfig() {
   const [remote1, remote2] = await Promise.all([sbGetConfigById(1), sbGetConfigById(2)]);
-  if(remote1) { _cfgCache = remote1; ls.set("config_intendencia", remote1); }
-  else { _cfgCache = ls.get("config_intendencia") || ls.get("config") || {}; }
-  if(remote2) { _cfgCacheAdm = remote2; ls.set("config_administracion", remote2); }
-  else { _cfgCacheAdm = ls.get("config_administracion") || {}; }
+  if(remote1) {
+    _cfgCache = remote1;
+    ls.set("config_intendencia", remote1);
+    if(remote1.ejecutores?.length) ls.set("ejecutores_intendencia", remote1.ejecutores);
+  } else { _cfgCache = ls.get("config_intendencia") || ls.get("config") || {}; }
+  if(remote2) {
+    _cfgCacheAdm = remote2;
+    ls.set("config_administracion", remote2);
+    if(remote2.ejecutores?.length) ls.set("ejecutores_administracion", remote2.ejecutores);
+  } else { _cfgCacheAdm = ls.get("config_administracion") || {}; }
 }
 function getDirectivos(cat) {
   return getCatCfg(cat).directivos || [];
@@ -2524,8 +2530,31 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
   },[]);
   // Ejecutores propios del área
   const ejsKey = "ejecutores_"+(area||"intendencia");
-  const [ejecutores, setEjecutores] = useState(()=>ls.get(ejsKey)||ls.get("ejecutores")||[]);
-  useEffect(()=>{ const e=ls.get(ejsKey)||ls.get("ejecutores"); if(e) setEjecutores(e); },[area]);
+  const getEjsFallback = () => {
+    const cfg = area==="administracion" ? (_cfgCacheAdm||ls.get("config_administracion")||{}) : (_cfgCache||ls.get("config_intendencia")||{});
+    return cfg.ejecutores||[];
+  };
+  const [ejecutores, setEjecutores] = useState(()=>{
+    const fromLs = ls.get(ejsKey)||ls.get("ejecutores");
+    return (fromLs&&fromLs.length) ? fromLs : getEjsFallback();
+  });
+  useEffect(()=>{
+    const fromLs = ls.get(ejsKey)||ls.get("ejecutores");
+    if(fromLs&&fromLs.length) { setEjecutores(fromLs); return; }
+    const fromCfg = getEjsFallback();
+    if(fromCfg.length) setEjecutores(fromCfg);
+  },[area]);
+  // Re-check ejecutores después de que loadConfig() termine (async)
+  useEffect(()=>{
+    const timer = setTimeout(()=>{
+      if(ejecutores.length) return;
+      const fromLs = ls.get(ejsKey)||ls.get("ejecutores");
+      if(fromLs&&fromLs.length) { setEjecutores(fromLs); return; }
+      const fromCfg = getEjsFallback();
+      if(fromCfg.length) setEjecutores(fromCfg);
+    }, 1500);
+    return ()=>clearTimeout(timer);
+  },[]);
   const [filtros,setFiltros] = useState({estado:"",cat:"",sector:"",q:""});
   const [modal,setModal] = useState(null);
   const [modalDup,setModalDup] = useState(null); // {hijo, padre}
@@ -3900,6 +3929,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
+
 
 
 
