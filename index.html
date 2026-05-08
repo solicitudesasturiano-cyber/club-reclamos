@@ -817,9 +817,14 @@ function FormularioSocio({onSubmit, reclamos}) {
     await onSubmit(rec);
     const appUrl = window.location.href.split("?")[0];
     const seguimientoUrl = appUrl+"?seguimiento="+n;
-    // Email a intendencia
-    await sendEmail({to:NOTIFY_EMAIL, subject:`[Asturiano] Nueva solicitud ${n} — ${f.sector}`,
-      body:`Nueva solicitud registrada.\n\nNúmero: ${n}\nSolicitante: ${f.tipo} — ${f.nombre}\nCelular: ${f.celular||"—"}\nEmail: ${f.email||"—"}\nSector: ${f.sector}${f.ubicacion?`\nUbicación exacta: ${f.ubicacion}`:""}\nTipo: ${catConf?.label} › ${f.sub}\nPrioridad: ${pri?.label}\nDescripción: ${f.desc}`});
+    // Email a responsables de la categoría
+    const catCfgNuevo = getCatCfg(f.cat);
+    const respMailsNuevo = (catCfgNuevo.responsables||[]).map(x=>x.mail).filter(Boolean);
+    const toNuevo = respMailsNuevo.length ? respMailsNuevo : [NOTIFY_EMAIL].filter(Boolean);
+    if(toNuevo.length) {
+      await sendEmail({to:toNuevo, subject:`[Asturiano] Nueva solicitud ${n} — ${f.sector}`,
+        body:`Nueva solicitud registrada.\n\nNúmero: ${n}\nSolicitante: ${f.tipo} — ${f.nombre}\nCelular: ${f.celular||"—"}\nEmail: ${f.email||"—"}\nSector: ${f.sector}${f.ubicacion?`\nUbicación exacta: ${f.ubicacion}`:""}\nTipo: ${catConf?.label} › ${f.sub}\nPrioridad: ${pri?.label}\nDescripción: ${f.desc}`});
+    }
     // Email de confirmación al usuario
     if(f.email) {
       await sendEmail({to:f.email, subject:`[Asturiano] Recibimos tu solicitud — ${n}`,
