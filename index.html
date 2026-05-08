@@ -825,6 +825,13 @@ function FormularioSocio({onSubmit, reclamos}) {
     const catCfgNuevo = (configUsada.categorias||{})[f.cat] || {responsables:[]};
     const respMailsNuevo = (catCfgNuevo.responsables||[]).map(x=>x.mail).filter(Boolean);
     const toNuevo = respMailsNuevo.length ? respMailsNuevo : [NOTIFY_EMAIL].filter(Boolean);
+    console.log("=== EMAIL DIAGNOSTICO ===");
+    console.log("cat:", f.cat, "isAdmCat:", isAdmCat);
+    console.log("configRemota keys:", configRemota ? Object.keys(configRemota) : "NULL");
+    console.log("configUsada.categorias:", JSON.stringify(configUsada.categorias));
+    console.log("catCfgNuevo:", JSON.stringify(catCfgNuevo));
+    console.log("respMailsNuevo:", respMailsNuevo);
+    console.log("toNuevo:", toNuevo);
     if(toNuevo.length) {
       await sendEmail({to:toNuevo, subject:`[Asturiano] Nueva solicitud ${n} — ${f.sector}`,
         body:`Nueva solicitud registrada.\n\nNúmero: ${n}\nSolicitante: ${f.tipo} — ${f.nombre}\nCelular: ${f.celular||"—"}\nEmail: ${f.email||"—"}\nSector: ${f.sector}${f.ubicacion?`\nUbicación exacta: ${f.ubicacion}`:""}\nTipo: ${catConf?.label} › ${f.sub}\nPrioridad: ${pri?.label}\nDescripción: ${f.desc}`});
@@ -4833,6 +4840,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
+
 
 
 
