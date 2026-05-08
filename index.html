@@ -817,8 +817,12 @@ function FormularioSocio({onSubmit, reclamos}) {
     await onSubmit(rec);
     const appUrl = window.location.href.split("?")[0];
     const seguimientoUrl = appUrl+"?seguimiento="+n;
-    // Email a responsables de la categoría
-    const catCfgNuevo = getCatCfg(f.cat);
+    // Cargar config fresca desde Supabase para obtener responsables
+    const configRemota = await sbGetConfigById(1); // intendencia
+    const configAdm = await sbGetConfigById(2);    // administracion
+    const isAdmCat = CATS_ADMINISTRACION.includes(f.cat);
+    const configUsada = isAdmCat ? (configAdm||{}) : (configRemota||{});
+    const catCfgNuevo = (configUsada.categorias||{})[f.cat] || {responsables:[]};
     const respMailsNuevo = (catCfgNuevo.responsables||[]).map(x=>x.mail).filter(Boolean);
     const toNuevo = respMailsNuevo.length ? respMailsNuevo : [NOTIFY_EMAIL].filter(Boolean);
     if(toNuevo.length) {
@@ -4829,6 +4833,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
+
 
 
 
