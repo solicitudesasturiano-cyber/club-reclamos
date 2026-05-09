@@ -1419,24 +1419,24 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs}) {
       ? "Adjuntamos fotos de la resolución para que puedas verificar el trabajo realizado."
       : "";
     // NOTE: User is NOT notified here - only after directivo validates
-    // Notify directivos and responsable
-    const dirMails = getDirectivos(savedRec.cat).map(d=>d.mail);
-    const respMail = getResponsableMail(savedRec.cat);
-    await sendEmail({to:[respMail,...dirMails].filter(Boolean),
+    // Notify directivos y responsables — config fresca de Supabase
+    const _cfgFresh = await sbGetConfigById(isAdminCat(savedRec.cat) ? 2 : 1) || {};
+    const _catCfgFresh = (_cfgFresh.categorias||{})[savedRec.cat] || {};
+    const dirMails = (_catCfgFresh.directivos||[]).map(d=>d.mail).filter(Boolean);
+    const respMails = (_catCfgFresh.responsables||[]).map(d=>d.mail).filter(Boolean);
+    await sendEmail({to:[...respMails,...dirMails].filter(Boolean),
       subject:`[Asturiano]  Tarea completada — ${savedRec.numero}: ${savedRec.sector}`,
-      body:`La tarea ${savedRec.numero} fue marcada como completada.
-
-Sector: ${savedRec.sector}
-Ejecutor: ${savedRec.ejecutorNombre||"—"}
-Resolución: ${descripcion||"—"}`});
+      body:`La tarea ${savedRec.numero} fue marcada como completada.\n\nSector: ${savedRec.sector}\nEjecutor: ${savedRec.ejecutorNombre||"—"}\nResolución: ${descripcion||"—"}`});
   };
 
   const notifResolucion = async () => {
     setSending(true);
     const appUrl=window.location.href.split("?")[0];
-    const _respM=getResponsableMail(rec.cat);
-    const _dirMs=getDirectivos(rec.cat).map(d=>d.mail);
-    await sendEmail({to:[_respM,..._dirMs].filter(Boolean),
+    const _cfgFresh2 = await sbGetConfigById(isAdminCat(rec.cat) ? 2 : 1) || {};
+    const _catCfgFresh2 = (_cfgFresh2.categorias||{})[rec.cat] || {};
+    const _respMs=(_catCfgFresh2.responsables||[]).map(d=>d.mail).filter(Boolean);
+    const _dirMs=(_catCfgFresh2.directivos||[]).map(d=>d.mail).filter(Boolean);
+    await sendEmail({to:[..._respMs,..._dirMs].filter(Boolean),
       subject:`[Asturiano]  Tarea completada — ${rec.numero}: ${rec.sector}`,
       body:`Tarea completada.\n\nNúmero: ${rec.numero}\nSector: ${rec.sector}\nEjecutor: ${rec.ejecutorNombre||"—"}\nDescripción: ${f.descripcionResolucion||"—"}\nCosto: ${f.presupuesto?"$"+Number(f.presupuesto).toLocaleString("es-AR"):"—"}\n${f.evidenciaUrl?"Evidencia: "+f.evidenciaUrl:""}`});
     setSending(false); alert("✅ Notificación enviada.");
@@ -2027,12 +2027,31 @@ function ModalProyecto({proyecto, onClose, onSave, ejecutores, recs}) {
     directivos:[], empleados:[], avances:[], reclamosVinculados:[], alertas:[],
     proximosPasos:"", createdAt: new Date().toISOString()
   });
-  const [nuevoAvance,setNuevoAvance] = useState("");
-  const [nuevaAlerta,setNuevaAlerta] = useState("");
   const [tab,setTab] = useState("info");
   const [modalSolicitud,setModalSolicitud] = useState(null);
+  const [todosDirectivos,setTodosDirectivos] = useState([]);
+  const [hitoEditando,setHitoEditando] = useState(null); // id del hito en edicion
+  const [uploadingHito,setUploadingHito] = useState(null);
   const set=(k,v)=>setF(p=>({...p,[k]:v}));
   const aS=()=>({width:"100%",padding:"10px 14px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:14,outline:"none",boxSizing:"border-box"});
+
+  // Cargar todos los directivos de ambas configs desde Supabase
+  useEffect(()=>{
+    (async()=>{
+      const [c1,c2] = await Promise.all([sbGetConfigById(1),sbGetConfigById(2)]);
+      const dirs = [];
+      const seen = new Set();
+      [c1,c2].forEach(cfg=>{
+        if(!cfg?.categorias) return;
+        Object.values(cfg.categorias).forEach(cat=>{
+          (cat.directivos||[]).forEach(d=>{
+            if(d.mail && !seen.has(d.mail)) { seen.add(d.mail); dirs.push(d); }
+          });
+        });
+      });
+      setTodosDirectivos(dirs);
+    })();
+  },[]);
 
   const ESTADOS_PROJ = [
     {id:"planificacion",label:"Planificación",color:"#0ea5e9"},
@@ -2042,11 +2061,61 @@ function ModalProyecto({proyecto, onClose, onSave, ejecutores, recs}) {
     {id:"cancelado",label:"Cancelado",color:"#ef4444"},
   ];
 
-  const addAvance=()=>{if(!nuevoAvance.trim())return;set("avances",[...(f.avances||[]),{texto:nuevoAvance.trim(),fecha:new Date().toISOString()}]);setNuevoAvance("");};
-  const addAlerta=()=>{if(!nuevaAlerta.trim())return;set("alertas",[...(f.alertas||[]),{texto:nuevaAlerta.trim(),fecha:new Date().toISOString()}]);setNuevaAlerta("");};
+  const addHito=()=>{
+    const nuevo={id:Date.now(),nombre:"",descripcion:"",fechaOriginal:"",fechaRevisada:"",
+      estado:"pendiente",comentarioAvance:"",fechaCompletado:"",adjuntos:[],creadoEn:new Date().toISOString()};
+    set("hitos",[...(f.hitos||[]),nuevo]);
+    setHitoEditando(nuevo.id);
+  };
+  const updateHito=(id,changes)=>set("hitos",(f.hitos||[]).map(h=>h.id===id?{...h,...changes}:h));
+  const removeHito=(id)=>set("hitos",(f.hitos||[]).filter(h=>h.id!==id));
+
+  const uploadHitoAdjunto=async(hitoId,file)=>{
+    setUploadingHito(hitoId);
+    try {
+      const ext=file.name.split(".").pop();
+      const path="proyectos/"+f.id+"/hitos/"+hitoId+"/"+Date.now()+"."+ext;
+      const r=await fetch(SUPABASE_URL+"/storage/v1/object/reclamos-adjuntos/"+path,{
+        method:"POST",headers:{...SB_HEADERS,"Content-Type":file.type,"x-upsert":"true"},body:file});
+      if(r.ok){
+        const url=SUPABASE_URL+"/storage/v1/object/public/reclamos-adjuntos/"+path;
+        updateHito(hitoId,{adjuntos:[...(((f.hitos||[]).find(h=>h.id===hitoId))?.adjuntos||[]),
+          {url,nombre:file.name,tipo:file.type,subidoEn:new Date().toISOString()}]});
+      }
+    } catch(e){console.error(e);}
+    setUploadingHito(null);
+  };
 
   const save=async()=>{
+    // Validar: si estado es "en_curso" o "completado", debe tener hitos con fechaOriginal
+    const hitos = f.hitos||[];
+    if(f.estado==="en_curso"||f.estado==="completado"){
+      const hitosValidos=hitos.filter(h=>h.nombre.trim()&&h.fechaOriginal);
+      if(hitosValidos.length===0){
+        alert("⚠️ Para pasar el proyecto a \""+ESTADOS_PROJ.find(e=>e.id===f.estado)?.label+"\" necesitás definir al menos un hito con nombre y fecha.\n\nSi todavía no tenés los hitos definidos, dejá el proyecto en \"Planificación\".");
+        return;
+      }
+    }
     await onSave(f);
+    // Notificar a directivos y responsables del proyecto
+    const appUrl=window.location.href.split("?")[0];
+    const panelLink=appUrl+(appUrl.includes("?")?"&":"?")+"panel=intendencia";
+    const dirEmails=(f.directivos||[]).map(d=>{var idx=d.lastIndexOf("(");var idx2=d.lastIndexOf(")");return idx>=0&&idx2>idx?d.slice(idx+1,idx2):null;}).filter(Boolean);
+    const empEmails=(f.empleados||[]).map(d=>{var idx=d.lastIndexOf("(");var idx2=d.lastIndexOf(")");return idx>=0&&idx2>idx?d.slice(idx+1,idx2):null;}).filter(Boolean);
+    const toProj=[...new Set([...dirEmails,...empEmails])];
+    if(toProj.length){
+      const sinHitos=!(f.hitos||[]).filter(h=>h.nombre.trim()&&h.fechaOriginal).length;
+      const esNuevo=nuevo;
+      await sendEmail({to:toProj,
+        subject:`[Asturiano] Proyecto ${esNuevo?"creado":"actualizado"}: ${f.titulo}`,
+        body:`El proyecto "${f.titulo}" fue ${esNuevo?"creado":"actualizado"}.
+
+Estado: ${ESTADOS_PROJ.find(e=>e.id===f.estado)?.label||f.estado}
+Sector: ${f.sector||"—"}
+Fecha inicio: ${f.fechaInicio||"—"} | Fecha fin: ${f.fechaFin||"—"}
+${sinHitos?"⚠️ ATENCIÓN: Este proyecto no tiene hitos definidos. Sin hitos no es posible hacer seguimiento.\n":""}${(f.hitos||[]).filter(h=>h.nombre).length?" \nHitos definidos ("+f.hitos.filter(h=>h.nombre).length+"): \n"+f.hitos.filter(h=>h.nombre).map(h=>" • "+h.nombre+" → "+( h.fechaOriginal||"sin fecha")+" ["+h.estado+"]").join("\n")+"\n":""}
+Ingresá al panel:\n${panelLink}`});
+    }
     // Only notify users when project is COMPLETED (not on every update)
     if(!nuevo && f.estado==="completado" && proyecto?.estado!=="completado" && f.reclamosVinculados?.length>0){
       const appUrl=window.location.href.split("?")[0];
@@ -2075,7 +2144,7 @@ function ModalProyecto({proyecto, onClose, onSave, ejecutores, recs}) {
           estProj && h('span',{style:{padding:"3px 10px",borderRadius:20,fontSize:12,fontWeight:600,color:estProj.color,background:"rgba(255,255,255,0.2)"}},"● "+estProj.label),
           h('button',{onClick:onClose,style:{background:"none",border:"none",color:"rgba(255,255,255,0.7)",fontSize:22,cursor:"pointer"}},"✕"))),
       h('div',{style:{display:"flex",gap:4,padding:"10px 16px 0",borderBottom:"1px solid #e2e8f0"}},
-        ...[["info","📋 Info"],["avances","📈 Avances"],["personas","👥 Personas"],["solicitudes","🔗 Solicitudes"]].map(([id,lbl])=>
+        ...[["info","📋 Info"],["hitos","📌 Hitos"],["personas","👥 Personas"],["solicitudes","🔗 Solicitudes"]].map(([id,lbl])=>
           h('button',{key:id,onClick:()=>setTab(id),style:tabStyle(id)},lbl))),
       h('div',{style:{padding:"18px 22px"}},
 
@@ -2097,31 +2166,88 @@ function ModalProyecto({proyecto, onClose, onSave, ejecutores, recs}) {
             h('div',{style:{display:"flex",gap:6,flexWrap:"wrap"}},
               ...ESTADOS_PROJ.map(e=>h('button',{key:e.id,onClick:()=>set("estado",e.id),
                 style:{padding:"6px 12px",borderRadius:8,border:f.estado===e.id?`2px solid ${e.color}`:"2px solid #e2e8f0",background:f.estado===e.id?e.color+"18":"white",color:f.estado===e.id?e.color:"#64748b",cursor:"pointer",fontSize:12,fontWeight:600}},e.label)))),
-          h('div',{style:{marginBottom:4}},h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Próximos pasos"),h('textarea',{value:f.proximosPasos,onChange:e=>set("proximosPasos",e.target.value),rows:2,placeholder:"¿Qué viene después?",style:{...aS(),resize:"vertical"}}))),
+)),
 
-        // TAB AVANCES
-        tab==="avances" && h('div',null,
-          h('div',{style:{marginBottom:16}},
-            h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},"Agregar avance"),
-            h('div',{style:{display:"flex",gap:8}},
-              h('input',{value:nuevoAvance,onChange:e=>setNuevoAvance(e.target.value),onKeyDown:e=>e.key==="Enter"&&addAvance(),placeholder:"Describí el avance...",style:{...aS(),flex:1}}),
-              h('button',{onClick:addAvance,style:{padding:"9px 16px",background:"#7c3aed",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontWeight:600}},"+ Agregar"))),
-          h('div',{style:{marginBottom:16}},
-            h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},"Agregar alerta"),
-            h('div',{style:{display:"flex",gap:8}},
-              h('input',{value:nuevaAlerta,onChange:e=>setNuevaAlerta(e.target.value),onKeyDown:e=>e.key==="Enter"&&addAlerta(),placeholder:"Ej: Lleva 6 meses esperar los equipos...",style:{...aS(),flex:1}}),
-              h('button',{onClick:addAlerta,style:{padding:"9px 16px",background:"#f97316",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontWeight:600}},"⚠️ Alerta"))),
-          h('div',{style:{display:"flex",flexDirection:"column",gap:8}},
-            ...[...(f.avances||[])].reverse().map((a,i)=>h('div',{key:i,style:{background:"#f0fdf4",borderLeft:"3px solid #22c55e",borderRadius:"0 8px 8px 0",padding:"10px 12px"}},
-              h('div',{style:{display:"flex",justifyContent:"space-between",marginBottom:2}},
-                h('span',{style:{fontSize:11,fontWeight:600,color:"#15803d"}},"📈 Avance"),
-                h('span',{style:{fontSize:11,color:"#94a3b8"}},fdt(a.fecha))),
-              h('div',{style:{fontSize:13,color:"#166534"}},a.texto))),
-            ...[...(f.alertas||[])].reverse().map((a,i)=>h('div',{key:"al"+i,style:{background:"#fff7ed",borderLeft:"3px solid #f97316",borderRadius:"0 8px 8px 0",padding:"10px 12px"}},
-              h('div',{style:{display:"flex",justifyContent:"space-between",marginBottom:2}},
-                h('span',{style:{fontSize:11,fontWeight:600,color:"#c2410c"}},"⚠️ Alerta"),
-                h('span',{style:{fontSize:11,color:"#94a3b8"}},fdt(a.fecha))),
-              h('div',{style:{fontSize:13,color:"#9a3412"}},a.texto))))),
+        // TAB HITOS
+        tab==="hitos" && h('div',null,
+          // Warning si estado en_curso sin hitos válidos
+          (f.estado==="en_curso"||f.estado==="completado") && !(f.hitos||[]).filter(h=>h.nombre.trim()&&h.fechaOriginal).length &&
+            h('div',{style:{background:"#fef3c7",border:"1.5px solid #fcd34d",borderRadius:8,padding:"10px 14px",fontSize:12,color:"#92400e",marginBottom:12,fontWeight:600}},
+              "⚠️ El proyecto está en \""+(ESTADOS_PROJ.find(e=>e.id===f.estado)?.label||"")+'\" pero no tiene hitos definidos. Agregá al menos un hito con nombre y fecha para poder hacer seguimiento.'),
+          !(f.hitos||[]).length &&
+            h('div',{style:{textAlign:"center",padding:"24px 0",color:"#94a3b8",fontSize:13}},"Sin hitos definidos. Agregá el primero."),
+          h('div',{style:{display:"flex",flexDirection:"column",gap:10,marginBottom:12}},
+            ...(f.hitos||[]).map(function(hito){
+              var editing = hitoEditando===hito.id;
+              var estadoColor={pendiente:"#64748b",en_curso:"#3b82f6",completado:"#22c55e",vencido:"#ef4444"}[hito.estado]||"#64748b";
+              return h('div',{key:hito.id,style:{border:"1.5px solid "+(editing?"#7c3aed":"#e2e8f0"),borderRadius:10,overflow:"hidden"}},
+                // Header del hito
+                h('div',{style:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 12px",background:editing?"#f5f3ff":"#f8fafc",cursor:"pointer"},
+                  onClick:function(){setHitoEditando(editing?null:hito.id);}},
+                  h('div',{style:{display:"flex",alignItems:"center",gap:8,flex:1,minWidth:0}},
+                    h('span',{style:{padding:"2px 8px",borderRadius:20,fontSize:11,fontWeight:700,color:estadoColor,background:estadoColor+"18",whiteSpace:"nowrap"}},
+                      {pendiente:"Pendiente",en_curso:"En curso",completado:"✅ Completado",vencido:"🔴 Vencido"}[hito.estado]||hito.estado),
+                    h('span',{style:{fontSize:13,fontWeight:600,color:"#1e293b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},
+                      hito.nombre||"(sin nombre)"),
+                    hito.fechaOriginal && h('span',{style:{fontSize:11,color:"#64748b",whiteSpace:"nowrap",marginLeft:4}},
+                      "→ "+hito.fechaOriginal+(hito.fechaRevisada?" (rev: "+hito.fechaRevisada+")":""))),
+                  h('div',{style:{display:"flex",gap:4,flexShrink:0}},
+                    h('button',{onClick:function(e){e.stopPropagation();removeHito(hito.id);},
+                      style:{background:"none",border:"none",color:"#ef4444",cursor:"pointer",fontSize:14,padding:"2px 4px"}},"✕"))),
+                // Body del hito (solo si editando)
+                editing && h('div',{style:{padding:"12px",borderTop:"1px solid #e2e8f0",display:"flex",flexDirection:"column",gap:8}},
+                  h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}},
+                    h('div',null,
+                      h('label',{style:{display:"block",fontSize:10,fontWeight:600,color:"#374151",marginBottom:3,textTransform:"uppercase"}},"Nombre del hito *"),
+                      h('input',{value:hito.nombre,onChange:function(e){updateHito(hito.id,{nombre:e.target.value});},
+                        placeholder:"Ej: Presentar planos",style:{width:"100%",padding:"7px 10px",borderRadius:7,border:"1.5px solid #e2e8f0",fontSize:13,outline:"none",boxSizing:"border-box"}})),
+                    h('div',null,
+                      h('label',{style:{display:"block",fontSize:10,fontWeight:600,color:"#374151",marginBottom:3,textTransform:"uppercase"}},"Estado"),
+                      h('select',{value:hito.estado,onChange:function(e){
+                          var changes={estado:e.target.value};
+                          if(e.target.value==="completado"&&!hito.fechaCompletado) changes.fechaCompletado=new Date().toISOString().slice(0,10);
+                          updateHito(hito.id,changes);},
+                        style:{width:"100%",padding:"7px 10px",borderRadius:7,border:"1.5px solid #e2e8f0",fontSize:13,outline:"none",boxSizing:"border-box"}},
+                        h('option',{value:"pendiente"},"Pendiente"),
+                        h('option',{value:"en_curso"},"En curso"),
+                        h('option',{value:"completado"},"✅ Completado"),
+                        h('option',{value:"vencido"},"🔴 Vencido")))),
+                  h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}},
+                    h('div',null,
+                      h('label',{style:{display:"block",fontSize:10,fontWeight:600,color:"#374151",marginBottom:3,textTransform:"uppercase"}},"📅 Fecha original (comprometida) *"),
+                      h('input',{type:"date",value:hito.fechaOriginal,
+                        onChange:function(e){
+                          // Solo se puede editar si es nuevo (sin fechaOriginal previa guardada en DB)
+                          if(!hito._fechaOriginalBloqueada) updateHito(hito.id,{fechaOriginal:e.target.value,_fechaOriginalBloqueada:!!proyecto?.id});
+                        },
+                        style:{width:"100%",padding:"7px 10px",borderRadius:7,border:"1.5px solid #bfdbfe",fontSize:13,outline:"none",boxSizing:"border-box",background:"#eff6ff"}})),
+                    h('div',null,
+                      h('label',{style:{display:"block",fontSize:10,fontWeight:600,color:"#374151",marginBottom:3,textTransform:"uppercase"}},"📅 Fecha revisada (reprogramada)"),
+                      h('input',{type:"date",value:hito.fechaRevisada||"",
+                        onChange:function(e){updateHito(hito.id,{fechaRevisada:e.target.value});},
+                        style:{width:"100%",padding:"7px 10px",borderRadius:7,border:"1.5px solid #e2e8f0",fontSize:13,outline:"none",boxSizing:"border-box"}}))),
+                  h('div',null,
+                    h('label',{style:{display:"block",fontSize:10,fontWeight:600,color:"#374151",marginBottom:3,textTransform:"uppercase"}},"Comentario / avance"),
+                    h('textarea',{value:hito.comentarioAvance||"",onChange:function(e){updateHito(hito.id,{comentarioAvance:e.target.value});},
+                      rows:2,placeholder:"¿Qué se hizo? ¿Qué falta?",
+                      style:{width:"100%",padding:"7px 10px",borderRadius:7,border:"1.5px solid #e2e8f0",fontSize:13,outline:"none",resize:"vertical",boxSizing:"border-box"}})),
+                  // Adjuntos
+                  h('div',null,
+                    h('label',{style:{display:"block",fontSize:10,fontWeight:600,color:"#374151",marginBottom:6,textTransform:"uppercase"}},"📎 Fotos / videos de evidencia"),
+                    h('div',{style:{display:"flex",gap:6,flexWrap:"wrap",marginBottom:6}},
+                      ...(hito.adjuntos||[]).map(function(adj,ai){
+                        var esImagen=adj.tipo&&adj.tipo.startsWith("image");
+                        return h('div',{key:ai,style:{position:"relative",borderRadius:8,overflow:"hidden",border:"1.5px solid #e2e8f0"}},
+                          esImagen
+                            ? h('img',{src:adj.url,style:{width:80,height:80,objectFit:"cover",display:"block"}})
+                            : h('a',{href:adj.url,target:"_blank",style:{display:"flex",alignItems:"center",justifyContent:"center",width:80,height:80,background:"#f8fafc",fontSize:24}},"📎"),
+                          h('button',{onClick:function(){updateHito(hito.id,{adjuntos:(hito.adjuntos||[]).filter(function(_,i){return i!==ai;})});},
+                            style:{position:"absolute",top:2,right:2,background:"rgba(0,0,0,0.5)",border:"none",color:"white",borderRadius:"50%",width:18,height:18,cursor:"pointer",fontSize:11,lineHeight:"18px",textAlign:"center",padding:0}},"×"));})),
+                    (hito.adjuntos||[]).length<5 && h('label',{style:{display:"inline-flex",alignItems:"center",gap:6,padding:"5px 12px",background:"#f1f5f9",border:"1.5px dashed #cbd5e1",borderRadius:7,cursor:"pointer",fontSize:12,color:"#475569"}},
+                      uploadingHito===hito.id ? "Subiendo..." : "+ Agregar foto/video",
+                      h('input',{type:"file",accept:"image/*,video/*",style:{display:"none"},
+                        onChange:function(e){if(e.target.files[0])uploadHitoAdjunto(hito.id,e.target.files[0]);}})))));})),
+          h('button',{onClick:addHito,style:{width:"100%",padding:"10px",background:"#f5f3ff",border:"2px dashed #c4b5fd",borderRadius:10,cursor:"pointer",fontSize:13,color:"#7c3aed",fontWeight:600,marginTop:4}},"+ Agregar hito")),
 
         // TAB PERSONAS
         tab==="personas" && h('div',null,
@@ -2133,7 +2259,7 @@ function ModalProyecto({proyecto, onClose, onSave, ejecutores, recs}) {
                 h('button',{onClick:()=>set("directivos",(f.directivos).filter((_,idx)=>idx!==i)),style:{background:"none",border:"none",cursor:"pointer",color:"#ef4444"}},"✕"))),
               h('select',{onChange:e=>{if(e.target.value)set("directivos",[...(f.directivos||[]),e.target.value]);e.target.value="";},style:{...aS(),marginTop:4}},
                 h('option',{value:""},"+ Agregar directivo..."),
-                ...Object.values(CATS).flatMap(cat=>(ls.get("config")?.categorias?.[cat.id]?.directivos||[])).map(d=>h('option',{key:d.mail,value:d.nombre+" ("+d.mail+")"},d.nombre))))),
+                ...todosDirectivos.map(d=>h('option',{key:d.mail,value:d.nombre+" ("+d.mail+")"},d.nombre))))),
           h('div',null,
             h('div',{style:{fontSize:13,fontWeight:600,color:"#374151",marginBottom:8}},"👷 Empleados / ejecutores involucrados"),
             h('div',{style:{display:"flex",flexDirection:"column",gap:6}},
@@ -2175,7 +2301,7 @@ function ModalProyecto({proyecto, onClose, onSave, ejecutores, recs}) {
 
         h('div',{style:{display:"flex",gap:10,marginTop:20}},
           h('button',{onClick:onClose,style:{flex:1,padding:"12px",background:"#f1f5f9",color:"#64748b",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:600}},"Cancelar"),
-          h('button',{onClick:save,style:{flex:2,padding:"12px",background:"linear-gradient(135deg,#7c3aed,#5b21b6)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700}},"Guardar proyecto ✓")))));
+          h('button',{onClick:save,style:{flex:2,padding:"12px",background:"linear-gradient(135deg,#7c3aed,#5b21b6)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700}},"Guardar proyecto ✓"))));
 }
 
 // ── RECURRENCIAS ────────────────────────────────────────────────────────────
@@ -2996,6 +3122,18 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
       }
     }
     if(!diasOverride) setRecs(actualizados);
+
+    // Chequear proyectos: sin hitos y hitos vencidos
+    const proyectosLS = ls.get("proyectos") || [];
+    const scriptUrl = (await sbGetConfigById(1))?.scriptUrl || SCRIPT_URL;
+    if(proyectosLS.length && scriptUrl) {
+      try {
+        await fetch(scriptUrl, {method:"POST", headers:{"Content-Type":"text/plain"},
+          body: JSON.stringify({type:"checkProyectos", proyectos: proyectosLS})});
+        enviados++;
+      } catch(e) { console.error("checkProyectos error:", e); }
+    }
+
     alert(enviados>0?`✅ Se enviaron ${enviados} notificaciones.`:"ℹ️ Sin alertas pendientes en este momento.");
     setChecking(false);
   };
@@ -4547,6 +4685,24 @@ function App() {
       const ej=ls.get("ejecutores_intendencia")||ls.get("ejecutores"); if(ej) setEjecutores(ej);
       await loadConfig(); // Cargar config desde Supabase
       setLoaded(true);
+
+      // Chequeo automático diario de proyectos (una vez por día)
+      const HOY = new Date().toISOString().slice(0,10);
+      const ultimoCheck = localStorage.getItem("proyectos_check_dia");
+      if(ultimoCheck !== HOY) {
+        const proyectosLS = ls.get("proyectos") || [];
+        if(proyectosLS.length) {
+          const cfgP = await sbGetConfigById(1);
+          const scriptUrlP = cfgP?.scriptUrl || SCRIPT_URL;
+          if(scriptUrlP) {
+            try {
+              await fetch(scriptUrlP, {method:"POST", headers:{"Content-Type":"text/plain"},
+                body: JSON.stringify({type:"checkProyectos", proyectos: proyectosLS})});
+              localStorage.setItem("proyectos_check_dia", HOY);
+            } catch(e) { console.error("auto checkProyectos:", e); }
+          }
+        }
+      }
     })();
   },[]);
 
@@ -4840,6 +4996,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
+
 
 
 
