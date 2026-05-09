@@ -1690,7 +1690,7 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs}) {
               set("estadoAvance","completada");
               setTimeout(()=>save(),50);
             },style:{width:"100%",padding:"13px",background:"linear-gradient(135deg,#22c55e,#15803d)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700}},"✅ Marcar como completado — enviar a validación")),
-          ["esperando_validacion","esperando_validacion_responsable","esperando_validacion_directivo"].includes(f.estadoAvance) && h('div',{style:{background:"#f5f3ff",border:"1.5px solid #ddd6fe",borderRadius:8,padding:"10px 14px",fontSize:12,color:"#6d28d9",marginBottom:8}},"🔵 Esperando validación del directivo. Una vez aprobado, el usuario recibirá el mail de calificación.")),
+          ["esperando_validacion"].includes(f.estadoAvance) && h('div',{style:{background:"#f5f3ff",border:"1.5px solid #ddd6fe",borderRadius:8,padding:"10px 14px",fontSize:12,color:"#6d28d9",marginBottom:8}},"🔵 Esperando validación del directivo. Una vez aprobado, el usuario recibirá el mail de calificación.")),
 
         // TAB HISTORIAL
         tab==="historial" && h('div',null,
@@ -3635,6 +3635,7 @@ function RechazarValidacionView({recId, recs, setRecs, loaded}) {
 }
 
 // ── CALIFICAR VIEW ────────────────────────────────────────────────────────
+function ValidarDetalleView({recId, recs, setRecs, loaded, setView}) {
   const rec = recs.find(r=>r.id===recId);
   const [sending, setSending] = useState(false);
   const [done, setDone] = useState(null); // "aprobado" | "aprobado_responsable" | "rechazado"
@@ -5024,8 +5025,6 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
-
-
 
 
 
