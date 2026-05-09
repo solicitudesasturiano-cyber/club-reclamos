@@ -2919,14 +2919,22 @@ function ProyectosTab({recs, onUpdate, ejecutores}) {
         const est=ESTADOS_PROJ.find(e=>e.id===p.estado);
         const diasRestantes=p.fechaFin?(new Date(p.fechaFin)-new Date())/86400000:null;
         const vencido=diasRestantes!==null&&diasRestantes<0&&p.estado!=="completado";
-        return h('div',{key:p.id,style:{background:"white",borderRadius:14,padding:"18px 20px",boxShadow:"0 2px 8px rgba(0,0,0,0.07)",borderTop:`4px solid ${est?.color||"#e2e8f0"}`,cursor:"pointer"},onClick:()=>{
-          // Reload from localStorage to get latest reclamosVinculados
-          const fresh = (ls.get("proyectos")||[]).find(x=>x.id===p.id) || p;
-          setModal(fresh);
-        }},
+        return h('div',{key:p.id,style:{background:"white",borderRadius:14,padding:"18px 20px",boxShadow:"0 2px 8px rgba(0,0,0,0.07)",borderTop:`4px solid ${est?.color||"#e2e8f0"}`}},
           h('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}},
-            h('div',{style:{fontSize:15,fontWeight:700,color:"#1a3a6b",lineHeight:1.3,flex:1}},p.titulo||"Sin título"),
-            h('span',{style:{padding:"2px 8px",borderRadius:20,fontSize:11,fontWeight:600,color:est?.color,background:est?.color+"22",whiteSpace:"nowrap",marginLeft:8}},est?.label)),
+            h('div',{style:{fontSize:15,fontWeight:700,color:"#1a3a6b",lineHeight:1.3,flex:1,cursor:"pointer"},onClick:()=>{
+              const fresh = (ls.get("proyectos")||[]).find(x=>x.id===p.id) || p;
+              setModal(fresh);
+            }},p.titulo||"Sin título"),
+            h('div',{style:{display:"flex",gap:4,alignItems:"center",marginLeft:8}},
+              h('span',{style:{padding:"2px 8px",borderRadius:20,fontSize:11,fontWeight:600,color:est?.color,background:est?.color+"22",whiteSpace:"nowrap"}},est?.label),
+              h('button',{onClick:e=>{e.stopPropagation();const fresh=(ls.get("proyectos")||[]).find(x=>x.id===p.id)||p;setModal(fresh);},
+                style:{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:7,cursor:"pointer",fontSize:12,color:"#1d4ed8",padding:"3px 8px",fontWeight:600,whiteSpace:"nowrap"}},
+                "✏️ Editar"),
+              h('button',{onClick:e=>{e.stopPropagation();if(confirm("¿Eliminar el proyecto \""+p.titulo+"\"? Esta acción no se puede deshacer.")){
+                const lista=(ls.get("proyectos")||[]).filter(x=>x.id!==p.id);
+                ls.set("proyectos",lista);setProyectos(lista);}},
+                style:{background:"#fef2f2",border:"1px solid #fecaca",borderRadius:7,cursor:"pointer",fontSize:12,color:"#dc2626",padding:"3px 8px",fontWeight:600}},
+                "🗑️"))),
           p.sector && h('div',{style:{fontSize:12,color:"#64748b",marginBottom:6}},"📍 "+p.sector),
           p.descripcion && h('div',{style:{fontSize:13,color:"#475569",lineHeight:1.5,marginBottom:10,overflow:"hidden",textOverflow:"ellipsis",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}},p.descripcion),
           h('div',{style:{display:"flex",gap:12,marginBottom:8,fontSize:12,color:"#64748b"}},
@@ -4996,6 +5004,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
+
 
 
 
