@@ -365,7 +365,9 @@ const ESTADOS = [
   {id:"sin_resolucion",label:"Sin resolución temporaria", color:"#be185d"},
   {id:"vinculado_proyecto", label:"Vinculado a proyecto", color:"#7c3aed"},
   {id:"demorada",      label:"Demorada",       color:"#dc2626"},
-  {id:"esperando_validacion", label:"Esperando validación", color:"#6d28d9"},
+  {id:"esperando_validacion_responsable", label:"Esp. validación responsable", color:"#7c3aed"},
+  {id:"esperando_validacion_directivo",   label:"Esp. validación directivo",   color:"#6d28d9"},
+  {id:"esperando_validacion", label:"Esperando validación (legacy)", color:"#6d28d9"},
   {id:"completada",    label:"Completada",     color:"#22c55e"},
   {id:"consolidada",   label:"Consolidada",    color:"#8b5cf6"},
 ];
@@ -438,7 +440,7 @@ const hoy = () => { const d=new Date(); return d.getFullYear()+"-"+String(d.getM
 const pld = iso => { if(!iso) return new Date(NaN); const p=iso.split("T")[0].split("-"); return new Date(Number(p[0]),Number(p[1])-1,Number(p[2])); };
 
 function getTiming(r) {
-  if (["completada","consolidada","sin_resolucion","vinculado_proyecto"].includes(r.estadoAvance)) return null;
+  if (["completada","consolidada","sin_resolucion","vinculado_proyecto","esperando_validacion_responsable","esperando_validacion_directivo"].includes(r.estadoAvance)) return null;
   if (!r.fechaCierre) return null;
   const d = (pld(r.fechaCierre) - new Date()) / 86400000;
   if (d < 0)  return {label:"Vencido",    color:"#ef4444", bg:"#fef2f2"};
@@ -448,7 +450,7 @@ function getTiming(r) {
 }
 
 function getAccionRequerida(r) {
-  if (["completada","consolidada","vinculado_proyecto"].includes(r.estadoAvance)) return null;
+  if (["completada","consolidada","vinculado_proyecto","esperando_validacion_responsable","esperando_validacion_directivo"].includes(r.estadoAvance)) return null;
   const crit = r.criticidad || r.pri || "media";
   const plazoDias = {urgente:1,alta:2,media:3,baja:5}[crit] || 3;
   const diasCreado = (new Date() - new Date(r.createdAt)) / 86400000;
@@ -459,7 +461,8 @@ function getAccionRequerida(r) {
   }
   if (r.ejecutorRechazado) return {label:"❌ Reasignar ejecutor", color:"#dc2626", bg:"#fef2f2"};
   // "Esperando confirmación" ya lo muestra el badge — no repetir
-  if (r.estadoAvance === "esperando_validacion") return {label:"Esperando validacion directivo", color:"#6d28d9", bg:"#f5f3ff"};
+  if (r.estadoAvance === "esperando_validacion_responsable") return {label:"Esp. validación responsable", color:"#7c3aed", bg:"#fdf4ff"};
+  if (r.estadoAvance === "esperando_validacion_directivo" || r.estadoAvance === "esperando_validacion") return {label:"Esp. validación directivo", color:"#6d28d9", bg:"#f5f3ff"};
   if (r.estadoAvance === "sin_resolucion") return {label:"Sin resolucion — en seguimiento", color:"#d97706", bg:"#fffbeb"};
   return null;
 }
@@ -476,8 +479,10 @@ function getEstadoEjecucion(r) {
   if (cierre) cierre.setHours(0,0,0,0);
 
   // Esperando validacion directivo
-  if (r.estadoAvance === "esperando_validacion")
-    return { label: "Esperando validacion directivo", color: "#6d28d9", bg: "#f5f3ff" };
+  if (r.estadoAvance === "esperando_validacion_responsable")
+    return { label: "Esp. validación responsable", color: "#7c3aed", bg: "#fdf4ff" };
+  if (r.estadoAvance === "esperando_validacion_directivo" || r.estadoAvance === "esperando_validacion")
+    return { label: "Esp. validación directivo", color: "#6d28d9", bg: "#f5f3ff" };
 
   // Completada
   if (r.estadoAvance === "completada")
@@ -725,7 +730,7 @@ async function detectarDuplicados(nuevoRec, todosRecs) {
   const candidatos = todosRecs.filter(r =>
     r.id !== nuevoRec.id &&
     !r.esRecurrente &&  // excluir tickets recurrentes
-    !["completada","consolidada","vinculado_proyecto"].includes(r.estadoAvance) &&
+    !["completada","consolidada","vinculado_proyecto","esperando_validacion_responsable","esperando_validacion_directivo"].includes(r.estadoAvance) &&
     r.desc && r.desc.trim().length > 3
   );
   if(!candidatos.length) return [];
@@ -1190,7 +1195,7 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs}) {
     // Auto-calculate estado based on dates and assignment
     const calcEstado = () => {
       // Don't auto-change if already in terminal/special states
-      if(["completada","consolidada","esperando_validacion","vinculado_proyecto","sin_resolucion"].includes(f.estadoAvance)) return f.estadoAvance;
+      if(["completada","consolidada","esperando_validacion","esperando_validacion_responsable","esperando_validacion_directivo","vinculado_proyecto","sin_resolucion"].includes(f.estadoAvance)) return f.estadoAvance;
       const ahora = new Date();
       const fechaInicio = pld(f.fechaInicioEsperado||f.fechaInicioActualizada||"");
       const fechaCierreEfectiva = pld(f.fechaCierreActualizada||f.fechaCierre||"");
@@ -1331,7 +1336,7 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs}) {
       }
     }
     // When marked as completada → set to esperando_validacion (directivo must approve first)
-    if((f.estadoAvance==="completada"||f.estadoAvance==="esperando_validacion") && !["completada","esperando_validacion"].includes(rec.estadoAvance) && f.descripcionResolucion.trim()) {
+    if((f.estadoAvance==="completada"||f.estadoAvance==="esperando_validacion"||f.estadoAvance==="esperando_validacion_responsable") && !["completada","esperando_validacion","esperando_validacion_responsable","esperando_validacion_directivo"].includes(rec.estadoAvance) && f.descripcionResolucion.trim()) {
       const appUrl2 = window.location.href.split("?")[0];
       // Tickets recurrentes: no requieren validación del directivo ni mail al solicitante
       if (rec.esRecurrente) {
@@ -1339,7 +1344,7 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs}) {
         await sbUpsert(savedRec);
         setRecs(prev=>prev.map(r=>r.id===savedRec.id?savedRec:r));
       } else {
-      savedRec = {...savedRec, estadoAvance:"esperando_validacion", fechaEnvioValidacion: new Date().toISOString()};
+      savedRec = {...savedRec, estadoAvance:"esperando_validacion_responsable", fechaEnvioValidacion: new Date().toISOString()};
       await sbUpsert(savedRec);
       setRecs(prev=>prev.map(r=>r.id===savedRec.id?savedRec:r));
       const dirMails = getDirectivos(savedRec.cat).map(d=>d.mail).filter(Boolean);
@@ -1666,7 +1671,7 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs}) {
                       : h('span',{style:{maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},a.nombre),
                 h('button',{onClick:()=>setF(p=>({...p,adjuntosResolucion:p.adjuntosResolucion.filter((_,idx)=>idx!==i)})),style:{background:"none",border:"none",cursor:"pointer",color:"#ef4444",fontSize:14,padding:0}},"✕")))),
             h('button',{onClick:()=>fileRef.current.click(),style:{padding:"8px 16px",borderRadius:8,border:"1.5px dashed #e2e8f0",background:"transparent",color:"#64748b",cursor:"pointer",fontSize:13}},"📎 Adjuntar foto / video")),
-          !["completada","consolidada","esperando_validacion"].includes(f.estadoAvance) && h('div',{style:{marginTop:16,paddingTop:16,borderTop:"1.5px solid #f1f5f9"}},
+          !["completada","consolidada","esperando_validacion","esperando_validacion_responsable","esperando_validacion_directivo"].includes(f.estadoAvance) && h('div',{style:{marginTop:16,paddingTop:16,borderTop:"1.5px solid #f1f5f9"}},
             // Nueva fecha de resolución (para casos reabiertos)
             rec.reabierta && h('div',{style:{background:"#fff7ed",border:"1.5px solid #fed7aa",borderRadius:10,padding:14,marginBottom:16}},
               h('div',{style:{fontSize:12,fontWeight:700,color:"#92400e",marginBottom:10}},"📅 Asignar nueva fecha de resolución"),
@@ -1685,7 +1690,7 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs}) {
               set("estadoAvance","completada");
               setTimeout(()=>save(),50);
             },style:{width:"100%",padding:"13px",background:"linear-gradient(135deg,#22c55e,#15803d)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700}},"✅ Marcar como completado — enviar a validación")),
-          ["esperando_validacion"].includes(f.estadoAvance) && h('div',{style:{background:"#f5f3ff",border:"1.5px solid #ddd6fe",borderRadius:8,padding:"10px 14px",fontSize:12,color:"#6d28d9",marginBottom:8}},"🔵 Esperando validación del directivo. Una vez aprobado, el usuario recibirá el mail de calificación.")),
+          ["esperando_validacion","esperando_validacion_responsable","esperando_validacion_directivo"].includes(f.estadoAvance) && h('div',{style:{background:"#f5f3ff",border:"1.5px solid #ddd6fe",borderRadius:8,padding:"10px 14px",fontSize:12,color:"#6d28d9",marginBottom:8}},"🔵 Esperando validación del directivo. Una vez aprobado, el usuario recibirá el mail de calificación.")),
 
         // TAB HISTORIAL
         tab==="historial" && h('div',null,
@@ -2492,7 +2497,7 @@ function RecurrenciasTab({area, ejecutores, recs}) {
         const diasFaltantes = Math.round((fechaOcurrencia - hoy) / 86400000);
 
         // Buscar ticket pendiente existente de esta recurrencia (el más próximo no resuelto)
-        const estadosActivos = ["bajo_analisis","en_proceso","sin_resolucion","esperando_validacion"];
+        const estadosActivos = ["bajo_analisis","en_proceso","sin_resolucion","esperando_validacion","esperando_validacion_responsable","esperando_validacion_directivo"];
         const ticketsPendientes = allRecs
           .filter(r => r.recurrenciaId===rec.id && estadosActivos.includes(r.estadoAvance))
           .sort((a,b) => new Date(a.fechaInicioEsperado||a.createdAt) - new Date(b.fechaInicioEsperado||b.createdAt));
@@ -2992,8 +2997,8 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
   const POR_PAGINA = 20;
   const sf = (k,v) => { setFiltros(f=>({...f,[k]:v})); setPagina(1); };
 
-  const ESTADOS_ACTIVOS = ["bajo_analisis","en_proceso","sin_resolucion","esperando_validacion"];
-  const ESTADOS_COMPLETADOS = ["completada","consolidada","vinculado_proyecto"];
+  const ESTADOS_ACTIVOS = ["bajo_analisis","en_proceso","sin_resolucion","esperando_validacion","esperando_validacion_responsable","esperando_validacion_directivo"];
+  const ESTADOS_COMPLETADOS = ["completada","consolidada","vinculado_proyecto","esperando_validacion_responsable","esperando_validacion_directivo"];
 
   const filtrados = recs.filter(r=>{
     // Archivo: solo completados/consolidados
@@ -3039,7 +3044,7 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
     total:recs.length,
     noIniciadas:recs.filter(r=>r.estadoAvance==="bajo_analisis").length,
     enCurso:recs.filter(r=>r.estadoAvance==="iniciada").length,
-    demoradas:recs.filter(r=>r.estadoAvance==="demorada"||(!["completada","consolidada","sin_resolucion","vinculado_proyecto"].includes(r.estadoAvance)&&r.fechaCierre&&pld(r.fechaCierre)<new Date())).length,
+    demoradas:recs.filter(r=>r.estadoAvance==="demorada"||(!["completada","consolidada","sin_resolucion","vinculado_proyecto","esperando_validacion_responsable","esperando_validacion_directivo"].includes(r.estadoAvance)&&r.fechaCierre&&pld(r.fechaCierre)<new Date())).length,
     completadas:recs.filter(r=>r.estadoAvance==="completada").length,
   };
 
@@ -3060,7 +3065,7 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
     };
 
     for (const r of recs) {
-      if(["completada","consolidada","vinculado_proyecto"].includes(r.estadoAvance)) continue;
+      if(["completada","consolidada","vinculado_proyecto","esperando_validacion_responsable","esperando_validacion_directivo"].includes(r.estadoAvance)) continue;
 
       const crit = r.criticidad || r.pri || "media";
       const plazos = ESCALADO[crit] || ESCALADO.media;
@@ -3111,8 +3116,8 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
       }
 
       // CASO 5: Directivo no accionó en 2 días → notificar cliente automáticamente
-      if(r.estadoAvance === "esperando_validacion" && r.fechaEnvioValidacion && !diasOverride) {
-        const diasEsperando = (new Date() - new Date(r.fechaEnvioValidacion)) / 86400000;
+      if((r.estadoAvance === "esperando_validacion_directivo" || r.estadoAvance === "esperando_validacion") && (r.fechaEnvioValidacionDirectivo||r.fechaEnvioValidacion) && !diasOverride) {
+        const diasEsperando = (new Date() - new Date(r.fechaEnvioValidacionDirectivo||r.fechaEnvioValidacion)) / 86400000;
         if(diasEsperando >= 2) {
           const updated = {...r, estadoAvance:"completada",
             comentarios:[...(r.comentarios||[]),{texto:"Directivo no accionó en 2 días. Cliente notificado automáticamente.",fecha:new Date().toISOString(),autor:"Sistema"}]};
@@ -3474,7 +3479,7 @@ function CompletarView({recId, recs, setRecs, loaded}) {
     const calificarUrl=appUrl+"?calificar="+rec.id;
     const mailCfg=getMailConfig();
     const msgCat={infraestructura:"nuestro equipo de obras e infraestructura revisó y resolvió el inconveniente",mantenimiento:"nuestro equipo de mantenimiento atendió y solucionó el problema",limpieza:"nuestro equipo de limpieza atendió la situación",equipamiento:"el equipamiento fue revisado y el problema fue solucionado",preparacion:"el espacio fue preparado correctamente",servicios:"nuestro equipo de atención al socio gestionó tu consulta",cuotas:"nuestro equipo administrativo revisó y resolvió tu consulta"}[rec.cat]||"nuestro equipo atendió y resolvió el inconveniente";
-    const updated={...rec,estadoAvance: rec.esRecurrente ? "completada" : "esperando_validacion",
+    const updated={...rec,estadoAvance: rec.esRecurrente ? "completada" : "esperando_validacion_responsable",
       descripcionResolucion:desc,adjuntosResolucion,
       fechaEnvioValidacion: rec.esRecurrente ? null : new Date().toISOString(),
       updatedAt:new Date().toISOString(),
@@ -3630,177 +3635,70 @@ function RechazarValidacionView({recId, recs, setRecs, loaded}) {
 }
 
 // ── CALIFICAR VIEW ────────────────────────────────────────────────────────
-function ValidarDetalleView({recId, recs, setRecs, loaded, setView}) {
   const rec = recs.find(r=>r.id===recId);
   const [sending, setSending] = useState(false);
-  const [done, setDone] = useState(null); // "aprobado" | "rechazado"
+  const [done, setDone] = useState(null); // "aprobado" | "aprobado_responsable" | "rechazado"
   const [motivoRechazo, setMotivoRechazo] = useState("");
   const [showRechazo, setShowRechazo] = useState(false);
   const appUrl = window.location.href.split("?")[0];
 
-  const CATS={infraestructura:"Obras / Infraestructura",mantenimiento:"Mantenimiento Preventivo",limpieza:"Limpieza",preparacion:"Preparacion de espacios",servicios:"Servicios y Atencion",cuotas:"Cuotas y Aranceles"};
+  const CATS={infraestructura:"Obras / Infraestructura",mantenimiento:"Mantenimiento Preventivo",limpieza:"Limpieza",preparacion:"Preparacion de espacios",servicios:"Servicios & Atención",cuotas:"Cuotas & Aranceles"};
   const CRIT_COLOR={urgente:"#ef4444",alta:"#f97316",media:"#eab308",baja:"#22c55e"};
 
   const wrapStyle={minHeight:"100vh",background:"linear-gradient(135deg,#1a3a6b,#0f2347)",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"32px 16px"};
   const cardStyle={background:"white",borderRadius:16,maxWidth:640,width:"100%",overflow:"hidden",boxShadow:"0 20px 60px rgba(0,0,0,0.4)"};
-  const secStyle=(color,bg)=>({background:bg,borderLeft:"4px solid "+color,borderRadius:"0 10px 10px 0",padding:"14px 16px",marginBottom:16});
   const labelStyle={fontSize:11,color:"#94a3b8",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4};
   const valStyle={fontWeight:600,color:"#1e293b",fontSize:14};
 
-  if(!loaded) return h('div',{style:wrapStyle},h('div',{style:{color:"white",textAlign:"center",marginTop:80}},h('div',{style:{fontSize:16}},"Cargando...")));
-  if(!rec) return h('div',{style:wrapStyle},h('div',{style:{color:"white",textAlign:"center",marginTop:80}},h('div',{style:{fontSize:16}},"Solicitud no encontrada.")));
-
-  const crit = rec.criticidad||rec.pri||"media";
-  const critColor = CRIT_COLOR[crit]||"#64748b";
-
-  // Comentario del responsable al ejecutor
-  const instrucciones = rec.nuevoComentario?.trim() || (() => {
-    if(!rec.comentarios?.length) return null;
-    for(let i=rec.comentarios.length-1;i>=0;i--) {
-      const a=rec.comentarios[i].autor||"";
-      if(["Intendencia","Administracion","Responsable"].includes(a)) return rec.comentarios[i].texto;
-    }
-    return null;
-  })();
-
-  const aprobar = async () => {
-    if(sending) return;
-    setSending(true);
-    const mensajes={infraestructura:"nuestro equipo de obras reviso y resolvio el inconveniente",mantenimiento:"nuestro equipo de mantenimiento preventivo atendio el problema",limpieza:"nuestro equipo de limpieza atendio la situacion",preparacion:"el espacio fue preparado correctamente",servicios:"nuestro equipo de atencion al socio gestionó tu consulta",cuotas:"nuestro equipo administrativo resolvio tu consulta"};
-    const msgCat=mensajes[rec.cat]||"nuestro equipo atendio y resolvio el inconveniente";
-    const updated={...rec,estadoAvance:"completada",fechaEnvioValidacion:rec.fechaEnvioValidacion,
-      comentarios:[...(rec.comentarios||[]),{texto:"Resolucion validada por directivo.",fecha:new Date().toISOString(),autor:"Directivo"}]};
-    await sbUpsert(updated);
-    setRecs(prev=>prev.map(r=>r.id===recId?updated:r));
-    if(rec.email) await sendEmail({to:rec.email,subject:`[Asturiano] Tu solicitud fue resuelta — ${rec.numero}`,
-      body:`Hola ${rec.nombre},\n\nNos alegra informarte que el inconveniente que reportaste en ${rec.sector} fue resuelto. ${msgCat}.\n\n${rec.descripcionResolucion?"Lo que se hizo:\n"+rec.descripcionResolucion+"\n\n":""}Cuando tengas un momento, califica la atencion:\n${appUrl}?calificar=${rec.id}\n\nGracias por ayudarnos a mejorar el club.\n\n— Equipo de Intendencia Asturiano`});
-    for(const num of (rec.reclamosHijos||[])) {
-      const hijo=recs.find(x=>x.numero===num);
-      if(hijo?.email) await sendEmail({to:hijo.email,subject:`[Asturiano] Tu solicitud fue resuelta — ${hijo.numero}`,
-        body:`Hola ${hijo.nombre},\n\nNos alegra informarte que el inconveniente que reportaste en ${hijo.sector} fue resuelto. ${msgCat}.\n\n${rec.descripcionResolucion?"Lo que se hizo:\n"+rec.descripcionResolucion+"\n\n":""}Cuando tengas un momento, califica la atencion:\n${appUrl}?calificar=${hijo.id}\n\nGracias.\n\n— Equipo de Intendencia Asturiano`});
-    }
-    setSending(false); setDone("aprobado");
-  };
-
-  const rechazar = async () => {
-    if(!motivoRechazo.trim()) return;
-    if(sending) return;
-    setSending(true);
-    const updated={...rec,estadoAvance:"bajo_analisis",reabierta:true,descripcionResolucion:"",ejecutorConfirmado:false,
-      comentarios:[...(rec.comentarios||[]),{texto:"Directivo rechazo la resolucion. Motivo: "+motivoRechazo,fecha:new Date().toISOString(),autor:"Directivo"}]};
-    await sbUpsert(updated);
-    setRecs(prev=>prev.map(r=>r.id===recId?updated:r));
-    const respMail=getResponsableMail(rec.cat)||NOTIFY_EMAIL;
-    await sendEmail({to:[respMail].filter(Boolean),subject:`[Asturiano] Resolucion rechazada — ${rec.numero}`,
-      body:`La resolucion del ticket ${rec.numero} fue rechazada por el directivo.\n\nMotivo: ${motivoRechazo}\n\nEl ticket fue reabierto y requiere nueva gestion.\n\n${appUrl}`});
-    setSending(false); setDone("rechazado");
-  };
-
-  if(done) return h('div',{style:wrapStyle},
-    h('div',{style:{...cardStyle,padding:40,textAlign:"center"}},
-      h('div',{style:{fontSize:48,marginBottom:16}},done==="aprobado"?"":""),
-      h('div',{style:{fontSize:22,fontWeight:700,color:done==="aprobado"?"#16a34a":"#dc2626",marginBottom:8}},
-        done==="aprobado"?"Resolucion aprobada":"Resolucion rechazada"),
-      h('div',{style:{color:"#64748b",fontSize:14}},
-        done==="aprobado"?"El solicitante fue notificado.":"El responsable fue notificado para regestionar.")));
-
-  return h('div',{style:wrapStyle},
-    h('div',{style:cardStyle},
-      h('div',{style:{background:"#1a3a6b",padding:"20px 24px"}},
-        h('div',{style:{color:"#a8c4e8",fontSize:11,letterSpacing:2,textTransform:"uppercase",marginBottom:4}},"Sistema de Reclamos — Validacion Directivo"),
-        h('div',{style:{color:"white",fontSize:18,fontWeight:700}},rec.numero+" — "+rec.sector)),
-      h('div',{style:{padding:24}},
-
-        // SECCION 1: Solicitud original
-        h('div',{style:{marginBottom:20}},
-          h('div',{style:{fontSize:12,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:1,marginBottom:10,paddingBottom:6,borderBottom:"2px solid #f1f5f9"}},"1. Solicitud original"),
-          h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}},
-            h('div',{style:{background:"#f8fafc",borderRadius:8,padding:"10px 12px"}},h('div',{style:labelStyle},"Sector"),h('div',{style:valStyle},rec.sector)),
-            h('div',{style:{background:"#f8fafc",borderRadius:8,padding:"10px 12px"}},h('div',{style:labelStyle},"Tipo"),h('div',{style:valStyle},rec.sub)),
-            h('div',{style:{background:"#f8fafc",borderRadius:8,padding:"10px 12px"}},h('div',{style:labelStyle},"Solicitante"),h('div',{style:valStyle},(rec.tipo||"")+" — "+(rec.nombre||""))),
-            h('div',{style:{background:"#f8fafc",borderRadius:8,padding:"10px 12px"}},h('div',{style:labelStyle},"Prioridad"),
-              h('div',{style:{display:"inline-block",padding:"2px 10px",borderRadius:20,fontSize:12,fontWeight:700,background:critColor+"22",color:critColor}},crit.toUpperCase()))),
-          h('div',{style:{background:"#f8fafc",borderRadius:8,padding:"10px 12px"}},
-            h('div',{style:labelStyle},"Descripcion"),
-            h('div',{style:{color:"#374151",fontSize:14,lineHeight:1.6}},rec.desc||"—"))),
-          (rec.adjuntos||[]).filter(a=>a.url).length>0 && h('div',{style:{marginTop:10}},
-            h('div',{style:{...labelStyle,marginBottom:8}},"Fotos del solicitante"),
-            h('div',{style:{display:"flex",flexWrap:"wrap",gap:8}},
-              ...(rec.adjuntos||[]).filter(a=>a.url).map((a,i)=>
-                a.tipo && a.tipo.startsWith('image/')
-                  ? h('a',{key:i,href:a.url,target:"_blank"},h('img',{src:a.url,style:{width:110,height:80,objectFit:"cover",borderRadius:8,border:"1px solid #e2e8f0",display:"block"}}))
-                  : h('a',{key:i,href:a.url,target:"_blank",style:{display:"inline-block",padding:"6px 12px",background:"#f1f5f9",borderRadius:6,fontSize:12,color:"#2563eb",textDecoration:"none"}},a.nombre||"archivo")))),
-
-        // SECCION 2: Asignacion del responsable
-        h('div',{style:{marginBottom:20}},
-          h('div',{style:{fontSize:12,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:1,marginBottom:10,paddingBottom:6,borderBottom:"2px solid #f1f5f9"}},"2. Asignacion del responsable"),
-          h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:instrucciones?10:0}},
-            h('div',{style:{background:"#f8fafc",borderRadius:8,padding:"10px 12px"}},h('div',{style:labelStyle},"Ejecutor"),h('div',{style:valStyle},rec.ejecutorNombre||"—")),
-            h('div',{style:{background:"#f8fafc",borderRadius:8,padding:"10px 12px"}},h('div',{style:labelStyle},"Periodo"),
-              h('div',{style:valStyle},fd(rec.fechaInicioEsperado||rec.fechaInicioOriginal)+" al "+fd(rec.fechaCierreConfirmada||rec.fechaCierre)))),
-          instrucciones && h('div',{style:{background:"#eff6ff",borderLeft:"3px solid #3b82f6",borderRadius:"0 8px 8px 0",padding:"10px 12px"}},
-            h('div',{style:labelStyle},"Instrucciones al ejecutor"),
-            h('div',{style:{color:"#1e40af",fontSize:14}},instrucciones))),
-
-        // SECCION 3: Resolucion del ejecutor
-        h('div',{style:{marginBottom:24}},
-          h('div',{style:{fontSize:12,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:1,marginBottom:10,paddingBottom:6,borderBottom:"2px solid #f1f5f9"}},"3. Resolucion del ejecutor"),
-          h('div',{style:{background:"#f0fdf4",borderLeft:"4px solid #16a34a",borderRadius:"0 10px 10px 0",padding:"12px 14px",marginBottom:10}},
-            h('div',{style:labelStyle},"Lo que se hizo"),
-            h('div',{style:{color:"#14532d",fontSize:14,lineHeight:1.6}},rec.descripcionResolucion||"Sin descripcion.")),
-          (rec.adjuntosResolucion||[]).filter(a=>a.url).length>0 && h('div',{style:{marginBottom:8}},
-            h('div',{style:{...labelStyle,marginBottom:8}},"Fotos / evidencia"),
-            h('div',{style:{display:"flex",flexWrap:"wrap",gap:8}},
-              ...(rec.adjuntosResolucion||[]).filter(a=>a.url).map((a,i)=>
-                a.tipo && a.tipo.startsWith('image/')
-                  ? h('a',{key:i,href:a.url,target:"_blank"},h('img',{src:a.url,style:{width:120,height:90,objectFit:"cover",borderRadius:8,border:"1px solid #bbf7d0",display:"block"}}))
-                  : h('a',{key:i,href:a.url,target:"_blank",style:{display:"inline-block",padding:"8px 14px",background:"#dcfce7",borderRadius:8,fontSize:13,color:"#15803d",textDecoration:"none",fontWeight:600}},a.nombre||"Ver video")))),
-          rec.evidenciaUrl && h('div',{style:{marginTop:4}},
-            h('a',{href:rec.evidenciaUrl,target:"_blank",style:{color:"#2563eb",fontSize:13,fontWeight:600}},"Ver evidencia / foto"))),
-
-        // BOTONES
-        !showRechazo && h('div',{style:{display:"flex",gap:12,flexWrap:"wrap"}},
-          h('button',{onClick:aprobar,disabled:sending,
-            style:{flex:2,padding:"14px",background:sending?"#94a3b8":"linear-gradient(135deg,#16a34a,#15803d)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:15,fontWeight:700}},
-            sending?"Procesando...":"Aprobar resolucion"),
-          h('button',{onClick:()=>setShowRechazo(true),disabled:sending,
-            style:{flex:1,padding:"14px",background:"#fef2f2",color:"#dc2626",border:"2px solid #fca5a5",borderRadius:10,cursor:"pointer",fontSize:15,fontWeight:700}},
-            "Rechazar")),
-
-        showRechazo && h('div',{style:{background:"#fef2f2",border:"1.5px solid #fca5a5",borderRadius:10,padding:16}},
-          h('div',{style:{fontWeight:700,color:"#dc2626",marginBottom:8,fontSize:14}},"Motivo del rechazo (obligatorio)"),
-          h('textarea',{value:motivoRechazo,onChange:e=>setMotivoRechazo(e.target.value),rows:3,
-            placeholder:"Que falta corregir o completar...",
-            style:{width:"100%",padding:10,border:"1.5px solid #fca5a5",borderRadius:8,fontSize:14,resize:"vertical",boxSizing:"border-box",marginBottom:10}}),
-          h('div',{style:{display:"flex",gap:10}},
-            h('button',{onClick:rechazar,disabled:sending||!motivoRechazo.trim(),
-              style:{flex:2,padding:"12px",background:sending||!motivoRechazo.trim()?"#94a3b8":"#dc2626",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:14,fontWeight:700}},
-              sending?"Procesando...":"Confirmar rechazo"),
-            h('button',{onClick:()=>setShowRechazo(false),
-              style:{flex:1,padding:"12px",background:"white",color:"#64748b",border:"1.5px solid #e2e8f0",borderRadius:8,cursor:"pointer",fontSize:14}},
-              "Cancelar"))),
-
-        h('div',{style:{textAlign:"center",marginTop:20,color:"#94a3b8",fontSize:11}},"Club Asturiano — Sistema de Reclamos"))));
-}
-
-function VerSolicitudPublica({recId, recs, loaded}) {
-  const rec = recs.find(r=>r.id===recId);
-  const CATS={infraestructura:"Obras / Infraestructura",mantenimiento:"Mantenimiento Preventivo",limpieza:"Limpieza",preparacion:"Preparación de espacios",servicios:"Servicios & Atención",cuotas:"Cuotas & Aranceles"};
-  const CRIT_COLOR={urgente:"#ef4444",alta:"#f97316",media:"#eab308",baja:"#22c55e"};
-  const ESTADO_LABEL={"pendiente":"Pendiente","en_proceso":"En proceso","sin_resolucion":"Sin resolución temporal","esperando_validacion":"Esperando validación","completada":"Completada","bajo_analisis":"En revisión"};
-
-  const wrapStyle={minHeight:"100vh",background:"linear-gradient(135deg,#1a3a6b,#0f2347)",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"32px 16px"};
-  const cardStyle={background:"white",borderRadius:16,maxWidth:600,width:"100%",overflow:"hidden",boxShadow:"0 20px 60px rgba(0,0,0,0.4)"};
-
   if(!loaded) return h('div',{style:wrapStyle},
     h('div',{style:{color:"white",textAlign:"center",marginTop:80}},
-      h('div',{style:{fontSize:40,marginBottom:12}},"Cargando..."),
-      h('div',{style:{fontSize:16}},"Cargando solicitud...")));
-
+      h('div',{style:{fontSize:16}},"Cargando...")));
   if(!rec) return h('div',{style:wrapStyle},
     h('div',{style:{color:"white",textAlign:"center",marginTop:80}},
-      h('div',{style:{fontSize:40,marginBottom:12}},"Error"),
       h('div',{style:{fontSize:16}},"Solicitud no encontrada.")));
+
+  // ── DETERMINAR ROL Y ESTADO ────────────────────────────────────────────
+  const estadoActual = rec.estadoAvance;
+  const esParaResponsable = estadoActual === "esperando_validacion_responsable";
+  const esParaDirectivo   = estadoActual === "esperando_validacion_directivo" || estadoActual === "esperando_validacion";
+  const yaCompletada      = estadoActual === "completada";
+  const yaReanudada       = estadoActual === "bajo_analisis" && rec.reabierta;
+
+  // Detectar rol desde URL
+  const urlParams = new URLSearchParams(window.location.search);
+  const rolUrl = urlParams.get("rol"); // "responsable" | "directivo"
+
+  // ── PANTALLA DE VALIDACIÓN EXPIRADA ────────────────────────────────────
+  let estadoExpirado = null;
+
+  if (rolUrl === "responsable" && !esParaResponsable) {
+    if (esParaDirectivo)
+      estadoExpirado = {msg:"Tu revisión fue registrada. La solicitud fue enviada al directivo para validación final.", icon:"📤", color:"#7c3aed"};
+    else if (yaCompletada)
+      estadoExpirado = {msg:"La solicitud ya fue completada y el solicitante fue notificado.", icon:"✅", color:"#16a34a"};
+    else if (yaReanudada)
+      estadoExpirado = {msg:"La solicitud fue reabierta al ejecutor para retrabajar.", icon:"🔄", color:"#f97316"};
+    else
+      estadoExpirado = {msg:"Esta validación ya no está disponible.", icon:"⚠️", color:"#64748b"};
+  }
+
+  if (rolUrl === "directivo" && !esParaDirectivo) {
+    if (esParaResponsable)
+      estadoExpirado = {msg:"Esta solicitud aún está esperando la revisión del responsable. Vas a recibir la notificación cuando esté lista para tu validación.", icon:"⏳", color:"#7c3aed"};
+    else if (yaCompletada)
+      estadoExpirado = {msg:"La solicitud ya fue completada y el solicitante fue notificado.", icon:"✅", color:"#16a34a"};
+    else if (yaReanudada)
+      estadoExpirado = {msg:"La solicitud fue reabierta al ejecutor para retrabajar.", icon:"🔄", color:"#f97316"};
+    else
+      estadoExpirado = {msg:"Esta validación ya no está disponible.", icon:"⚠️", color:"#64748b"};
+  }
+
+  if (estadoExpirado) return h('div',{style:wrapStyle},
+    h('div',{style:{...cardStyle,padding:40,textAlign:"center"}},
+      h('div',{style:{fontSize:52,marginBottom:16}},estadoExpirado.icon),
+      h('div',{style:{fontSize:18,fontWeight:700,color:estadoExpirado.color,marginBottom:12}},"Validación no disponible"),
+      h('div',{style:{fontSize:14,color:"#64748b",lineHeight:1.7,marginBottom:20}},estadoExpirado.msg),
+      h('div',{style:{fontSize:12,color:"#94a3b8"}},"Podés cerrar esta ventana.")));
 
   const crit = rec.criticidad||rec.pri||"media";
   const critColor = CRIT_COLOR[crit]||"#64748b";
@@ -3817,67 +3715,189 @@ function VerSolicitudPublica({recId, recs, loaded}) {
     return null;
   })();
 
+  // ── APROBAR ─────────────────────────────────────────────────────────────
+  const aprobar = async () => {
+    if(sending) return;
+    setSending(true);
+
+    if (esParaResponsable) {
+      // Responsable aprueba → pasa al directivo
+      const updated={...rec,
+        estadoAvance:"esperando_validacion_directivo",
+        fechaEnvioValidacionDirectivo: new Date().toISOString(),
+        comentarios:[...(rec.comentarios||[]),{
+          texto:"Resolución aprobada por responsable. Enviada al directivo para validación final.",
+          fecha:new Date().toISOString(), autor:"Responsable"
+        }]};
+      await sbUpsert(updated);
+      setRecs(prev=>prev.map(r=>r.id===recId?updated:r));
+      setSending(false); setDone("aprobado_responsable");
+      return;
+    }
+
+    // Directivo aprueba → completar y notificar al solicitante
+    const mensajes={
+      infraestructura:"nuestro equipo de obras reviso y resolvio el inconveniente",
+      mantenimiento:"nuestro equipo de mantenimiento preventivo atendio el problema",
+      limpieza:"nuestro equipo de limpieza atendio la situacion",
+      preparacion:"el espacio fue preparado correctamente",
+      servicios:"nuestro equipo de atencion al socio gestiono tu consulta",
+      cuotas:"nuestro equipo administrativo resolvio tu consulta"
+    };
+    const msgCat=mensajes[rec.cat]||"nuestro equipo atendio y resolvio el inconveniente";
+    const updated={...rec,estadoAvance:"completada",
+      comentarios:[...(rec.comentarios||[]),{
+        texto:"Resolución validada por directivo.",
+        fecha:new Date().toISOString(), autor:"Directivo"
+      }]};
+    await sbUpsert(updated);
+    setRecs(prev=>prev.map(r=>r.id===recId?updated:r));
+
+    if(rec.email) await sendEmail({to:rec.email,
+      subject:`[Asturiano] Tu solicitud fue resuelta — ${rec.numero}`,
+      body:`Hola ${rec.nombre},\n\nNos alegra informarte que el inconveniente que reportaste en ${rec.sector} fue resuelto. ${msgCat}.\n\n${rec.descripcionResolucion?"Lo que se hizo:\n"+rec.descripcionResolucion+"\n\n":""}Cuando tengas un momento, calificá la atención:\n${appUrl}?calificar=${rec.id}\n\nGracias por ayudarnos a mejorar el club.\n\n— Equipo de Intendencia Asturiano`});
+
+    for(const num of (rec.reclamosHijos||[])) {
+      const hijo=recs.find(x=>x.numero===num);
+      if(hijo?.email) await sendEmail({to:hijo.email,
+        subject:`[Asturiano] Tu solicitud fue resuelta — ${hijo.numero}`,
+        body:`Hola ${hijo.nombre},\n\nNos alegra informarte que el inconveniente que reportaste en ${hijo.sector} fue resuelto. ${msgCat}.\n\n${rec.descripcionResolucion?"Lo que se hizo:\n"+rec.descripcionResolucion+"\n\n":""}Cuando tengas un momento, calificá la atención:\n${appUrl}?calificar=${hijo.id}\n\nGracias.\n\n— Equipo de Intendencia Asturiano`});
+    }
+    setSending(false); setDone("aprobado");
+  };
+
+  // ── RECHAZAR ─────────────────────────────────────────────────────────────
+  const rechazar = async () => {
+    if(!motivoRechazo.trim()) return;
+    if(sending) return;
+    setSending(true);
+    const autor = esParaResponsable ? "Responsable" : "Directivo";
+    const updated={...rec,estadoAvance:"bajo_analisis",reabierta:true,descripcionResolucion:"",ejecutorConfirmado:false,
+      comentarios:[...(rec.comentarios||[]),{
+        texto:autor+" rechazó la resolución. Motivo: "+motivoRechazo,
+        fecha:new Date().toISOString(), autor
+      }]};
+    await sbUpsert(updated);
+    setRecs(prev=>prev.map(r=>r.id===recId?updated:r));
+    const respMail=getResponsableMail(rec.cat)||NOTIFY_EMAIL;
+    await sendEmail({to:[respMail].filter(Boolean),
+      subject:`[Asturiano] Resolución rechazada por ${autor.toLowerCase()} — ${rec.numero}`,
+      body:`La resolución del ticket ${rec.numero} fue rechazada por el ${autor.toLowerCase()}.\n\nMotivo: ${motivoRechazo}\n\nEl ticket fue reabierto y requiere nueva gestión.\n\n${appUrl}`});
+    setSending(false); setDone("rechazado");
+  };
+
+  // ── PANTALLA DONE ────────────────────────────────────────────────────────
+  if(done) return h('div',{style:wrapStyle},
+    h('div',{style:{...cardStyle,padding:40,textAlign:"center"}},
+      h('div',{style:{fontSize:52,marginBottom:16}},
+        done==="aprobado"?"✅":done==="aprobado_responsable"?"📤":"🔄"),
+      h('div',{style:{fontSize:22,fontWeight:700,
+        color:done==="aprobado"?"#16a34a":done==="aprobado_responsable"?"#7c3aed":"#dc2626",
+        marginBottom:8}},
+        done==="aprobado"?"Resolución aprobada":
+        done==="aprobado_responsable"?"Aprobado — enviado al directivo":
+        "Resolución rechazada"),
+      h('div',{style:{color:"#64748b",fontSize:14,lineHeight:1.6}},
+        done==="aprobado"?"El solicitante fue notificado.":
+        done==="aprobado_responsable"?"Tu aprobación fue registrada. La resolución pasa ahora al directivo para su validación final.":
+        "El responsable fue notificado para regestionar."),
+      h('div',{style:{fontSize:12,color:"#94a3b8",marginTop:12}},"Podés cerrar esta ventana.")));
+
+  // ── RENDER PRINCIPAL ─────────────────────────────────────────────────────
+  const rolLabel = esParaResponsable ? "Responsable" : "Directivo";
+  const rolColor = esParaResponsable ? "#7c3aed" : "#2563eb";
+
   return h('div',{style:wrapStyle},
     h('div',{style:cardStyle},
       h('div',{style:{background:"#1a3a6b",padding:"20px 24px"}},
-        h('div',{style:{color:"#a8c4e8",fontSize:11,letterSpacing:2,textTransform:"uppercase",marginBottom:4}},"Sistema de Reclamos — Club Asturiano"),
-        h('div',{style:{color:"white",fontSize:20,fontWeight:700}},"Detalle de Solicitud")),
+        h('div',{style:{color:"#a8c4e8",fontSize:11,letterSpacing:2,textTransform:"uppercase",marginBottom:4}},
+          "Sistema de Reclamos — Validación "+rolLabel),
+        h('div',{style:{color:"white",fontSize:18,fontWeight:700}},rec.numero+" — "+rec.sector)),
       h('div',{style:{padding:24}},
-        // Header número + estado
-        h('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:8}},
-          h('span',{style:{fontFamily:"monospace",fontWeight:800,color:"#3b82f6",fontSize:22}},rec.numero),
-          h('span',{style:{padding:"4px 12px",borderRadius:20,fontSize:12,fontWeight:700,background:critColor+"22",color:critColor}},crit.toUpperCase())),
-        // Info básica
-        h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:20}},
-          h('div',{style:{background:"#f8fafc",borderRadius:10,padding:"12px 14px"}},
-            h('div',{style:{fontSize:11,color:"#94a3b8",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}},"Sector"),
-            h('div',{style:{fontWeight:700,color:"#1e293b"}},rec.sector)),
-          h('div',{style:{background:"#f8fafc",borderRadius:10,padding:"12px 14px"}},
-            h('div',{style:{fontSize:11,color:"#94a3b8",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}},"Tipo"),
-            h('div',{style:{fontWeight:600,color:"#374151"}},rec.sub)),
-          h('div',{style:{background:"#f8fafc",borderRadius:10,padding:"12px 14px"}},
-            h('div',{style:{fontSize:11,color:"#94a3b8",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}},"Área"),
-            h('div',{style:{fontWeight:600,color:"#374151"}},CATS[rec.cat]||rec.cat)),
-          h('div',{style:{background:"#f8fafc",borderRadius:10,padding:"12px 14px"}},
-            h('div',{style:{fontSize:11,color:"#94a3b8",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}},"Estado"),
-            h('div',{style:{fontWeight:600,color:"#374151"}},ESTADO_LABEL[rec.estadoAvance]||rec.estadoAvance))),
-        // Descripción
-        h('div',{style:{background:"#f8fafc",borderRadius:10,padding:"12px 14px",marginBottom:16}},
-          h('div',{style:{fontSize:11,color:"#94a3b8",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}},"Descripción"),
-          h('div',{style:{color:"#374151",fontSize:14,lineHeight:1.6}},rec.desc||"—")),
-        // Fechas
-        (fechaIni||fechaFin) && h('div',{style:{display:"flex",gap:12,marginBottom:16,flexWrap:"wrap"}},
-          fechaIni && h('div',{style:{background:"#eff6ff",borderRadius:10,padding:"10px 14px",flex:1}},
-            h('div',{style:{fontSize:11,color:"#a8c4e8",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}},"Fecha inicio"),
-            h('div',{style:{fontWeight:700,color:"#1e40af"}},fd(fechaIni))),
-          fechaFin && h('div',{style:{background:"#eff6ff",borderRadius:10,padding:"10px 14px",flex:1}},
-            h('div',{style:{fontSize:11,color:"#a8c4e8",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}},"Fecha cierre"),
-            h('div',{style:{fontWeight:700,color:"#1e40af"}},fd(fechaFin))),
-          rec.horaInicio && h('div',{style:{background:"#eff6ff",borderRadius:10,padding:"10px 14px",flex:1}},
-            h('div',{style:{fontSize:11,color:"#a8c4e8",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}},"Horario"),
-            h('div',{style:{fontWeight:700,color:"#1e40af"}},rec.horaInicio+(rec.horaFin?" a "+rec.horaFin:"")))),
-        // Comentario/instrucciones del responsable
-        comentResp && h('div',{style:{background:"#eff6ff",borderLeft:"4px solid #3b82f6",borderRadius:"0 10px 10px 0",padding:"12px 14px",marginBottom:16}},
-          h('div',{style:{fontSize:11,color:"#3b82f6",fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}},"Instrucciones"),
-          h('div',{style:{color:"#1e40af",fontSize:14,lineHeight:1.6}},comentResp)),
-        // Resolución del ejecutor
-        rec.descripcionResolucion && h('div',{style:{background:"#f0fdf4",borderLeft:"4px solid #16a34a",borderRadius:"0 10px 10px 0",padding:"12px 14px",marginBottom:16}},
-          h('div',{style:{fontSize:11,color:"#16a34a",fontWeight:700,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}},"Lo que se hizo"),
-          h('div',{style:{color:"#14532d",fontSize:14,lineHeight:1.6}},rec.descripcionResolucion),
-          (rec.adjuntosResolucion||[]).filter(a=>a.url).length>0 && h('div',{style:{marginTop:10}},
-            h('div',{style:{fontSize:11,color:"#16a34a",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}},"Fotos / evidencia"),
+
+        // Banner rol
+        h('div',{style:{background:rolColor+"11",border:"1.5px solid "+rolColor+"33",borderRadius:10,
+          padding:"10px 14px",marginBottom:20,fontSize:13,color:rolColor,fontWeight:600}},
+          esParaResponsable
+            ? "👤 Sos el responsable — revisá la resolución antes de que pase al directivo. Tenés 2 días."
+            : "🎖️ Sos el directivo — el responsable ya aprobó. Tu validación notifica al solicitante. Tenés 2 días."),
+
+        // SECCION 1: Solicitud original
+        h('div',{style:{marginBottom:20}},
+          h('div',{style:{fontSize:12,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:1,marginBottom:10,paddingBottom:6,borderBottom:"2px solid #f1f5f9"}},"1. Solicitud original"),
+          h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}},
+            h('div',{style:{background:"#f8fafc",borderRadius:8,padding:"10px 12px"}},h('div',{style:labelStyle},"Sector"),h('div',{style:valStyle},rec.sector)),
+            h('div',{style:{background:"#f8fafc",borderRadius:8,padding:"10px 12px"}},h('div',{style:labelStyle},"Tipo"),h('div',{style:valStyle},rec.sub)),
+            h('div',{style:{background:"#f8fafc",borderRadius:8,padding:"10px 12px"}},h('div',{style:labelStyle},"Solicitante"),h('div',{style:valStyle},(rec.tipo||"")+" — "+(rec.nombre||""))),
+            h('div',{style:{background:"#f8fafc",borderRadius:8,padding:"10px 12px"}},h('div',{style:labelStyle},"Prioridad"),
+              h('div',{style:{display:"inline-block",padding:"2px 10px",borderRadius:20,fontSize:12,fontWeight:700,background:critColor+"22",color:critColor}},crit.toUpperCase()))),
+          h('div',{style:{background:"#f8fafc",borderRadius:8,padding:"10px 12px"}},
+            h('div',{style:labelStyle},"Descripción"),
+            h('div',{style:{color:"#374151",fontSize:14,lineHeight:1.6}},rec.desc||"—"))),
+
+        (rec.adjuntos||[]).filter(a=>a.url).length>0 && h('div',{style:{marginBottom:16}},
+          h('div',{style:{...labelStyle,marginBottom:8}},"Fotos del solicitante"),
+          h('div',{style:{display:"flex",flexWrap:"wrap",gap:8}},
+            ...(rec.adjuntos||[]).filter(a=>a.url).map((a,i)=>
+              a.tipo && a.tipo.startsWith('image/')
+                ? h('a',{key:i,href:a.url,target:"_blank"},h('img',{src:a.url,style:{width:110,height:80,objectFit:"cover",borderRadius:8,border:"1px solid #e2e8f0",display:"block"}}))
+                : h('a',{key:i,href:a.url,target:"_blank",style:{display:"inline-block",padding:"6px 12px",background:"#f1f5f9",borderRadius:6,fontSize:12,color:"#2563eb",textDecoration:"none"}},a.nombre||"archivo")))),
+
+        // SECCION 2: Asignación
+        h('div',{style:{marginBottom:20}},
+          h('div',{style:{fontSize:12,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:1,marginBottom:10,paddingBottom:6,borderBottom:"2px solid #f1f5f9"}},"2. Asignación"),
+          h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:comentResp?10:0}},
+            h('div',{style:{background:"#f8fafc",borderRadius:8,padding:"10px 12px"}},h('div',{style:labelStyle},"Ejecutor"),h('div',{style:valStyle},rec.ejecutorNombre||"—")),
+            h('div',{style:{background:"#f8fafc",borderRadius:8,padding:"10px 12px"}},h('div',{style:labelStyle},"Período"),
+              h('div',{style:valStyle},fd(fechaIni)+" al "+fd(fechaFin)))),
+          comentResp && h('div',{style:{background:"#eff6ff",borderLeft:"3px solid #3b82f6",borderRadius:"0 8px 8px 0",padding:"10px 12px"}},
+            h('div',{style:labelStyle},"Instrucciones al ejecutor"),
+            h('div',{style:{color:"#1e40af",fontSize:14}},comentResp))),
+
+        // SECCION 3: Resolución
+        h('div',{style:{marginBottom:24}},
+          h('div',{style:{fontSize:12,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:1,marginBottom:10,paddingBottom:6,borderBottom:"2px solid #f1f5f9"}},"3. Resolución del ejecutor"),
+          h('div',{style:{background:"#f0fdf4",borderLeft:"4px solid #16a34a",borderRadius:"0 10px 10px 0",padding:"12px 14px",marginBottom:10}},
+            h('div',{style:labelStyle},"Lo que se hizo"),
+            h('div',{style:{color:"#14532d",fontSize:14,lineHeight:1.6}},rec.descripcionResolucion||"Sin descripción.")),
+          (rec.adjuntosResolucion||[]).filter(a=>a.url).length>0 && h('div',{style:{marginBottom:8}},
+            h('div',{style:{...labelStyle,marginBottom:8}},"Fotos / evidencia del ejecutor"),
             h('div',{style:{display:"flex",flexWrap:"wrap",gap:8}},
               ...(rec.adjuntosResolucion||[]).filter(a=>a.url).map((a,i)=>
                 a.tipo && a.tipo.startsWith('image/')
-                  ? h('a',{key:i,href:a.url,target:"_blank"},h('img',{src:a.url,style:{width:110,height:80,objectFit:"cover",borderRadius:8,border:"1px solid #bbf7d0",display:"block"}}))
-                  : h('a',{key:i,href:a.url,target:"_blank",style:{display:"inline-block",padding:"6px 12px",background:"#dcfce7",borderRadius:6,fontSize:12,color:"#15803d",textDecoration:"none"}},a.nombre||"archivo"))))),
-        // Botón completar si corresponde
-        (rec.ejecutorMail && rec.estadoAvance!=="completada" && rec.estadoAvance!=="esperando_validacion") &&
-          h('a',{href:window.location.href.split("?")[0]+"?completar="+rec.id,
-            style:{display:"block",textAlign:"center",padding:"14px",background:"linear-gradient(135deg,#16a34a,#15803d)",color:"white",textDecoration:"none",borderRadius:10,fontWeight:700,fontSize:15,marginTop:8}},
-            "Marcar como completada"),
-        h('div',{style:{textAlign:"center",marginTop:20,color:"#94a3b8",fontSize:12}},"Club Asturiano — Sistema de Reclamos"))));
+                  ? h('a',{key:i,href:a.url,target:"_blank"},h('img',{src:a.url,style:{width:120,height:90,objectFit:"cover",borderRadius:8,border:"1px solid #bbf7d0",display:"block"}}))
+                  : h('a',{key:i,href:a.url,target:"_blank",style:{display:"inline-block",padding:"8px 14px",background:"#dcfce7",borderRadius:8,fontSize:13,color:"#15803d",textDecoration:"none",fontWeight:600}},a.nombre||"Ver video"))))),
+
+        // BOTONES
+        !showRechazo && h('div',{style:{display:"flex",gap:12,flexWrap:"wrap"}},
+          h('button',{onClick:aprobar,disabled:sending,
+            style:{flex:2,padding:"14px",
+              background:sending?"#94a3b8":esParaResponsable?"linear-gradient(135deg,#7c3aed,#5b21b6)":"linear-gradient(135deg,#16a34a,#15803d)",
+              color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:15,fontWeight:700}},
+            sending?"Procesando...":
+            esParaResponsable?"✓ Aprobar — enviar al directivo":"✅ Aprobar — notificar al solicitante"),
+          h('button',{onClick:()=>setShowRechazo(true),disabled:sending,
+            style:{flex:1,padding:"14px",background:"#fef2f2",color:"#dc2626",border:"2px solid #fca5a5",borderRadius:10,cursor:"pointer",fontSize:15,fontWeight:700}},
+            "Rechazar")),
+
+        showRechazo && h('div',{style:{background:"#fef2f2",border:"1.5px solid #fca5a5",borderRadius:10,padding:16}},
+          h('div',{style:{fontWeight:700,color:"#dc2626",marginBottom:8,fontSize:14}},"Motivo del rechazo (obligatorio)"),
+          h('textarea',{value:motivoRechazo,onChange:e=>setMotivoRechazo(e.target.value),rows:3,
+            placeholder:"¿Qué falta corregir o completar?",
+            style:{width:"100%",padding:10,border:"1.5px solid #fca5a5",borderRadius:8,fontSize:14,resize:"vertical",boxSizing:"border-box",marginBottom:10}}),
+          h('div',{style:{display:"flex",gap:10}},
+            h('button',{onClick:rechazar,disabled:sending||!motivoRechazo.trim(),
+              style:{flex:2,padding:"12px",
+                background:sending||!motivoRechazo.trim()?"#94a3b8":"#dc2626",
+                color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:14,fontWeight:700}},
+              sending?"Procesando...":"Confirmar rechazo"),
+            h('button',{onClick:()=>setShowRechazo(false),
+              style:{flex:1,padding:"12px",background:"white",color:"#64748b",border:"1.5px solid #e2e8f0",borderRadius:8,cursor:"pointer",fontSize:14}},
+              "Cancelar"))),
+
+        h('div',{style:{textAlign:"center",marginTop:20,color:"#94a3b8",fontSize:11}},"Club Asturiano — Sistema de Reclamos"))));
 }
+
 
 function CalificarView({recId, recs, setRecs, loaded}) {
   const rec = recs.find(r=>r.id===recId);
