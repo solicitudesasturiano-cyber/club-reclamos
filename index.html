@@ -731,7 +731,9 @@ async function detectarDuplicados(nuevoRec, todosRecs) {
     r.id !== nuevoRec.id &&
     !r.esRecurrente &&  // excluir tickets recurrentes
     !["completada","consolidada","vinculado_proyecto","esperando_validacion_responsable","esperando_validacion_directivo"].includes(r.estadoAvance) &&
-    r.desc && r.desc.trim().length > 3
+    r.desc && r.desc.trim().length > 3 &&
+    !(r.sub && r.sub.toLowerCase() === "otro") &&       // excluir sub "Otro"
+    !(nuevoRec.sub && nuevoRec.sub.toLowerCase() === "otro")  // excluir si el nuevo es "Otro"
   );
   if(!candidatos.length) return [];
 
@@ -5020,10 +5022,6 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
-
-
-
-
 
 
 
