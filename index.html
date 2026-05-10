@@ -1424,24 +1424,24 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs}) {
       ? "Adjuntamos fotos de la resolución para que puedas verificar el trabajo realizado."
       : "";
     // NOTE: User is NOT notified here - only after directivo validates
-    // Notify directivos y responsables — config fresca de Supabase
-    const _cfgFresh = await sbGetConfigById(isAdminCat(savedRec.cat) ? 2 : 1) || {};
-    const _catCfgFresh = (_cfgFresh.categorias||{})[savedRec.cat] || {};
-    const dirMails = (_catCfgFresh.directivos||[]).map(d=>d.mail).filter(Boolean);
-    const respMails = (_catCfgFresh.responsables||[]).map(d=>d.mail).filter(Boolean);
-    await sendEmail({to:[...respMails,...dirMails].filter(Boolean),
+    // Notify directivos and responsable
+    const dirMails = getDirectivos(savedRec.cat).map(d=>d.mail);
+    const respMail = getResponsableMail(savedRec.cat);
+    await sendEmail({to:[respMail,...dirMails].filter(Boolean),
       subject:`[Asturiano]  Tarea completada — ${savedRec.numero}: ${savedRec.sector}`,
-      body:`La tarea ${savedRec.numero} fue marcada como completada.\n\nSector: ${savedRec.sector}\nEjecutor: ${savedRec.ejecutorNombre||"—"}\nResolución: ${descripcion||"—"}`});
+      body:`La tarea ${savedRec.numero} fue marcada como completada.
+
+Sector: ${savedRec.sector}
+Ejecutor: ${savedRec.ejecutorNombre||"—"}
+Resolución: ${descripcion||"—"}`});
   };
 
   const notifResolucion = async () => {
     setSending(true);
     const appUrl=window.location.href.split("?")[0];
-    const _cfgFresh2 = await sbGetConfigById(isAdminCat(rec.cat) ? 2 : 1) || {};
-    const _catCfgFresh2 = (_cfgFresh2.categorias||{})[rec.cat] || {};
-    const _respMs=(_catCfgFresh2.responsables||[]).map(d=>d.mail).filter(Boolean);
-    const _dirMs=(_catCfgFresh2.directivos||[]).map(d=>d.mail).filter(Boolean);
-    await sendEmail({to:[..._respMs,..._dirMs].filter(Boolean),
+    const _respM=getResponsableMail(rec.cat);
+    const _dirMs=getDirectivos(rec.cat).map(d=>d.mail);
+    await sendEmail({to:[_respM,..._dirMs].filter(Boolean),
       subject:`[Asturiano]  Tarea completada — ${rec.numero}: ${rec.sector}`,
       body:`Tarea completada.\n\nNúmero: ${rec.numero}\nSector: ${rec.sector}\nEjecutor: ${rec.ejecutorNombre||"—"}\nDescripción: ${f.descripcionResolucion||"—"}\nCosto: ${f.presupuesto?"$"+Number(f.presupuesto).toLocaleString("es-AR"):"—"}\n${f.evidenciaUrl?"Evidencia: "+f.evidenciaUrl:""}`});
     setSending(false); alert("✅ Notificación enviada.");
@@ -1559,13 +1559,8 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs}) {
                 h('input',{type:"time",value:f.horaInicio||"",onChange:e=>set("horaInicio",e.target.value),style:aS()})),
               h('div',null,h('label',{style:{display:"block",fontSize:10,fontWeight:600,color:"#374151",marginBottom:4,textTransform:"uppercase"}},"Hora fin"),
                 h('input',{type:"time",value:f.horaFin||"",onChange:e=>set("horaFin",e.target.value),style:aS()})))),
-          h('div',{style:{marginBottom:14}},
-            h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:8,textTransform:"uppercase",letterSpacing:0.5}},"💰 Planilla de Presupuesto"),
-            h(PlanillaPresupuesto,{value:f.presupuestoDetalle,onChange:v=>{
-              set("presupuestoDetalle",v);
-              // Calcular total y guardarlo en presupuesto
-              try{const d=JSON.parse(v);const tot=d.filas.reduce((s,r)=>s+d.meses.reduce((ss,_,mi)=>ss+Number(r.valores[mi]||0),0),0);set("presupuesto",tot||"");}catch(e){}
-            }})),
+          h('div',{style:{marginBottom:14}},h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Presupuesto ($)"),h('input',{value:f.presupuesto,onChange:e=>set("presupuesto",e.target.value),placeholder:"0",type:"number",style:aS()})),
+          h('div',{style:{marginBottom:14}},h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Detalle del presupuesto"),h('textarea',{value:f.presupuestoDetalle,onChange:e=>set("presupuestoDetalle",e.target.value),rows:2,placeholder:"Conceptos...",style:{...aS(),resize:"vertical"}}))),
 
         // TAB ASIGNACIÓN
         tab==="asignacion" && h('div',null,
@@ -1711,7 +1706,7 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs}) {
         saveErr && h('div',{style:{background:"#fef2f2",border:"1.5px solid #fecaca",borderRadius:8,padding:"10px 14px",marginBottom:10,fontSize:13,color:"#dc2626"}},saveErr),
         h('div',{style:{display:"flex",gap:10,marginTop:4}},
           h('button',{onClick:onClose,style:{flex:1,padding:"12px",background:"#f1f5f9",color:"#64748b",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:600}},"Cancelar"),
-          h('button',{onClick:save,disabled:sending,style:{flex:2,padding:"12px",background:sending?"#94a3b8":"linear-gradient(135deg,#1a3a6b,#0f2347)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700}},sending?"Guardando...":"Guardar ✓"))));
+          h('button',{onClick:save,disabled:sending,style:{flex:2,padding:"12px",background:sending?"#94a3b8":"linear-gradient(135deg,#1a3a6b,#0f2347)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700}},sending?"Guardando...":"Guardar ✓")));
 }
 
 // ── PANEL CONFIG ───────────────────────────────────────────────────────────
@@ -3378,7 +3373,7 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
     mainTab==="reclamos" && view==="kanban" && h(Kanban,{recs:filtrados,onEdit:setModal}),
     mainTab==="proyectos" && h(ProyectosTab,{recs,onUpdate,ejecutores}),
     mainTab==="recurrencias" && h(RecurrenciasTab,{area,ejecutores,recs}),
-    modal && h(EditModal,{rec:modal,onClose:()=>setModal(null),onSave:async u=>{await onUpdate(u,modal);setModal(null);},ejecutores,onUpdateHijo:async u=>{await onUpdate(u,u);},recs}),
+    modal && h(EditModal,{key:modal.id,rec:modal,onClose:()=>setModal(null),onSave:async u=>{await onUpdate(u,modal);setModal(null);},ejecutores,onUpdateHijo:async u=>{await onUpdate(u,u);},recs}),
     showCfg && h(PanelConfig,{onClose:()=>setShowCfg(false),onSaveEjecutores:ejs=>{setEjecutores(ejs);setShowCfg(false);},area}),
     modalDup && h(ModalConsolidacion,{
       hijo: modalDup.hijo,
@@ -5025,6 +5020,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
+
 
 
 
