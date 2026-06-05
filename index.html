@@ -4147,415 +4147,465 @@ function SeccionSolicitantes({recs, ChartBox, COLORS, card, sectionTitle}) {
 
 function DashboardPanel({recs}) {
   const [filtroArea, setFiltroArea] = useState("todas");
-  const [filtroPeriodo, setFiltroPeriodo] = useState("30");
-  const [filtroEjecutor, setFiltroEjecutor] = useState("");
-  const [granularidad, setGranularidad] = useState("mes"); // "dia" | "semana" | "mes"
+  const [filtroPeriodo, setFiltroPeriodo] = useState("all");
+  const [filtroAreaTendencia, setFiltroAreaTendencia] = useState("todas");
+  const [granularidad, setGranularidad] = useState("mes");
   const [chartsReady, setChartsReady] = useState(false);
+  const chartRefs = {};
 
   useEffect(()=>{
-    if(window.Chart) { setChartsReady(true); return; }
-    const s = document.createElement('script');
-    s.src = "https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js";
-    s.onload = ()=>setChartsReady(true);
+    if(window.Chart){setChartsReady(true);return;}
+    const s=document.createElement('script');
+    s.src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js";
+    s.onload=()=>setChartsReady(true);
     document.head.appendChild(s);
   },[]);
 
-  // Filtrar recs según filtros
   const ahora = new Date();
-  const diasPeriodo = filtroPeriodo === "all" ? 9999 : Number(filtroPeriodo);
-  const fechaCorte = new Date(ahora.getTime() - diasPeriodo * 86400000);
+  const diasPeriodo = filtroPeriodo==="all"?99999:Number(filtroPeriodo);
+  const fechaCorte = new Date(ahora.getTime()-diasPeriodo*86400000);
 
-  const recsFilt = recs.filter(r => {
-    if(filtroArea !== "todas") {
-      const cats = filtroArea === "intendencia" ? CATS_INTENDENCIA : CATS_ADMINISTRACION;
+  const recsFilt = recs.filter(r=>{
+    if(filtroArea!=="todas"){
+      const cats=filtroArea==="intendencia"?CATS_INTENDENCIA:CATS_ADMINISTRACION;
       if(!cats.includes(r.cat)) return false;
     }
-    if(filtroEjecutor && r.ejecutorMail !== filtroEjecutor) return false;
-    return new Date(r.createdAt) >= fechaCorte;
+    return new Date(r.createdAt)>=fechaCorte;
   });
 
-  // Todos los ejecutores únicos
-  const ejecutoresUnicos = [...new Map(
-    recs.filter(r=>r.ejecutorMail&&r.ejecutorNombre).map(r=>[r.ejecutorMail,r.ejecutorNombre])
-  ).entries()].map(([mail,nombre])=>({mail,nombre}));
+  const CAT_LABEL={infraestructura:"Obras",mantenimiento:"Mantenimiento",limpieza:"Limpieza",preparacion:"Preparación",servicios:"Servicios",cuotas:"Cuotas"};
+  const MESES=["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+  const AREAS_TODAS=[
+    {id:"todas",label:"Todas"},
+    {id:"infraestructura",label:"Obras"},
+    {id:"mantenimiento",label:"Mantenimiento"},
+    {id:"limpieza",label:"Limpieza"},
+    {id:"preparacion",label:"Preparación"},
+    {id:"servicios",label:"Servicios"},
+    {id:"cuotas",label:"Cuotas"},
+  ];
 
-  const CAT_LABEL = {infraestructura:"Obras",mantenimiento:"Mantenimiento",limpieza:"Limpieza",preparacion:"Preparación",servicios:"Servicios",cuotas:"Cuotas"};
-  const MESES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+  // ── KPIs globales ──────────────────────────────────────────────────────
+  const completadas = recsFilt.filter(r=>r.estadoAvance==="completada");
+  const pctComp = recsFilt.length>0?Math.round(completadas.length/recsFilt.length*100):0;
 
-  // ── CÁLCULOS ──────────────────────────────────────────────────────────────
+  const diasAsignarArr = recsFilt.filter(r=>r.fechaAsignacion&&r.createdAt).map(r=>{
+    const d=(new Date(r.fechaAsignacion)-new Date(r.createdAt))/86400000;
+    return d>=0&&d<60?d:null;
+  }).filter(x=>x!==null);
+  const promAsignar = diasAsignarArr.length>0?(diasAsignarArr.reduce((a,b)=>a+b,0)/diasAsignarArr.length).toFixed(1):null;
 
-  // 1. Tickets por período (según granularidad)
-  const ticketsPorMes = (() => {
-    const map = {};
-    recsFilt.forEach(r => {
-      const d = new Date(r.createdAt);
-      let key, label;
-      if(granularidad === "dia") {
-        key = d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
-        label = String(d.getDate()).padStart(2,"0")+"/"+String(d.getMonth()+1).padStart(2,"0");
-      } else if(granularidad === "semana") {
-        // Número de semana ISO
-        const startOfYear = new Date(d.getFullYear(),0,1);
-        const weekNum = Math.ceil(((d-startOfYear)/86400000+startOfYear.getDay()+1)/7);
-        key = d.getFullYear()+"-W"+String(weekNum).padStart(2,"0");
-        label = "Sem "+weekNum+" '"+String(d.getFullYear()).slice(2);
-      } else {
-        key = d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0");
-        label = MESES[d.getMonth()]+" "+String(d.getFullYear()).slice(2);
-      }
-      if(!map[key]) map[key]={label,socio:0,empleado:0,otro:0};
-      const tipo = r.tipo==="socio"?"socio":r.tipo==="empleado"?"empleado":"otro";
-      map[key][tipo]++;
-    });
-    return Object.entries(map).sort((a,b)=>a[0]>b[0]?1:-1).map(([,v])=>v);
-  })();
+  const diasCompletarArr = completadas.filter(r=>r.fechaCompletada&&r.createdAt).map(r=>{
+    const d=(new Date(r.fechaCompletada)-new Date(r.createdAt))/86400000;
+    return d>=0&&d<365?d:null;
+  }).filter(x=>x!==null);
+  // fallback a updatedAt para recs sin fechaCompletada
+  const diasCompletarFallback = completadas.filter(r=>!r.fechaCompletada&&r.updatedAt&&r.createdAt).map(r=>{
+    const d=(new Date(r.updatedAt)-new Date(r.createdAt))/86400000;
+    return d>=0&&d<365?d:null;
+  }).filter(x=>x!==null);
+  const todosCompletarDias=[...diasCompletarArr,...diasCompletarFallback];
+  const promCompletar = todosCompletarDias.length>0?(todosCompletarDias.reduce((a,b)=>a+b,0)/todosCompletarDias.length).toFixed(1):null;
 
-  // 2. Top sectores
-  const topSectores = (() => {
-    const map = {};
-    recsFilt.forEach(r=>{ map[r.sector]=(map[r.sector]||0)+1; });
-    return Object.entries(map).sort((a,b)=>b[1]-a[1]).slice(0,8);
-  })();
+  const diasConfirmarArr = recsFilt.filter(r=>r.fechaAsignacion&&r.fechaConfirmacion).map(r=>{
+    const d=(new Date(r.fechaConfirmacion)-new Date(r.fechaAsignacion))/86400000;
+    return d>=0&&d<30?d:null;
+  }).filter(x=>x!==null);
+  const promConfirmar = diasConfirmarArr.length>0?(diasConfirmarArr.reduce((a,b)=>a+b,0)/diasConfirmarArr.length).toFixed(1):null;
 
-  // 3. Top mails solicitantes
-  const topMails = (() => {
-    const map = {};
-    recsFilt.filter(r=>r.email).forEach(r=>{ map[r.email]=(map[r.email]||0)+1; });
-    return Object.entries(map).sort((a,b)=>b[1]-a[1]).slice(0,8);
-  })();
-
-  // 4. Distribución por estado actual
-  const distEstados = (() => {
-    const map = {bajo_analisis:0, en_proceso:0, completada:0, esperando_validacion:0, sin_resolucion:0};
-    recsFilt.forEach(r=>{ if(map[r.estadoAvance]!==undefined) map[r.estadoAvance]++; else map["otro"]=(map["otro"]||0)+1; });
-    return map;
-  })();
-
-  // 5. Tiempo promedio de resolución por área
-  const tiempoPromPorArea = (() => {
-    const map = {};
-    recsFilt.filter(r=>r.estadoAvance==="completada"&&r.createdAt&&r.updatedAt).forEach(r=>{
-      const dias = (new Date(r.updatedAt)-new Date(r.createdAt))/86400000;
-      const label = CAT_LABEL[r.cat]||r.cat;
-      if(!map[label]) map[label]={sum:0,count:0};
-      map[label].sum+=dias; map[label].count++;
-    });
-    return Object.entries(map).map(([label,{sum,count}])=>({label,avg:Math.round(sum/count*10)/10}));
-  })();
-
-  // 6. % dentro de plazo
-  const PLAZOS_MAP = {urgente:1,alta:2,media:3,baja:5};
-  const enPlazo = recsFilt.filter(r=>r.estadoAvance==="completada").filter(r=>{
-    const plazo = PLAZOS_MAP[r.criticidad||r.pri||"media"]||3;
-    const dias = (new Date(r.updatedAt)-new Date(r.createdAt))/86400000;
-    return dias <= plazo;
+  const demoradas = recsFilt.filter(r=>{
+    if(["completada","consolidada","vinculado_proyecto"].includes(r.estadoAvance)) return false;
+    if(!r.fechaCierre) return false;
+    return new Date(r.fechaCierre)<ahora;
   }).length;
-  const completadas = recsFilt.filter(r=>r.estadoAvance==="completada").length;
 
-  // 7. Calificación promedio por área
-  const califPorArea = (() => {
-    const map = {};
-    recsFilt.filter(r=>r.calificacion).forEach(r=>{
-      const label = CAT_LABEL[r.cat]||r.cat;
-      if(!map[label]) map[label]={sum:0,count:0};
-      map[label].sum+=r.calificacion; map[label].count++;
-    });
-    return Object.entries(map).map(([label,{sum,count}])=>({label,avg:Math.round(sum/count*10)/10,count}));
-  })();
+  const sinAsignar = recsFilt.filter(r=>
+    !["completada","consolidada","vinculado_proyecto"].includes(r.estadoAvance)&&
+    (!r.ejecutorMail||r.ejecutorMail.trim()==="")
+  ).length;
 
-  // 8. Tasa de reapertura
   const reabiertas = recsFilt.filter(r=>r.reabierta).length;
+  const tasaReapertura = completadas.length>0?Math.round(reabiertas/completadas.length*100):0;
 
-  // 9. Tasa de calificación
-  const califTasaPorArea = (() => {
-    const map = {};
-    recsFilt.filter(r=>r.estadoAvance==="completada").forEach(r=>{
-      const label = CAT_LABEL[r.cat]||r.cat;
-      if(!map[label]) map[label]={total:0,calificados:0};
-      map[label].total++;
-      if(r.calificacion) map[label].calificados++;
+  // ── Por área ───────────────────────────────────────────────────────────
+  const CATS_ALL = [...CATS_INTENDENCIA,...CATS_ADMINISTRACION];
+
+  const porArea = CATS_ALL.map(cat=>{
+    const label=CAT_LABEL[cat]||cat;
+    const rArea=recsFilt.filter(r=>r.cat===cat);
+    const compArea=rArea.filter(r=>r.estadoAvance==="completada");
+    const pct=rArea.length>0?Math.round(compArea.length/rArea.length*100):null;
+
+    // tiempos
+    const asigArr=rArea.filter(r=>r.fechaAsignacion&&r.createdAt).map(r=>{
+      const d=(new Date(r.fechaAsignacion)-new Date(r.createdAt))/86400000;
+      return d>=0&&d<60?d:null;
+    }).filter(x=>x!==null);
+    const tAsig=asigArr.length>0?(asigArr.reduce((a,b)=>a+b,0)/asigArr.length).toFixed(1):null;
+
+    const confirArr=rArea.filter(r=>r.fechaAsignacion&&r.fechaConfirmacion).map(r=>{
+      const d=(new Date(r.fechaConfirmacion)-new Date(r.fechaAsignacion))/86400000;
+      return d>=0&&d<30?d:null;
+    }).filter(x=>x!==null);
+    const tConfirm=confirArr.length>0?(confirArr.reduce((a,b)=>a+b,0)/confirArr.length).toFixed(1):null;
+
+    const ejArr=compArea.filter(r=>(r.fechaCompletada||r.updatedAt)&&r.fechaConfirmacion).map(r=>{
+      const end=r.fechaCompletada||r.updatedAt;
+      const d=(new Date(end)-new Date(r.fechaConfirmacion))/86400000;
+      return d>=0&&d<365?d:null;
+    }).filter(x=>x!==null);
+    const tEj=ejArr.length>0?(ejArr.reduce((a,b)=>a+b,0)/ejArr.length).toFixed(1):null;
+
+    const totalArr=compArea.filter(r=>(r.fechaCompletada||r.updatedAt)&&r.createdAt).map(r=>{
+      const end=r.fechaCompletada||r.updatedAt;
+      const d=(new Date(end)-new Date(r.createdAt))/86400000;
+      return d>=0&&d<365?d:null;
+    }).filter(x=>x!==null);
+    const tTotal=totalArr.length>0?(totalArr.reduce((a,b)=>a+b,0)/totalArr.length).toFixed(1):null;
+
+    // calificacion
+    const conCalif=compArea.filter(r=>r.calificacion);
+    const promCalif=conCalif.length>0?(conCalif.reduce((a,r)=>a+r.calificacion,0)/conCalif.length).toFixed(1):null;
+
+    // reapertura
+    const reabArea=rArea.filter(r=>r.reabierta).length;
+    const tasaReapArea=compArea.length>0?Math.round(reabArea/compArea.length*100):null;
+
+    return {cat,label,total:rArea.length,completadas:compArea.length,pct,tAsig,tConfirm,tEj,tTotal,promCalif,califCount:conCalif.length,tasaReap:tasaReapArea,reabiertas:reabArea};
+  }).filter(a=>a.total>0);
+
+  // ── Tendencia ──────────────────────────────────────────────────────────
+  const tendenciaData = (()=>{
+    const recsParaTendencia = filtroAreaTendencia==="todas"
+      ? recs
+      : recs.filter(r=>r.cat===filtroAreaTendencia);
+
+    const mapNuevas={};
+    recsParaTendencia.forEach(r=>{
+      const d=new Date(r.createdAt);
+      let key,label;
+      if(granularidad==="mes"){
+        key=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0");
+        label=MESES[d.getMonth()]+" '"+String(d.getFullYear()).slice(2);
+      } else {
+        const startOfYear=new Date(d.getFullYear(),0,1);
+        const wk=Math.ceil(((d-startOfYear)/86400000+startOfYear.getDay()+1)/7);
+        key=d.getFullYear()+"-W"+String(wk).padStart(2,"0");
+        label="Sem "+wk+" '"+String(d.getFullYear()).slice(2);
+      }
+      if(!mapNuevas[key]) mapNuevas[key]={label,nuevas:0,completadasDelPeriodo:0};
+      mapNuevas[key].nuevas++;
     });
-    return Object.entries(map).map(([label,{total,calificados}])=>({label,tasa:Math.round(calificados/total*100),total,calificados}));
+
+    // completadas: usar fechaCompletada o updatedAt, contarlas en el período en que se completaron
+    recsParaTendencia.filter(r=>r.estadoAvance==="completada").forEach(r=>{
+      const fechaC=r.fechaCompletada||r.updatedAt;
+      if(!fechaC) return;
+      const d=new Date(fechaC);
+      let key;
+      if(granularidad==="mes"){
+        key=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0");
+      } else {
+        const startOfYear=new Date(d.getFullYear(),0,1);
+        const wk=Math.ceil(((d-startOfYear)/86400000+startOfYear.getDay()+1)/7);
+        key=d.getFullYear()+"-W"+String(wk).padStart(2,"0");
+      }
+      if(mapNuevas[key]) mapNuevas[key].completadasDelPeriodo++;
+    });
+
+    const entries=Object.entries(mapNuevas).sort((a,b)=>a[0]>b[0]?1:-1);
+    // últimos 18 períodos máx
+    const slice=entries.slice(-18);
+    return {
+      labels:slice.map(([,v])=>v.label),
+      nuevas:slice.map(([,v])=>v.nuevas),
+      completadas:slice.map(([,v])=>v.completadasDelPeriodo),
+      tasas:slice.map(([,v])=>v.nuevas>0?Math.round(v.completadasDelPeriodo/v.nuevas*100):0),
+    };
   })();
 
-  // 10. Ranking ejecutores
-  const rankingEjecutores = (() => {
-    const map = {};
-    recsFilt.filter(r=>r.ejecutorNombre).forEach(r=>{
-      if(!map[r.ejecutorNombre]) map[r.ejecutorNombre]={completados:0,sumCalif:0,countCalif:0,rechazos:0};
-      if(r.estadoAvance==="completada") map[r.ejecutorNombre].completados++;
-      if(r.calificacion) { map[r.ejecutorNombre].sumCalif+=r.calificacion; map[r.ejecutorNombre].countCalif++; }
-      if(r.ejecutorRechazado) map[r.ejecutorNombre].rechazos++;
-    });
-    return Object.entries(map).map(([nombre,d])=>({
-      nombre, completados:d.completados,
-      calificacion: d.countCalif>0 ? Math.round(d.sumCalif/d.countCalif*10)/10 : null,
-      rechazos: d.rechazos
-    })).sort((a,b)=>b.completados-a.completados);
+  // Insight tendencia
+  const insightTendencia = (()=>{
+    const tasas=tendenciaData.tasas;
+    if(tasas.length<3) return null;
+    const recientes=tasas.slice(-3);
+    const anteriores=tasas.slice(-6,-3);
+    if(!anteriores.length) return null;
+    const promRec=Math.round(recientes.reduce((a,b)=>a+b,0)/recientes.length);
+    const promAnt=Math.round(anteriores.reduce((a,b)=>a+b,0)/anteriores.length);
+    const diff=promRec-promAnt;
+    if(Math.abs(diff)<3) return {texto:"La tasa de resolución se mantuvo estable ("+promRec+"% en los últimos 3 períodos).",color:"#185FA5",bg:"#E6F1FB"};
+    if(diff>0) return {texto:"La tasa de resolución mejoró "+diff+" puntos en los últimos 3 períodos ("+promAnt+"% → "+promRec+"%).",color:"#3B6D11",bg:"#EAF3DE"};
+    return {texto:"La tasa de resolución cayó "+Math.abs(diff)+" puntos en los últimos 3 períodos ("+promAnt+"% → "+promRec+"%). Revisar acumulación.",color:"#A32D2D",bg:"#FCEBEB"};
   })();
 
-  // 11. Ranking responsables (por tiempo promedio y tasa plazo)
-  const rankingResponsables = (() => {
-    const map = {};
-    recsFilt.filter(r=>r.estadoAvance==="completada").forEach(r=>{
-      const resp = (()=>{
-        const cc = getCatCfg(r.cat);
-        return (cc.responsables||[])[0]?.nombre||"—";
-      })();
-      if(!map[resp]) map[resp]={tickets:0,sumDias:0,enPlazo:0};
-      const dias = (new Date(r.updatedAt)-new Date(r.createdAt))/86400000;
-      const plazo = PLAZOS_MAP[r.criticidad||r.pri||"media"]||3;
-      map[resp].tickets++;
-      map[resp].sumDias+=dias;
-      if(dias<=plazo) map[resp].enPlazo++;
-    });
-    return Object.entries(map).map(([nombre,d])=>({
-      nombre, tickets:d.tickets,
-      avgDias: Math.round(d.sumDias/d.tickets*10)/10,
-      tasaPlazo: Math.round(d.enPlazo/d.tickets*100)
-    })).sort((a,b)=>b.tickets-a.tickets);
+  // Insight cuello de botella
+  const insightCuello = (()=>{
+    const etapas=[
+      {label:"Creación → asignación",val:promAsignar?Number(promAsignar):null},
+      {label:"Asignación → confirmación",val:promConfirmar?Number(promConfirmar):null},
+    ];
+    const validas=etapas.filter(e=>e.val!==null);
+    if(!validas.length) return null;
+    const max=validas.reduce((a,b)=>b.val>a.val?b:a);
+    return "El cuello de botella principal es «"+max.label+"» ("+max.val+"d promedio).";
   })();
 
-  // ── COMPONENTE GRÁFICO ────────────────────────────────────────────────────
-  const ChartBox = ({id, type, data, options, height=220}) => {
-    const ref = React.useRef(null);
-    const chartRef = React.useRef(null);
+  // ── ChartBox ──────────────────────────────────────────────────────────
+  function ChartBox({id,type,data,options,height}){
+    const ref=useRef(null);
+    const chartRef=useRef(null);
     useEffect(()=>{
       if(!chartsReady||!ref.current) return;
       if(chartRef.current) chartRef.current.destroy();
-      chartRef.current = new window.Chart(ref.current, {type, data, options:{
-        responsive:true, maintainAspectRatio:false,
-        plugins:{legend:{labels:{font:{family:"DM Sans, sans-serif",size:11},color:"#64748b"}},
-          tooltip:{titleFont:{family:"DM Sans"},bodyFont:{family:"DM Sans"}}},
+      chartRef.current=new window.Chart(ref.current,{type,data,options:{
+        responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{display:false},tooltip:{titleFont:{size:12},bodyFont:{size:11}}},
         ...options
       }});
-      return ()=>{ if(chartRef.current) chartRef.current.destroy(); };
-    },[chartsReady, JSON.stringify(data)]);
-    return h('div',{style:{position:"relative",height:height+"px",width:"100%"}},
-      h('canvas',{ref}));
-  };
+      return ()=>{if(chartRef.current) chartRef.current.destroy();};
+    },[chartsReady,JSON.stringify(data)]);
+    return h('div',{style:{position:"relative",height:(height||220)+"px",width:"100%"}},
+      h('canvas',{ref,role:"img","aria-label":"Gráfico"},"Gráfico"));
+  }
 
-  // ── ESTILOS ───────────────────────────────────────────────────────────────
-  const card = (extra={}) => ({background:"white",borderRadius:16,padding:20,boxShadow:"0 2px 8px rgba(0,0,0,0.06)",border:"1px solid #f1f5f9",...extra});
-  const sectionTitle = (txt, sub) => h('div',{style:{marginBottom:20}},
-    h('div',{style:{fontSize:18,fontWeight:800,color:"#1a3a6b"}}),
-    h('div',{style:{fontSize:18,fontWeight:800,color:"#1a3a6b"}},txt),
-    sub && h('div',{style:{fontSize:12,color:"#94a3b8",marginTop:2}},sub));
-  const kpiCard = (label,value,color,sub) => h('div',{style:{...card(),textAlign:"center",padding:"20px 16px"}},
-    h('div',{style:{fontSize:32,fontWeight:900,color}}),
-    h('div',{style:{fontSize:32,fontWeight:900,color}},value),
-    h('div',{style:{fontSize:12,color:"#64748b",marginTop:4,fontWeight:600}},label),
-    sub && h('div',{style:{fontSize:11,color:"#94a3b8",marginTop:2}},sub));
-
-  const COLORS = ["#3b82f6","#8b5cf6","#22c55e","#f97316","#ef4444","#eab308","#06b6d4","#ec4899"];
+  // ── Estilos helpers ───────────────────────────────────────────────────
+  const card=(extra)=>Object.assign({background:"white",borderRadius:14,border:"1px solid #f1f5f9",padding:"16px 18px"},extra||{});
+  const secLabel=(txt)=>h('div',{style:{fontSize:11,fontWeight:600,color:"#64748b",textTransform:"uppercase",letterSpacing:"1px",margin:"20px 0 10px"}},txt);
+  const colorTiempo=(v)=>v===null?"#94a3b8":Number(v)<=2?"#3B6D11":Number(v)<=5?"#BA7517":"#A32D2D";
+  const colorPct=(v)=>v===null?"#94a3b8":v>=70?"#3B6D11":v>=50?"#BA7517":"#A32D2D";
+  const colorCalif=(v)=>v===null?"#94a3b8":Number(v)>=4?"#3B6D11":Number(v)>=3?"#BA7517":"#A32D2D";
+  const colorReap=(v)=>v===null?"#94a3b8":v<=5?"#3B6D11":v<=15?"#BA7517":"#A32D2D";
+  const fmt1=(v)=>v!==null&&v!==undefined?v+"d":"—";
+  const fmtPct=(v)=>v!==null&&v!==undefined?v+"%":"—";
 
   if(!chartsReady) return h('div',{style:{padding:60,textAlign:"center",color:"#64748b"}},"Cargando dashboard...");
 
-  return h('div',{style:{minHeight:"100vh",background:"#f1f5f9",paddingBottom:80}},
-    // Header
-    h('div',{style:{background:"linear-gradient(135deg,#1a3a6b,#0f2347)",padding:"24px 28px 20px"}},
-      h('div',{style:{color:"#a8c4e8",fontSize:11,letterSpacing:2,textTransform:"uppercase",marginBottom:4}},"Centro Asturiano de Buenos Aires"),
-      h('div',{style:{color:"white",fontSize:24,fontWeight:800,marginBottom:16}},"Dashboard de Métricas"),
-      // Filtros
-      h('div',{style:{display:"flex",gap:10,flexWrap:"wrap"}},
+  return h('div',{style:{background:"#f1f5f9",minHeight:"100vh",paddingBottom:60}},
+
+    // ── Header ──────────────────────────────────────────────────────────
+    h('div',{style:{background:"#1a3a6b",padding:"20px 24px 16px"}},
+      h('div',{style:{color:"rgba(168,196,232,0.8)",fontSize:11,letterSpacing:2,textTransform:"uppercase",marginBottom:4}},"Centro Asturiano de Buenos Aires"),
+      h('div',{style:{color:"white",fontSize:22,fontWeight:500,marginBottom:14}},"Dashboard de gestión"),
+      h('div',{style:{display:"flex",gap:8,flexWrap:"wrap"}},
         h('select',{value:filtroArea,onChange:e=>setFiltroArea(e.target.value),
-          style:{padding:"8px 12px",borderRadius:8,border:"none",background:"rgba(255,255,255,0.15)",color:"white",fontSize:13,cursor:"pointer"}},
+          style:{background:"rgba(255,255,255,0.12)",border:"0.5px solid rgba(255,255,255,0.2)",color:"white",borderRadius:8,padding:"6px 10px",fontSize:12}},
           h('option',{value:"todas",style:{color:"#1a3a6b"}},"Todas las áreas"),
           h('option',{value:"intendencia",style:{color:"#1a3a6b"}},"Intendencia"),
           h('option',{value:"administracion",style:{color:"#1a3a6b"}},"Administración")),
         h('select',{value:filtroPeriodo,onChange:e=>setFiltroPeriodo(e.target.value),
-          style:{padding:"8px 12px",borderRadius:8,border:"none",background:"rgba(255,255,255,0.15)",color:"white",fontSize:13,cursor:"pointer"}},
-          h('option',{value:"7",style:{color:"#1a3a6b"}},"Últimos 7 días"),
+          style:{background:"rgba(255,255,255,0.12)",border:"0.5px solid rgba(255,255,255,0.2)",color:"white",borderRadius:8,padding:"6px 10px",fontSize:12}},
+          h('option',{value:"all",style:{color:"#1a3a6b"}},"Todo el historial"),
           h('option',{value:"30",style:{color:"#1a3a6b"}},"Últimos 30 días"),
           h('option',{value:"90",style:{color:"#1a3a6b"}},"Últimos 3 meses"),
           h('option',{value:"180",style:{color:"#1a3a6b"}},"Últimos 6 meses"),
-          h('option',{value:"365",style:{color:"#1a3a6b"}},"Último año"),
-          h('option',{value:"all",style:{color:"#1a3a6b"}},"Todo el historial")),
-        h('select',{value:filtroEjecutor,onChange:e=>setFiltroEjecutor(e.target.value),
-          style:{padding:"8px 12px",borderRadius:8,border:"none",background:"rgba(255,255,255,0.15)",color:"white",fontSize:13,cursor:"pointer"}},
-          h('option',{value:"",style:{color:"#1a3a6b"}},"Todos los ejecutores"),
-          ...ejecutoresUnicos.map(e=>h('option',{key:e.mail,value:e.mail,style:{color:"#1a3a6b"}},e.nombre))),
-        h('div',{style:{display:"flex",background:"rgba(255,255,255,0.1)",borderRadius:8,padding:2}},
-          ...["dia","semana","mes"].map(g=>
-            h('button',{key:g,onClick:()=>setGranularidad(g),
-              style:{padding:"6px 14px",borderRadius:6,border:"none",cursor:"pointer",fontSize:12,fontWeight:600,
-                background:granularidad===g?"white":"transparent",
-                color:granularidad===g?"#1a3a6b":"rgba(255,255,255,0.7)",
-                transition:"all 0.15s"}},
-              g==="dia"?"Día":g==="semana"?"Semana":"Mes"))))),
+          h('option',{value:"365",style:{color:"#1a3a6b"}},"Último año")))),
 
-    h('div',{style:{padding:"24px 24px 0"}},
+    h('div',{style:{padding:"0 20px"}},
 
-      // ── KPIs RÁPIDOS ────────────────────────────────────────────────────
-      h('div',{style:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:12,marginBottom:28}},
-        kpiCard("Total tickets", recsFilt.length, "#3b82f6"),
-        kpiCard("Completados", completadas, "#22c55e", completadas>0?Math.round(completadas/recsFilt.length*100)+"% del total":""),
-        kpiCard("En curso", recsFilt.filter(r=>["bajo_analisis","en_proceso"].includes(r.estadoAvance)).length, "#f97316"),
-        kpiCard("Dentro de plazo", completadas>0?Math.round(enPlazo/completadas*100)+"%":"—", "#8b5cf6"),
-        kpiCard("Reabiertos", reabiertas, "#ef4444", completadas>0?Math.round(reabiertas/completadas*100)+"% tasa":"")),
+      // ── KPIs ───────────────────────────────────────────────────────────
+      secLabel("Resumen ejecutivo"),
+      h('div',{style:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:10,marginBottom:20}},
+        ...[
+          {label:"Total solicitudes",val:recsFilt.length,color:"#185FA5",sub:null},
+          {label:"Completadas",val:pctComp+"%",color:colorPct(pctComp),sub:completadas.length+" de "+recsFilt.length},
+          {label:"Días para asignar",val:promAsignar?promAsignar+"d":"—",color:colorTiempo(promAsignar),sub:"promedio"},
+          {label:"Días para completar",val:promCompletar?promCompletar+"d":"—",color:colorTiempo(promCompletar?Number(promCompletar):null),sub:"promedio"},
+          {label:"Demoradas",val:demoradas,color:demoradas>0?"#A32D2D":"#3B6D11",sub:"fuera de plazo"},
+          {label:"Sin asignar",val:sinAsignar,color:sinAsignar>0?"#BA7517":"#3B6D11",sub:"requieren acción"},
+          {label:"Tasa reapertura",val:tasaReapertura+"%",color:colorReap(tasaReapertura),sub:reabiertas+" reabiertos"},
+        ].map(k=>h('div',{key:k.label,style:{background:"white",borderRadius:10,border:"0.5px solid #e2e8f0",padding:"14px 16px"}},
+          h('div',{style:{fontSize:24,fontWeight:500,color:k.color}},k.val),
+          h('div',{style:{fontSize:11,color:"#64748b",marginTop:3}},k.label),
+          k.sub&&h('div',{style:{fontSize:10,color:"#94a3b8",marginTop:2}},k.sub)))),
 
-      // ── GRUPO 1: VOLUMEN ─────────────────────────────────────────────────
-      sectionTitle("Volumen de solicitudes"),
-      h('div',{style:{...card(),marginBottom:20}},
-        h('div',{style:{fontSize:14,fontWeight:700,color:"#1a3a6b",marginBottom:16}},
-          "Tickets por "+(granularidad==="dia"?"día":granularidad==="semana"?"semana":"mes")+" por tipo de solicitante"),
-        h(ChartBox,{id:"vol-mes",type:"bar",height:240,
-          data:{
-            labels: ticketsPorMes.map(m=>m.label),
-            datasets:[
-              {label:"Socio",data:ticketsPorMes.map(m=>m.socio),backgroundColor:"#3b82f6",borderRadius:4},
-              {label:"Empleado",data:ticketsPorMes.map(m=>m.empleado),backgroundColor:"#8b5cf6",borderRadius:4},
-              {label:"Otro",data:ticketsPorMes.map(m=>m.otro),backgroundColor:"#94a3b8",borderRadius:4}
-            ]},
-          options:{scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true,grid:{color:"#f1f5f9"}}},plugins:{legend:{position:"top"}}}})),
+      // ── SECCIÓN 1: Embudo de tiempos ──────────────────────────────────
+      secLabel("1. Embudo de tiempos — dónde se pierde el tiempo"),
+      h('div',{style:card({marginBottom:12})},
+        h('div',{style:{fontSize:13,fontWeight:500,color:"#1a3a6b",marginBottom:2}},"Tiempo promedio por etapa (días) — solicitudes completadas"),
+        h('div',{style:{fontSize:11,color:"#94a3b8",marginBottom:16}},"Solo incluye solicitudes con "+fechaCompletada+" o updatedAt. Cuanto menor el valor, mejor."),
 
-      h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:20}},
-        h('div',{style:card()},
-          h('div',{style:{fontSize:14,fontWeight:700,color:"#1a3a6b",marginBottom:16}},"Top sectores con más problemas"),
-          h(ChartBox,{id:"top-sectores",type:"bar",height:220,
-            data:{
-              labels:topSectores.map(([s])=>s.length>20?s.slice(0,18)+"...":s),
-              datasets:[{label:"Tickets",data:topSectores.map(([,n])=>n),
-                backgroundColor:topSectores.map((_,i)=>COLORS[i%COLORS.length]),borderRadius:4}]},
-            options:{indexAxis:"y",scales:{x:{grid:{color:"#f1f5f9"}},y:{grid:{display:false}}},plugins:{legend:{display:false}}}})),
-        h('div',{style:card()},
-          h('div',{style:{fontSize:14,fontWeight:700,color:"#1a3a6b",marginBottom:16}},"Distribución por estado actual"),
-          h(ChartBox,{id:"dist-estados",type:"doughnut",height:220,
-            data:{
-              labels:["Bajo análisis","En proceso","Completada","Esp. validación","Sin resolución"],
-              datasets:[{data:[distEstados.bajo_analisis,distEstados.en_proceso,distEstados.completada,distEstados.esperando_validacion,distEstados.sin_resolucion],
-                backgroundColor:["#94a3b8","#3b82f6","#22c55e","#8b5cf6","#f97316"],borderWidth:2,borderColor:"white"}]},
-            options:{plugins:{legend:{position:"bottom"}}}}))  ),
+        // Cascada visual
+        h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr auto 1fr",gap:4,alignItems:"flex-end",marginBottom:12}},
+          ...[
+            {label:"Creación → asignar",val:promAsignar,color:"#BA7517",note:"cuello"},
+            {label:"Asignar → confirmar",val:promConfirmar,color:"#534AB7",note:""},
+            {label:"Confirmar → completar",val:promCompletar&&promAsignar&&promConfirmar?(Number(promCompletar)-Number(promAsignar)-Number(promConfirmar)).toFixed(1):null,color:"#185FA5",note:""},
+            {label:"Total end-to-end",val:promCompletar,color:"#1a3a6b",note:"total"},
+          ].map((etapa,i)=>{
+            const maxVal=promCompletar?Number(promCompletar):10;
+            const h_pct=etapa.val?Math.max(15,Math.round(Number(etapa.val)/maxVal*100)):15;
+            return h('div',{key:i,style:{display:"flex",flexDirection:"column",alignItems:"center"}},
+              h('div',{style:{fontSize:10,fontWeight:500,color:colorTiempo(etapa.val?Number(etapa.val):null),marginBottom:3}},etapa.val?etapa.val+"d":"—"),
+              h('div',{style:{width:"100%",height:h_pct+"px",background:etapa.color,borderRadius:"4px 4px 0 0",opacity:0.85,minHeight:12}}),
+              h('div',{style:{fontSize:9,color:"#64748b",marginTop:5,textAlign:"center",lineHeight:1.3}},etapa.label));
+          })),
 
-      // Top mails solicitantes
-      h('div',{style:{...card(),marginBottom:28}},
-        h('div',{style:{fontSize:14,fontWeight:700,color:"#1a3a6b",marginBottom:14}},"Top solicitantes por volumen de tickets"),
+        insightCuello&&h('div',{style:{background:"#fef9c3",borderRadius:8,padding:"8px 12px",fontSize:11,color:"#713f12",marginBottom:14}},insightCuello),
+
+        // Tabla por área
+        h('div',{style:{fontSize:12,fontWeight:500,color:"#374151",marginBottom:8}},"Desglose por área"),
         h('div',{style:{overflowX:"auto"}},
-          h('table',{style:{width:"100%",borderCollapse:"collapse",fontSize:13}},
-            h('thead',null,h('tr',null,
-              h('th',{style:{padding:"8px 12px",textAlign:"left",color:"#64748b",fontWeight:600,fontSize:11,borderBottom:"2px solid #f1f5f9"}},"#"),
-              h('th',{style:{padding:"8px 12px",textAlign:"left",color:"#64748b",fontWeight:600,fontSize:11,borderBottom:"2px solid #f1f5f9"}},"Email"),
-              h('th',{style:{padding:"8px 12px",textAlign:"center",color:"#64748b",fontWeight:600,fontSize:11,borderBottom:"2px solid #f1f5f9"}},"Tickets"),
-              h('th',{style:{padding:"8px 12px",textAlign:"left",color:"#64748b",fontWeight:600,fontSize:11,borderBottom:"2px solid #f1f5f9"}},""))),
-            h('tbody',null,...topMails.map(([mail,count],i)=>
-              h('tr',{key:i,style:{borderBottom:"1px solid #f8fafc",background:i%2===0?"white":"#fafafa"}},
-                h('td',{style:{padding:"10px 12px",fontWeight:700,color:"#64748b"}},i+1),
-                h('td',{style:{padding:"10px 12px",color:"#1e293b",fontWeight:500}},mail),
-                h('td',{style:{padding:"10px 12px",textAlign:"center"}},
-                  h('span',{style:{background:"#eff6ff",color:"#3b82f6",fontWeight:700,padding:"3px 10px",borderRadius:20,fontSize:12}},count)),
-                h('td',{style:{padding:"10px 12px"}},
-                  h('div',{style:{background:"#e2e8f0",borderRadius:4,height:6,width:"100%"}},
-                    h('div',{style:{background:"#3b82f6",borderRadius:4,height:6,width:Math.round(count/topMails[0][1]*100)+"%"}}))))))))),
+          h('table',{style:{width:"100%",borderCollapse:"collapse",fontSize:12}},
+            h('thead',null,h('tr',{style:{background:"#f8fafc"}},
+              ...["Área","Creación → asignar","Asignar → confirmar","Confirmar → completar","Total end-to-end"].map(col=>
+                h('th',{key:col,style:{padding:"8px 10px",textAlign:"left",color:"#64748b",fontWeight:500,fontSize:11,borderBottom:"0.5px solid #e2e8f0"}},col)))),
+            h('tbody',null,
+              ...porArea.map((a,i)=>h('tr',{key:i,style:{borderBottom:"0.5px solid #f1f5f9",background:i%2===0?"white":"#fafafa"}},
+                h('td',{style:{padding:"8px 10px",fontWeight:500,color:"#1e293b"}},a.label),
+                h('td',{style:{padding:"8px 10px",color:colorTiempo(a.tAsig?Number(a.tAsig):null),fontWeight:500}},fmt1(a.tAsig)),
+                h('td',{style:{padding:"8px 10px",color:colorTiempo(a.tConfirm?Number(a.tConfirm):null),fontWeight:500}},fmt1(a.tConfirm)),
+                h('td',{style:{padding:"8px 10px",color:colorTiempo(a.tEj?Number(a.tEj):null),fontWeight:500}},fmt1(a.tEj)),
+                h('td',{style:{padding:"8px 10px",fontWeight:600,color:colorTiempo(a.tTotal?Number(a.tTotal):null)}},fmt1(a.tTotal)))),
+              h('tr',{style:{borderTop:"1.5px solid #e2e8f0",background:"#f8fafc"}},
+                h('td',{style:{padding:"8px 10px",fontWeight:600,color:"#1a3a6b"}},"Promedio total"),
+                h('td',{style:{padding:"8px 10px",fontWeight:600,color:colorTiempo(promAsignar?Number(promAsignar):null)}},fmt1(promAsignar)),
+                h('td',{style:{padding:"8px 10px",fontWeight:600,color:colorTiempo(promConfirmar?Number(promConfirmar):null)}},fmt1(promConfirmar)),
+                h('td',{style:{padding:"8px 10px",fontWeight:600,color:"#94a3b8"}},"—"),
+                h('td',{style:{padding:"8px 10px",fontWeight:700,color:colorTiempo(promCompletar?Number(promCompletar):null)}},fmt1(promCompletar)))))),
 
-      // ── GRUPO 2: VELOCIDAD ───────────────────────────────────────────────
-      sectionTitle("Velocidad de resolución"),
-      h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:28}},
-        h('div',{style:card()},
-          h('div',{style:{fontSize:14,fontWeight:700,color:"#1a3a6b",marginBottom:16}},"Tiempo promedio de resolución (días)"),
-          h(ChartBox,{id:"tiempo-area",type:"bar",height:220,
-            data:{
-              labels:tiempoPromPorArea.map(x=>x.label),
-              datasets:[{label:"Días promedio",data:tiempoPromPorArea.map(x=>x.avg),
-                backgroundColor:tiempoPromPorArea.map((_,i)=>COLORS[i%COLORS.length]),borderRadius:6}]},
-            options:{scales:{x:{grid:{display:false}},y:{grid:{color:"#f1f5f9"}}},plugins:{legend:{display:false}}}})),
-        h('div',{style:card()},
-          h('div',{style:{fontSize:14,fontWeight:700,color:"#1a3a6b",marginBottom:16}},"Cumplimiento de plazos"),
-          h(ChartBox,{id:"plazo",type:"doughnut",height:220,
-            data:{
-              labels:["Dentro del plazo","Fuera de plazo"],
-              datasets:[{data:[enPlazo, completadas-enPlazo],
-                backgroundColor:["#22c55e","#ef4444"],borderWidth:2,borderColor:"white"}]},
-            options:{plugins:{legend:{position:"bottom"}}}}))),
+        h('div',{style:{fontSize:10,color:"#94a3b8",marginTop:8}},"Verde ≤2d · Naranja 2–5d · Rojo >5d")),
 
-      // ── GRUPO 3: CALIDAD ─────────────────────────────────────────────────
-      sectionTitle("Calidad de resolución"),
-      h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:20}},
-        h('div',{style:card()},
-          h('div',{style:{fontSize:14,fontWeight:700,color:"#1a3a6b",marginBottom:16}},"Calificación promedio por área (1-5)"),
-          califPorArea.length === 0
-            ? h('div',{style:{textAlign:"center",padding:40,color:"#94a3b8",fontSize:13}},"Sin calificaciones en el período")
-            : h(ChartBox,{id:"calif-area",type:"bar",height:220,
-                data:{
-                  labels:califPorArea.map(x=>x.label),
-                  datasets:[{label:"Calificación",data:califPorArea.map(x=>x.avg),
-                    backgroundColor:califPorArea.map(x=>x.avg>=4?"#22c55e":x.avg>=3?"#eab308":"#ef4444"),borderRadius:6}]},
-                options:{scales:{x:{grid:{display:false}},y:{min:0,max:5,grid:{color:"#f1f5f9"}}},plugins:{legend:{display:false}}}})),
-        h('div',{style:card()},
-          h('div',{style:{fontSize:14,fontWeight:700,color:"#1a3a6b",marginBottom:16}},"Tasa de calificación por área"),
-          califTasaPorArea.length === 0
-            ? h('div',{style:{textAlign:"center",padding:40,color:"#94a3b8",fontSize:13}},"Sin datos en el período")
-            : h(ChartBox,{id:"tasa-calif",type:"bar",height:220,
-                data:{
-                  labels:califTasaPorArea.map(x=>x.label),
-                  datasets:[
-                    {label:"Calificaron",data:califTasaPorArea.map(x=>x.calificados),backgroundColor:"#22c55e",borderRadius:4},
-                    {label:"No calificaron",data:califTasaPorArea.map(x=>x.total-x.calificados),backgroundColor:"#e2e8f0",borderRadius:4}
-                  ]},
-                options:{scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true,grid:{color:"#f1f5f9"}}},plugins:{legend:{position:"top"}}}}))),
+      // ── SECCIÓN 2: Resolución y reaperturas ───────────────────────────
+      secLabel("2. Resolución y reaperturas"),
+      h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:12}},
 
-      // Correlación resoluciones vs calificaciones
-      h('div',{style:{...card(),marginBottom:28}},
-        h('div',{style:{fontSize:14,fontWeight:700,color:"#1a3a6b",marginBottom:4}},"Resoluciones completadas vs calificación promedio"),
-        h('div',{style:{fontSize:12,color:"#94a3b8",marginBottom:16}},"Compara volumen completado con satisfacción — ideal: alto volumen + alta calificación"),
-        califPorArea.length === 0
-          ? h('div',{style:{textAlign:"center",padding:40,color:"#94a3b8",fontSize:13}},"Sin calificaciones en el período")
-          : h(ChartBox,{id:"correlacion",type:"bar",height:240,
-              data:{
-                labels:califPorArea.map(x=>x.label),
-                datasets:[
-                  {label:"Completados",data:califPorArea.map(x=>recsFilt.filter(r=>r.estadoAvance==="completada"&&(CAT_LABEL[r.cat]||r.cat)===x.label).length),
-                    backgroundColor:"#3b82f6",borderRadius:4,yAxisID:"y"},
-                  {label:"Calificación promedio",data:califPorArea.map(x=>x.avg),
-                    type:"line",borderColor:"#f97316",backgroundColor:"#f9731620",pointBackgroundColor:"#f97316",
-                    borderWidth:2,pointRadius:5,yAxisID:"y1"}
-                ]},
-              options:{scales:{
-                x:{grid:{display:false}},
-                y:{position:"left",grid:{color:"#f1f5f9"},title:{display:true,text:"Completados",color:"#3b82f6"}},
-                y1:{position:"right",min:0,max:5,grid:{display:false},title:{display:true,text:"Calificación",color:"#f97316"}}
-              },plugins:{legend:{position:"top"}}}})),
-
-      // ── GRUPO 4: EQUIPO ──────────────────────────────────────────────────
-      sectionTitle("Performance del equipo"),
-      h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:20}},
+        // % completadas por área
         h('div',{style:card()},
-          h('div',{style:{fontSize:14,fontWeight:700,color:"#1a3a6b",marginBottom:14}},"Ranking de ejecutores"),
-          rankingEjecutores.length === 0
-            ? h('div',{style:{textAlign:"center",padding:40,color:"#94a3b8",fontSize:13}},"Sin datos")
-            : h('table',{style:{width:"100%",borderCollapse:"collapse",fontSize:12}},
-                h('thead',null,h('tr',null,
-                  ...["Ejecutor","Completados","Calif.","Rechazos"].map(col=>
-                    h('th',{key:col,style:{padding:"8px 10px",textAlign:"left",color:"#64748b",fontWeight:600,fontSize:11,borderBottom:"2px solid #f1f5f9"}},col)))),
-                h('tbody',null,...rankingEjecutores.slice(0,8).map((e,i)=>
-                  h('tr',{key:i,style:{borderBottom:"1px solid #f8fafc",background:i%2===0?"white":"#fafafa"}},
-                    h('td',{style:{padding:"8px 10px",fontWeight:600,color:"#1e293b"}},e.nombre),
-                    h('td',{style:{padding:"8px 10px",textAlign:"center"}},
-                      h('span',{style:{background:"#eff6ff",color:"#3b82f6",fontWeight:700,padding:"2px 8px",borderRadius:12,fontSize:11}},e.completados)),
-                    h('td',{style:{padding:"8px 10px",textAlign:"center",color:e.calificacion>=4?"#16a34a":e.calificacion>=3?"#ca8a04":"#dc2626",fontWeight:700}},
-                      e.calificacion ? "★ "+e.calificacion : "—"),
-                    h('td',{style:{padding:"8px 10px",textAlign:"center",color:e.rechazos>0?"#ef4444":"#22c55e",fontWeight:600}},e.rechazos)))  ))),
+          h('div',{style:{fontSize:13,fontWeight:500,color:"#1a3a6b",marginBottom:12}},"% completadas por área"),
+          h('div',{style:{display:"flex",flexDirection:"column",gap:7}},
+            ...porArea.map(a=>h('div',{key:a.cat,style:{display:"flex",alignItems:"center",gap:8}},
+              h('div',{style:{fontSize:11,color:"#64748b",width:90,flexShrink:0,textAlign:"right"}},a.label),
+              h('div',{style:{flex:1,height:20,background:"#f1f5f9",borderRadius:4,overflow:"hidden"}},
+                a.pct!==null&&h('div',{style:{height:"100%",width:a.pct+"%",background:colorPct(a.pct),borderRadius:4,display:"flex",alignItems:"center",paddingLeft:6,fontSize:10,fontWeight:500,color:"white",minWidth:24}},a.pct+"%")),
+              h('div',{style:{fontSize:10,color:"#94a3b8",width:28,textAlign:"right"}},a.completadas+"/"+a.total))),
+            h('div',{style:{display:"flex",alignItems:"center",gap:8,marginTop:4,paddingTop:4,borderTop:"0.5px solid #f1f5f9"}},
+              h('div',{style:{fontSize:11,color:"#1a3a6b",fontWeight:500,width:90,flexShrink:0,textAlign:"right"}},"Promedio"),
+              h('div',{style:{flex:1,height:20,background:"#f1f5f9",borderRadius:4,overflow:"hidden"}},
+                h('div',{style:{height:"100%",width:pctComp+"%",background:"#1a3a6b",borderRadius:4,display:"flex",alignItems:"center",paddingLeft:6,fontSize:10,fontWeight:500,color:"white",minWidth:24}},pctComp+"%"))))),
+
+        // Solicitudes activas
         h('div',{style:card()},
-          h('div',{style:{fontSize:14,fontWeight:700,color:"#1a3a6b",marginBottom:14}},"Ranking de responsables"),
-          rankingResponsables.length === 0
-            ? h('div',{style:{textAlign:"center",padding:40,color:"#94a3b8",fontSize:13}},"Sin datos")
-            : h('table',{style:{width:"100%",borderCollapse:"collapse",fontSize:12}},
-                h('thead',null,h('tr',null,
-                  ...["Responsable","Tickets","Tiempo prom.","% En plazo"].map(col=>
-                    h('th',{key:col,style:{padding:"8px 10px",textAlign:"left",color:"#64748b",fontWeight:600,fontSize:11,borderBottom:"2px solid #f1f5f9"}},col)))),
-                h('tbody',null,...rankingResponsables.slice(0,8).map((r,i)=>
-                  h('tr',{key:i,style:{borderBottom:"1px solid #f8fafc",background:i%2===0?"white":"#fafafa"}},
-                    h('td',{style:{padding:"8px 10px",fontWeight:600,color:"#1e293b"}},r.nombre),
-                    h('td',{style:{padding:"8px 10px",textAlign:"center"}},r.tickets),
-                    h('td',{style:{padding:"8px 10px",textAlign:"center",color:r.avgDias<=2?"#16a34a":r.avgDias<=5?"#ca8a04":"#dc2626",fontWeight:700}},r.avgDias+"d"),
-                    h('td',{style:{padding:"8px 10px",textAlign:"center"}},
-                      h('span',{style:{background:r.tasaPlazo>=80?"#f0fdf4":"#fef2f2",color:r.tasaPlazo>=80?"#16a34a":"#dc2626",fontWeight:700,padding:"2px 8px",borderRadius:12,fontSize:11}},r.tasaPlazo+"%")))))))),
+          h('div',{style:{fontSize:13,fontWeight:500,color:"#1a3a6b",marginBottom:12}},"Solicitudes activas sin resolver"),
+          h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}},
+            h('div',{style:{background:"#FCEBEB",borderRadius:8,padding:"10px 12px",textAlign:"center"}},
+              h('div',{style:{fontSize:22,fontWeight:500,color:"#A32D2D"}},demoradas),
+              h('div',{style:{fontSize:10,color:"#791F1F",marginTop:2}},"Demoradas")),
+            h('div',{style:{background:"#FAEEDA",borderRadius:8,padding:"10px 12px",textAlign:"center"}},
+              h('div',{style:{fontSize:22,fontWeight:500,color:"#854F0B"}},sinAsignar),
+              h('div',{style:{fontSize:10,color:"#633806",marginTop:2}},"Sin asignar"))),
+          h('div',{style:{fontSize:11,color:"#64748b",marginBottom:6}},"Activas por antigüedad:"),
+          h('div',{style:{display:"flex",gap:6}},
+            ...[
+              {label:"0–7d",count:recsFilt.filter(r=>!["completada","consolidada","vinculado_proyecto"].includes(r.estadoAvance)&&(new Date()-new Date(r.createdAt))/86400000<=7).length,bg:"#EAF3DE",tc:"#3B6D11"},
+              {label:"8–30d",count:recsFilt.filter(r=>!["completada","consolidada","vinculado_proyecto"].includes(r.estadoAvance)&&(new Date()-new Date(r.createdAt))/86400000>7&&(new Date()-new Date(r.createdAt))/86400000<=30).length,bg:"#FAEEDA",tc:"#854F0B"},
+              {label:"+30d",count:recsFilt.filter(r=>!["completada","consolidada","vinculado_proyecto"].includes(r.estadoAvance)&&(new Date()-new Date(r.createdAt))/86400000>30).length,bg:"#FCEBEB",tc:"#A32D2D"},
+            ].map(b=>h('div',{key:b.label,style:{flex:1,background:b.bg,borderRadius:8,padding:"8px",textAlign:"center"}},
+              h('div',{style:{fontSize:18,fontWeight:500,color:b.tc}},b.count),
+              h('div',{style:{fontSize:10,color:b.tc,opacity:0.8}},b.label))))),
 
-      // ── GRUPO 5: SOLICITANTES ─────────────────────────────────────────────
-      h(SeccionSolicitantes,{recs:recsFilt, ChartBox, COLORS, card, sectionTitle}),
+        // Tasa reapertura
+        h('div',{style:card()},
+          h('div',{style:{fontSize:13,fontWeight:500,color:"#1a3a6b",marginBottom:6}},"Tasa de reapertura"),
+          h('div',{style:{display:"flex",alignItems:"baseline",gap:8,marginBottom:12}},
+            h('div',{style:{fontSize:28,fontWeight:500,color:colorReap(tasaReapertura)}},tasaReapertura+"%"),
+            h('div',{style:{fontSize:11,color:"#64748b"}},reabiertas+" de "+completadas.length+" completadas")),
+          h('div',{style:{height:1,background:"#f1f5f9",marginBottom:10}}),
+          h('div',{style:{fontSize:11,color:"#64748b",marginBottom:8}},"Por área:"),
+          h('div',{style:{display:"flex",flexDirection:"column",gap:5}},
+            ...porArea.map(a=>h('div',{key:a.cat,style:{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:12}},
+              h('span',{style:{color:"#374151"}},a.label),
+              a.tasaReap!==null
+                ? h('span',{style:{fontWeight:500,color:colorReap(a.tasaReap)}},a.tasaReap+"%")
+                : h('span',{style:{color:"#94a3b8"}},"—"))),
+            h('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:12,marginTop:4,paddingTop:4,borderTop:"0.5px solid #f1f5f9"}},
+              h('span',{style:{fontWeight:500,color:"#1a3a6b"}},"Total"),
+              h('span',{style:{fontWeight:600,color:colorReap(tasaReapertura)}},tasaReapertura+"%"))))),
 
-            h('div',{style:{textAlign:"center",padding:"20px 0",color:"#94a3b8",fontSize:12}},"Centro Asturiano de Buenos Aires — Sistema de Reclamos")
-    ));
+      // ── SECCIÓN 3: Calificación ────────────────────────────────────────
+      secLabel("3. Calificación del socio"),
+      h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}},
+
+        h('div',{style:card()},
+          h('div',{style:{fontSize:13,fontWeight:500,color:"#1a3a6b",marginBottom:12}},"Calificación promedio por área (1–5)"),
+          h('div',{style:{display:"flex",flexDirection:"column",gap:7}},
+            ...porArea.filter(a=>a.promCalif!==null).map(a=>h('div',{key:a.cat,style:{display:"flex",alignItems:"center",gap:8}},
+              h('div',{style:{fontSize:11,color:"#64748b",width:90,flexShrink:0,textAlign:"right"}},a.label),
+              h('div',{style:{flex:1,height:20,background:"#f1f5f9",borderRadius:4,overflow:"hidden"}},
+                h('div',{style:{height:"100%",width:(Number(a.promCalif)/5*100)+"%",background:colorCalif(a.promCalif),borderRadius:4,display:"flex",alignItems:"center",paddingLeft:6,fontSize:10,fontWeight:500,color:"white"}},a.promCalif+" ★")),
+              h('div',{style:{fontSize:10,color:"#94a3b8",width:28,textAlign:"right"}},a.califCount+"x"))),
+          porArea.filter(a=>a.promCalif!==null).length===0&&h('div',{style:{textAlign:"center",padding:30,color:"#94a3b8",fontSize:12}},"Sin calificaciones en el período")),
+
+        h('div',{style:card()},
+          h('div',{style:{fontSize:13,fontWeight:500,color:"#1a3a6b",marginBottom:12}},"Distribución de calificaciones"),
+          (()=>{
+            const dist={1:0,2:0,3:0,4:0,5:0};
+            completadas.filter(r=>r.calificacion).forEach(r=>{ dist[r.calificacion]=(dist[r.calificacion]||0)+1; });
+            const total=Object.values(dist).reduce((a,b)=>a+b,0);
+            if(total===0) return h('div',{style:{textAlign:"center",padding:30,color:"#94a3b8",fontSize:12}},"Sin calificaciones en el período");
+            const colores={5:"#3B6D11",4:"#639922",3:"#EF9F27",2:"#D85A30",1:"#A32D2D"};
+            const negativas=Math.round(((dist[1]+dist[2])/total)*100);
+            return h('div',null,
+              h('div',{style:{display:"flex",flexDirection:"column",gap:6}},
+                ...[5,4,3,2,1].map(s=>h('div',{key:s,style:{display:"flex",alignItems:"center",gap:8}},
+                  h('div',{style:{fontSize:11,color:"#64748b",width:60,flexShrink:0,textAlign:"right"}},s+" estrellas"),
+                  h('div',{style:{flex:1,height:20,background:"#f1f5f9",borderRadius:4,overflow:"hidden"}},
+                    dist[s]>0&&h('div',{style:{height:"100%",width:Math.round(dist[s]/total*100)+"%",background:colores[s],borderRadius:4,display:"flex",alignItems:"center",paddingLeft:6,fontSize:10,fontWeight:500,color:"white",minWidth:16}},
+                      Math.round(dist[s]/total*100)+"%")),
+                  h('div',{style:{fontSize:10,color:"#94a3b8",width:16,textAlign:"right"}},dist[s])))),
+              negativas>15&&h('div',{style:{marginTop:10,background:"#FCEBEB",borderRadius:6,padding:"7px 10px",fontSize:11,color:"#791F1F"}},
+                negativas+"% calificó con 1–2 estrellas — revisar causas de insatisfacción."));
+          })())),
+
+      // ── SECCIÓN 4: Tendencia ──────────────────────────────────────────
+      secLabel("4. Tendencia — performance de resolución"),
+      h('div',{style:card({marginBottom:20})},
+        h('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4,flexWrap:"wrap",gap:8}},
+          h('div',null,
+            h('div',{style:{fontSize:13,fontWeight:500,color:"#1a3a6b"}},"Nuevas vs completadas · tasa de resolución del período"),
+            h('div',{style:{fontSize:11,color:"#94a3b8",marginTop:2}},"Tasa = completadas del período / nuevas del período. >100% significa que se resolvieron solicitudes anteriores acumuladas.")),
+          h('div',{style:{display:"flex",gap:8,alignItems:"center"}},
+            h('select',{value:filtroAreaTendencia,onChange:e=>setFiltroAreaTendencia(e.target.value),
+              style:{padding:"5px 8px",borderRadius:6,border:"0.5px solid #e2e8f0",fontSize:12,color:"#374151"}},
+              ...AREAS_TODAS.map(a=>h('option',{key:a.id,value:a.id},a.label))),
+            h('div',{style:{display:"flex",background:"#f1f5f9",borderRadius:6,padding:2}},
+              ...["mes","semana"].map(g=>
+                h('button',{key:g,onClick:()=>setGranularidad(g),
+                  style:{padding:"4px 10px",borderRadius:4,border:"none",cursor:"pointer",fontSize:11,fontWeight:500,
+                    background:granularidad===g?"white":"transparent",
+                    color:granularidad===g?"#1a3a6b":"#64748b"}},
+                  g==="mes"?"Mes":"Semana"))))),
+
+        insightTendencia&&h('div',{style:{background:insightTendencia.bg,borderRadius:8,padding:"8px 12px",fontSize:11,color:insightTendencia.color,marginBottom:12,fontWeight:500}},insightTendencia.texto),
+
+        h('div',{style:{display:"flex",gap:12,marginBottom:8,fontSize:11,color:"#64748b"}},
+          h('span',{style:{display:"flex",alignItems:"center",gap:4}},h('span',{style:{width:10,height:10,borderRadius:2,background:"#185FA5",display:"inline-block"}}),"Nuevas"),
+          h('span',{style:{display:"flex",alignItems:"center",gap:4}},h('span',{style:{width:10,height:10,borderRadius:2,background:"#3B6D11",display:"inline-block"}}),"Completadas del período"),
+          h('span',{style:{display:"flex",alignItems:"center",gap:4}},h('span',{style:{width:20,height:2,background:"#f97316",display:"inline-block",borderRadius:1}}),"Tasa de resolución %")),
+
+        h(ChartBox,{id:"tendencia",type:"bar",height:240,
+          data:{
+            labels:tendenciaData.labels,
+            datasets:[
+              {label:"Nuevas",data:tendenciaData.nuevas,backgroundColor:"#185FA5",borderRadius:4,barPercentage:0.7,order:2},
+              {label:"Completadas",data:tendenciaData.completadas,backgroundColor:"#3B6D11",borderRadius:4,barPercentage:0.7,order:2},
+              {label:"Tasa %",data:tendenciaData.tasas,type:"line",borderColor:"#f97316",backgroundColor:"transparent",
+                pointBackgroundColor:"#f97316",borderWidth:2,pointRadius:4,pointHoverRadius:6,yAxisID:"y1",order:1},
+            ]},
+          options:{
+            scales:{
+              x:{stacked:false,grid:{display:false},ticks:{autoSkip:false,maxRotation:45,font:{size:10}}},
+              y:{grid:{color:"rgba(0,0,0,0.05)"},beginAtZero:true,ticks:{font:{size:10}},title:{display:true,text:"Cantidad",font:{size:10},color:"#64748b"}},
+              y1:{position:"right",min:0,grid:{display:false},ticks:{font:{size:10},callback:v=>v+"%"},title:{display:true,text:"Tasa resolución",font:{size:10},color:"#f97316"}}
+            },
+            plugins:{legend:{display:false},tooltip:{mode:"index",intersect:false,callbacks:{label:(ctx)=>{
+              if(ctx.dataset.label==="Tasa %") return "Tasa: "+ctx.parsed.y+"%";
+              return ctx.dataset.label+": "+ctx.parsed.y;
+            }}}}}}))),
+
+    h('div',{style:{textAlign:"center",padding:"8px 0 0",color:"#94a3b8",fontSize:11}},"Centro Asturiano — Sistema de Reclamos · Verde ≤ umbral · Naranja cerca · Rojo atención requerida"));
 }
+
 
 function App() {
   // Detect URL params immediately so seguimiento works without login
