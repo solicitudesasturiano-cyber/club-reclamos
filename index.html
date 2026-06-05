@@ -4441,17 +4441,17 @@ function DashboardPanel({recs}) {
             var pct=function(v){return Math.round(v/total*100);};
             var t1=0; var t2=ph(noAsig); var t3=ph(noAsig)+ph(noConf);
             var cols=[
-              {type:"base", val:total,       color:"#1a3a6b", tc:"#1a3a6b", outline:true,  label:"Creadas",         sign:"+"},
+              {type:"base", val:total,       color:"#888780", tc:"#5F5E5A", outline:true,  label:"Creadas",         sign:"+"},
               {type:"drop", val:noAsig,      color:"#fca5a5", tc:"#991b1b", topPx:t1,       label:"No asignadas",   sign:"-"},
-              {type:"base", val:asignadas,   color:"#3B6D11", tc:"#3B6D11", outline:true,  label:"Asignadas",       sign:"+"},
+              {type:"base", val:asignadas,   color:"#888780", tc:"#5F5E5A", outline:true,  label:"Asignadas",       sign:"+"},
               {type:"drop", val:noConf,      color:"#fdba74", tc:"#92400e", topPx:t2,       label:"No confirmadas", sign:"-"},
-              {type:"base", val:confirmadas, color:"#185FA5", tc:"#1e3a5f", outline:true,  label:"Confirmadas",     sign:"+"},
+              {type:"base", val:confirmadas, color:"#888780", tc:"#5F5E5A", outline:true,  label:"Confirmadas",     sign:"+"},
               {type:"drop", val:noComp,      color:"#c4b5fd", tc:"#4c1d95", topPx:t3,       label:"No completadas", sign:"-"},
               {type:"base", val:completadasN,color:"#22c55e", tc:"#14532d", outline:false, label:"Completadas",     sign:"+"},
             ];
             return h('div',{style:{flex:1,minWidth:460}},
               h('div',{style:{fontSize:11,color:"#64748b",fontWeight:500,marginBottom:8}},"Conversion del total (100% = "+total+" solicitudes)"),
-              h('div',{style:{display:"flex",alignItems:"flex-end",gap:5,height:CH+"px",borderBottom:"1.5px solid #e2e8f0"}},
+              h('div',{style:{display:"flex",alignItems:"flex-end",gap:5,height:CH+"px",borderBottom:"1.5px solid #e2e8f0",marginTop:20}},
                 cols.map(function(d,i){
                   var barH=Math.max(4,ph(d.val));
                   return h('div',{key:i,style:{flex:1,height:CH+"px",position:"relative",minWidth:50}},
@@ -4621,7 +4621,7 @@ function DashboardPanel({recs}) {
             plugins:{legend:{display:false},tooltip:{mode:"index",intersect:false}}}})),
 
       h('div',{style:{textAlign:"center",padding:"8px 0 0",color:"#94a3b8",fontSize:11}},"Centro Asturiano - Sistema de Reclamos")));
-}  
+}
 function App() {
   // Detect URL params immediately so seguimiento works without login
   const _params = new URLSearchParams(window.location.search);
