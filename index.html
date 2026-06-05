@@ -4206,6 +4206,13 @@ function DashboardPanel({recs}) {
   }).filter(x=>x!==null);
   const promConfirmar = diasConfirmarArr.length>0?(diasConfirmarArr.reduce((a,b)=>a+b,0)/diasConfirmarArr.length).toFixed(1):null;
 
+  const diasEjecutarArr = completadas.filter(function(r){return (r.fechaCompletada||r.updatedAt)&&r.fechaConfirmacion;}).map(function(r){
+    var end=r.fechaCompletada||r.updatedAt;
+    var d=(new Date(end)-new Date(r.fechaConfirmacion))/86400000;
+    return d>=0&&d<365?d:null;
+  }).filter(function(x){return x!==null;});
+  const promEjecutar = diasEjecutarArr.length>0?(diasEjecutarArr.reduce(function(a,b){return a+b;},0)/diasEjecutarArr.length).toFixed(1):null;
+
   const demoradas = recsFilt.filter(r=>{
     if(["completada","consolidada","vinculado_proyecto"].includes(r.estadoAvance)) return false;
     if(!r.fechaCierre) return false;
@@ -4387,22 +4394,29 @@ function DashboardPanel({recs}) {
         h('div',{style:{fontSize:11,color:"#94a3b8",marginBottom:16}},"Cuanto menor el valor, mejor. Verde <=2d, naranja 2-5d, rojo >5d."),
 
         h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 0.2fr 1fr",gap:4,alignItems:"flex-end",marginBottom:12}},
-          ...[
-            {label:"Creacion a asignar",val:promAsignar,color:"#BA7517"},
-            {label:"Asignar a confirmar",val:promConfirmar,color:"#534AB7"},
-            {label:"Confirmar a completar",val:null,color:"#185FA5"},
-            null,
-            {label:"Total end-to-end",val:promCompletar,color:"#1a3a6b"},
-          ].map(function(etapa,i){
-            if(!etapa) return h('div',{key:"sep"+i,style:{height:2,background:"#e2e8f0",alignSelf:"center"}});
-            const maxV=promCompletar?Number(promCompletar):10;
-            const v=etapa.val?Number(etapa.val):null;
-            const hp=v?Math.max(12,Math.round(v/maxV*100)):12;
-            return h('div',{key:i,style:{display:"flex",flexDirection:"column",alignItems:"center"}},
-              h('div',{style:{fontSize:10,fontWeight:500,color:colorT(v),marginBottom:3}},v?v+"d":"---"),
-              h('div',{style:{width:"100%",height:hp+"px",background:etapa.color,borderRadius:"4px 4px 0 0",opacity:0.85,minHeight:12}}),
-              h('div',{style:{fontSize:9,color:"#64748b",marginTop:5,textAlign:"center",lineHeight:1.3}},etapa.label));
-          })),
+          (function(){
+            var etapas=[
+              {label:"Creacion a asignar",val:promAsignar?Number(promAsignar):null,color:"#BA7517"},
+              {label:"Asignar a confirmar",val:promConfirmar?Number(promConfirmar):null,color:"#534AB7"},
+              {label:"Confirmar a completar",val:promEjecutar?Number(promEjecutar):null,color:"#185FA5"},
+              {label:"Total end-to-end",val:promCompletar?Number(promCompletar):null,color:"#1a3a6b"},
+            ];
+            var maxV=promCompletar?Number(promCompletar):10;
+            var acum=0;
+            return etapas.map(function(etapa,i){
+              var v=etapa.val;
+              var esTotal=i===3;
+              if(!esTotal && v!==null) acum+=v;
+              var displayV=esTotal?promCompletar?Number(promCompletar):null:v;
+              var hp=displayV?Math.max(12,Math.round(displayV/maxV*100)):12;
+              var acumH=esTotal?hp:Math.max(12,Math.round(acum/maxV*100));
+              return h('div',{key:i,style:{display:"flex",flexDirection:"column",alignItems:"center",flex:1}},
+                h('div',{style:{fontSize:10,fontWeight:500,color:colorT(displayV),marginBottom:3}},displayV?displayV.toFixed(1)+"d":"---"),
+                h('div',{style:{width:"100%",height:acumH+"px",background:etapa.color,borderRadius:"4px 4px 0 0",opacity:esTotal?0.9:0.8,minHeight:12,position:"relative"}},
+                  !esTotal&&v?h('div',{style:{position:"absolute",bottom:0,left:0,right:0,height:hp+"px",background:etapa.color,borderRadius:"4px 4px 0 0",opacity:1}}):null),
+                h('div',{style:{fontSize:9,color:"#64748b",marginTop:5,textAlign:"center",lineHeight:1.3}},etapa.label));
+            });
+          })()),
 
         insightCuello?h('div',{style:{background:"#fef9c3",borderRadius:8,padding:"8px 12px",fontSize:11,color:"#713f12",marginBottom:14}},insightCuello):null,
 
@@ -4410,18 +4424,20 @@ function DashboardPanel({recs}) {
         h('div',{style:{overflowX:"auto"}},
           h('table',{style:{width:"100%",borderCollapse:"collapse",fontSize:12}},
             h('thead',null,h('tr',{style:{background:"#f8fafc"}},
-              ...["Area","Creacion a asignar","Asignar a confirmar","Total end-to-end"].map(function(col){
+              ...["Area","Creacion a asignar","Asignar a confirmar","Confirmar a completar","Total end-to-end"].map(function(col){
                 return h('th',{key:col,style:{padding:"8px 10px",textAlign:"left",color:"#64748b",fontWeight:500,fontSize:11,borderBottom:"0.5px solid #e2e8f0"}},col);}))),
             h('tbody',null,
               ...porArea.map(function(a,i){return h('tr',{key:i,style:{borderBottom:"0.5px solid #f1f5f9",background:i%2===0?"white":"#fafafa"}},
                 h('td',{style:{padding:"8px 10px",fontWeight:500,color:"#1e293b"}},a.label),
                 h('td',{style:{padding:"8px 10px",color:colorT(a.tAsig?Number(a.tAsig):null),fontWeight:500}},fmt1(a.tAsig)),
                 h('td',{style:{padding:"8px 10px",color:colorT(a.tConfirm?Number(a.tConfirm):null),fontWeight:500}},fmt1(a.tConfirm)),
+                h('td',{style:{padding:"8px 10px",color:colorT(a.tEj?Number(a.tEj):null),fontWeight:500}},fmt1(a.tEj)),
                 h('td',{style:{padding:"8px 10px",fontWeight:600,color:colorT(a.tTotal?Number(a.tTotal):null)}},fmt1(a.tTotal)));}),
               h('tr',{style:{borderTop:"1.5px solid #e2e8f0",background:"#f8fafc"}},
                 h('td',{style:{padding:"8px 10px",fontWeight:600,color:"#1a3a6b"}},"Promedio"),
                 h('td',{style:{padding:"8px 10px",fontWeight:600,color:colorT(promAsignar?Number(promAsignar):null)}},fmt1(promAsignar)),
                 h('td',{style:{padding:"8px 10px",fontWeight:600,color:colorT(promConfirmar?Number(promConfirmar):null)}},fmt1(promConfirmar)),
+                h('td',{style:{padding:"8px 10px",fontWeight:600,color:colorT(promEjecutar?Number(promEjecutar):null)}},fmt1(promEjecutar)),
                 h('td',{style:{padding:"8px 10px",fontWeight:700,color:colorT(promCompletar?Number(promCompletar):null)}},fmt1(promCompletar))))))),
 
       secLabel("2. Resolucion y reaperturas"),
