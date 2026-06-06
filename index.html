@@ -4144,7 +4144,6 @@ function SeccionSolicitantes({recs, ChartBox, COLORS, card, sectionTitle}) {
 }
 
 // ── DASHBOARD DE MÉTRICAS ──────────────────────────────────────────────────
-
 function DashboardPanel({recs}) {
   const [filtroArea, setFiltroArea] = useState("todas");
   const [filtroPeriodo, setFiltroPeriodo] = useState("all");
@@ -4247,6 +4246,15 @@ function DashboardPanel({recs}) {
     }).filter(x=>x!==null);
     const tConfirm=confirArr.length>0?(confirArr.reduce((a,b)=>a+b,0)/confirArr.length).toFixed(1):null;
 
+    // tEj: confirmar → completar (matches waterfall right side)
+    const ejConfArr=compArea.filter(r=>(r.fechaCompletada||r.updatedAt)&&r.fechaConfirmacion).map(r=>{
+      const end=r.fechaCompletada||r.updatedAt;
+      const d=(new Date(end)-new Date(r.fechaConfirmacion))/86400000;
+      return d>=0&&d<365?d:null;
+    }).filter(x=>x!==null);
+    const tEj=ejConfArr.length>0?(ejConfArr.reduce((a,b)=>a+b,0)/ejConfArr.length).toFixed(1):null;
+
+    // tTotal: creacion → completar (end-to-end, matches left waterfall final bar)
     const ejArr=compArea.filter(r=>(r.fechaCompletada||r.updatedAt)&&r.createdAt).map(r=>{
       const end=r.fechaCompletada||r.updatedAt;
       const d=(new Date(end)-new Date(r.createdAt))/86400000;
@@ -4254,17 +4262,35 @@ function DashboardPanel({recs}) {
     }).filter(x=>x!==null);
     const tTotal=ejArr.length>0?(ejArr.reduce((a,b)=>a+b,0)/ejArr.length).toFixed(1):null;
 
+    // Conversion per area (for right waterfall table)
+    const aAsignadas=rArea.filter(r=>r.ejecutorMail&&r.ejecutorMail.trim()!=="").length;
+    const aConfirmadas=rArea.filter(r=>r.ejecutorConfirmado||(r.ejecutores_lista||[]).some(function(e){return e.confirmado;})).length;
+    const aNoAsig=rArea.length-aAsignadas;
+    const aNoConf=Math.max(0,aAsignadas-aConfirmadas);
+    const aNoComp=Math.max(0,aConfirmadas-compArea.length);
+    const aPctAsig=rArea.length>0?Math.round(aAsignadas/rArea.length*100):null;
+    const aPctConf=rArea.length>0?Math.round(aConfirmadas/rArea.length*100):null;
+    const aPctComp=rArea.length>0?Math.round(compArea.length/rArea.length*100):null;
+
     const conCalif=compArea.filter(r=>r.calificacion);
     const promCalif=conCalif.length>0?(conCalif.reduce((a,r)=>a+r.calificacion,0)/conCalif.length).toFixed(1):null;
 
     const reabArea=rArea.filter(r=>r.reabierta).length;
     const tasaReapArea=compArea.length>0?Math.round(reabArea/compArea.length*100):null;
 
-    return {cat,label,total:rArea.length,completadas:compArea.length,pct,tAsig,tConfirm,tTotal,promCalif,califCount:conCalif.length,tasaReap:tasaReapArea};
+    return {cat,label,total:rArea.length,completadas:compArea.length,pct,tAsig,tConfirm,tEj,tTotal,promCalif,califCount:conCalif.length,tasaReap:tasaReapArea,aAsignadas,aConfirmadas,aNoAsig,aNoConf,aNoComp,aPctAsig,aPctConf,aPctComp};
   }).filter(a=>a.total>0);
 
   const tendenciaData = (()=>{
-    const recsT = filtroAreaTendencia==="todas"?recs:recs.filter(r=>r.cat===filtroAreaTendencia);
+    var recsBase = recs.filter(function(r){
+      var ok = new Date(r.createdAt) >= fechaCorte;
+      if(filtroArea !== "todas"){
+        var cats = filtroArea === "intendencia" ? CATS_INTENDENCIA : CATS_ADMINISTRACION;
+        if(!cats.includes(r.cat)) ok = false;
+      }
+      return ok;
+    });
+    const recsT = filtroAreaTendencia==="todas"?recsBase:recsBase.filter(r=>r.cat===filtroAreaTendencia);
     const map={};
     recsT.forEach(r=>{
       const d=new Date(r.createdAt);
@@ -4622,6 +4648,7 @@ function DashboardPanel({recs}) {
 
       h('div',{style:{textAlign:"center",padding:"8px 0 0",color:"#94a3b8",fontSize:11}},"Centro Asturiano - Sistema de Reclamos")));
 }
+
 function App() {
   // Detect URL params immediately so seguimiento works without login
   const _params = new URLSearchParams(window.location.search);
