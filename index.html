@@ -4404,16 +4404,10 @@ function DashboardPanel({recs}) {
         ...[
           {label:"Total solicitudes",val:recsFilt.length,color:"#185FA5",sub:null},
           {label:"Completadas",val:pctComp+"%",color:colorP(pctComp),sub:completadas.length+" de "+recsFilt.length},
-          {label:"Dias para asignar",val:promAsignar?promAsignar+"d":"---",color:colorT(promAsignar?Number(promAsignar):null),sub:"promedio"},
-          {label:"Dias para completar",val:promCompletar?promCompletar+"d":"---",color:colorT(promCompletar?Number(promCompletar):null),sub:"promedio"},
-          {label:"Demoradas",val:demoradas,color:demoradas>0?"#A32D2D":"#3B6D11",sub:"fuera de plazo"},
-          {label:"Sin asignar",val:sinAsignar,color:sinAsignar>0?"#BA7517":"#3B6D11",sub:"requieren accion"},
-          {label:"Tasa reapertura",val:tasaReapertura+"%",color:colorR(tasaReapertura),sub:reabiertas+" reabiertos"},
-        ].map(function(k){return h('div',{key:k.label,style:{background:"white",borderRadius:10,border:"0.5px solid #e2e8f0",padding:"14px 16px"}},
+        ].map(function(k){return h('div',{key:k.label,style:{background:"white",borderRadius:10,border:"0.5px solid #e2e8f0",padding:"14px 16px",maxWidth:200}},
           h('div',{style:{fontSize:24,fontWeight:500,color:k.color}},k.val),
           h('div',{style:{fontSize:11,color:"#64748b",marginTop:3}},k.label),
           k.sub?h('div',{style:{fontSize:10,color:"#94a3b8",marginTop:2}},k.sub):null);})),
-
       secLabel("1. Embudo de tiempos"),
       h('div',{style:card({marginBottom:12})},
         h('div',{style:{fontSize:13,fontWeight:500,color:"#1a3a6b",marginBottom:14}},"Embudo de tiempos y conversion"),
@@ -4502,25 +4496,61 @@ function DashboardPanel({recs}) {
           })()),
         insightCuello?h('div',{style:{background:"#fef9c3",borderRadius:8,padding:"8px 12px",fontSize:11,color:"#713f12",marginBottom:14}},insightCuello):null,
 
-        h('div',{style:{fontSize:12,fontWeight:500,color:"#374151",marginBottom:8}},"Desglose por area"),
-        h('div',{style:{overflowX:"auto"}},
-          h('table',{style:{width:"100%",borderCollapse:"collapse",fontSize:12}},
-            h('thead',null,h('tr',{style:{background:"#f8fafc"}},
-              ...["Area","Creacion a asignar","Asignar a confirmar","Confirmar a completar","Total acumulado"].map(function(col){
-                return h('th',{key:col,style:{padding:"8px 10px",textAlign:"left",color:"#64748b",fontWeight:500,fontSize:11,borderBottom:"0.5px solid #e2e8f0"}},col);}))),
-            h('tbody',null,
-              ...porArea.map(function(a,i){return h('tr',{key:i,style:{borderBottom:"0.5px solid #f1f5f9",background:i%2===0?"white":"#fafafa"}},
-                h('td',{style:{padding:"8px 10px",fontWeight:500,color:"#1e293b"}},a.label),
-                h('td',{style:{padding:"8px 10px",color:colorT(a.tAsig?Number(a.tAsig):null),fontWeight:500}},fmt1(a.tAsig)),
-                h('td',{style:{padding:"8px 10px",color:colorT(a.tConfirm?Number(a.tConfirm):null),fontWeight:500}},fmt1(a.tConfirm)),
-                h('td',{style:{padding:"8px 10px",color:colorT(a.tEj?Number(a.tEj):null),fontWeight:500}},fmt1(a.tEj)),
-                h('td',{style:{padding:"8px 10px",fontWeight:600,color:colorT(a.tTotal?Number(a.tTotal):null)}},fmt1(a.tTotal)));}),
-              h('tr',{style:{borderTop:"1.5px solid #e2e8f0",background:"#f8fafc"}},
-                h('td',{style:{padding:"8px 10px",fontWeight:600,color:"#1a3a6b"}},"Promedio"),
-                h('td',{style:{padding:"8px 10px",fontWeight:600,color:colorT(promAsignar?Number(promAsignar):null)}},fmt1(promAsignar)),
-                h('td',{style:{padding:"8px 10px",fontWeight:600,color:colorT(promConfirmar?Number(promConfirmar):null)}},fmt1(promConfirmar)),
-                h('td',{style:{padding:"8px 10px",fontWeight:600,color:colorT(promEjecutar?Number(promEjecutar):null)}},fmt1(promEjecutar)),
-                h('td',{style:{padding:"8px 10px",fontWeight:700,color:colorT(promCompletar?Number(promCompletar):null)}},fmt1(promCompletar))))))),
+        h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}},
+
+          h('div',null,
+            h('div',{style:{fontSize:12,fontWeight:500,color:"#374151",marginBottom:8}},"Tiempos por area (dias acumulados)"),
+            h('div',{style:{overflowX:"auto"}},
+              h('table',{style:{width:"100%",borderCollapse:"collapse",fontSize:12}},
+                h('thead',null,h('tr',{style:{background:"#f8fafc"}},
+                  ...["Area","Creac. a asignar","Asignar a confirm.","Confirm. a completar","Total acum."].map(function(col){
+                    return h('th',{key:col,style:{padding:"7px 10px",textAlign:"left",color:"#64748b",fontWeight:500,fontSize:11,borderBottom:"0.5px solid #e2e8f0"}},col);}))),
+                h('tbody',null,
+                  ...porArea.map(function(a,i){return h('tr',{key:i,style:{borderBottom:"0.5px solid #f1f5f9",background:i%2===0?"white":"#fafafa"}},
+                    h('td',{style:{padding:"7px 10px",fontWeight:500,color:"#1e293b"}},a.label),
+                    h('td',{style:{padding:"7px 10px",color:colorT(a.tAsig?Number(a.tAsig):null),fontWeight:500}},fmt1(a.tAsig)),
+                    h('td',{style:{padding:"7px 10px",color:colorT(a.tConfirm?Number(a.tConfirm):null),fontWeight:500}},fmt1(a.tConfirm)),
+                    h('td',{style:{padding:"7px 10px",color:colorT(a.tEj?Number(a.tEj):null),fontWeight:500}},fmt1(a.tEj)),
+                    h('td',{style:{padding:"7px 10px",fontWeight:600,color:colorT(a.tTotal?Number(a.tTotal):null)}},fmt1(a.tTotal)));}),
+                  h('tr',{style:{borderTop:"1.5px solid #e2e8f0",background:"#f8fafc"}},
+                    h('td',{style:{padding:"7px 10px",fontWeight:600,color:"#1a3a6b"}},"Promedio"),
+                    h('td',{style:{padding:"7px 10px",fontWeight:600,color:colorT(promAsignar?Number(promAsignar):null)}},fmt1(promAsignar)),
+                    h('td',{style:{padding:"7px 10px",fontWeight:600,color:colorT(promConfirmar?Number(promConfirmar):null)}},fmt1(promConfirmar)),
+                    h('td',{style:{padding:"7px 10px",fontWeight:600,color:colorT(promEjecutar?Number(promEjecutar):null)}},fmt1(promEjecutar)),
+                    h('td',{style:{padding:"7px 10px",fontWeight:700,color:colorT(promCompletar?Number(promCompletar):null)}},fmt1(promCompletar)))))),
+
+          h('div',null,
+            h('div',{style:{fontSize:12,fontWeight:500,color:"#374151",marginBottom:8}},"Conversion por area (% del total del area)"),
+            h('div',{style:{overflowX:"auto"}},
+              h('table',{style:{width:"100%",borderCollapse:"collapse",fontSize:12}},
+                h('thead',null,h('tr',{style:{background:"#f8fafc"}},
+                  ...["Area","Creadas","Asignadas","Confirmadas","Completadas"].map(function(col){
+                    return h('th',{key:col,style:{padding:"7px 10px",textAlign:"left",color:"#64748b",fontWeight:500,fontSize:11,borderBottom:"0.5px solid #e2e8f0"}},col);}))),
+                h('tbody',null,
+                  ...porArea.map(function(a,i){
+                    return h('tr',{key:i,style:{borderBottom:"0.5px solid #f1f5f9",background:i%2===0?"white":"#fafafa"}},
+                      h('td',{style:{padding:"7px 10px",fontWeight:500,color:"#1e293b"}},a.label),
+                      h('td',{style:{padding:"7px 10px",color:"#64748b"}},a.total),
+                      h('td',{style:{padding:"7px 10px",fontWeight:500,color:a.aPctAsig>=85?"#3B6D11":a.aPctAsig>=60?"#BA7517":"#A32D2D"}},
+                        a.aPctAsig!==null?a.aAsignadas+" ("+a.aPctAsig+"%)":"---"),
+                      h('td',{style:{padding:"7px 10px",fontWeight:500,color:a.aPctConf>=70?"#3B6D11":a.aPctConf>=40?"#BA7517":"#A32D2D"}},
+                        a.aPctConf!==null?a.aConfirmadas+" ("+a.aPctConf+"%)":"---"),
+                      h('td',{style:{padding:"7px 10px",fontWeight:600,color:colorP(a.aPctComp)}},
+                        a.aPctComp!==null?a.completadas+" ("+a.aPctComp+"%)":"---"));}),
+                  (function(){
+                    var tA=recsFilt.filter(function(r){return r.ejecutorMail&&r.ejecutorMail.trim()!=="";}).length;
+                    var tC=recsFilt.filter(function(r){return r.ejecutorConfirmado||(r.ejecutores_lista||[]).some(function(e){return e.confirmado;});}).length;
+                    var tX=completadas.length;
+                    var pA=recsFilt.length>0?Math.round(tA/recsFilt.length*100):0;
+                    var pC=recsFilt.length>0?Math.round(tC/recsFilt.length*100):0;
+                    var pX=recsFilt.length>0?Math.round(tX/recsFilt.length*100):0;
+                    return h('tr',{style:{borderTop:"1.5px solid #e2e8f0",background:"#f8fafc"}},
+                      h('td',{style:{padding:"7px 10px",fontWeight:600,color:"#1a3a6b"}},"Total"),
+                      h('td',{style:{padding:"7px 10px",fontWeight:600,color:"#64748b"}},recsFilt.length),
+                      h('td',{style:{padding:"7px 10px",fontWeight:600,color:pA>=85?"#3B6D11":pA>=60?"#BA7517":"#A32D2D"}},tA+" ("+pA+"%)"),
+                      h('td',{style:{padding:"7px 10px",fontWeight:600,color:pC>=70?"#3B6D11":pC>=40?"#BA7517":"#A32D2D"}},tC+" ("+pC+"%)"),
+                      h('td',{style:{padding:"7px 10px",fontWeight:700,color:colorP(pX)}},tX+" ("+pX+"%)"));
+                  })())))),
 
       secLabel("2. Resolucion y reaperturas"),
       h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:12}},
@@ -4646,9 +4676,8 @@ function DashboardPanel({recs}) {
             },
             plugins:{legend:{display:false},tooltip:{mode:"index",intersect:false}}}})),
 
-      h('div',{style:{textAlign:"center",padding:"8px 0 0",color:"#94a3b8",fontSize:11}},"Centro Asturiano - Sistema de Reclamos")));
+      h('div',{style:{textAlign:"center",padding:"8px 0 0",color:"#94a3b8",fontSize:11}},"Centro Asturiano - Sistema de Reclamos"))))));
 }
-
 function App() {
   // Detect URL params immediately so seguimiento works without login
   const _params = new URLSearchParams(window.location.search);
