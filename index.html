@@ -4963,8 +4963,128 @@ function MisSolicitudes({recs, loaded}) {
                   }))))))));
 }
 
+function VerSolicitudPublica({recId, recs, loaded}) {
+  var rec = recs.find(function(r){ return r.id === recId; });
+  var appUrl = window.location.href.split("?")[0];
 
-function App() {
+  if(!loaded) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#1a3a6b,#0f2347)",display:"flex",alignItems:"center",justifyContent:"center"}},
+    h('div',{style:{textAlign:"center",color:"white"}},
+      h('div',{style:{fontSize:40,marginBottom:16}},"?"),
+      h('div',{style:{fontSize:18}},"Cargando...")));
+
+  if(!rec) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#1a3a6b,#0f2347)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
+    h('div',{style:{background:"white",borderRadius:20,padding:40,maxWidth:420,width:"100%",textAlign:"center"}},
+      h('div',{style:{fontSize:48,marginBottom:16}},"?"),
+      h('h2',{style:{fontFamily:"'Playfair Display',serif",fontSize:22,margin:"0 0 12px"}},"Solicitud no encontrada"),
+      h('p',{style:{color:"#64748b",fontSize:14}},"No encontramos la solicitud. Es posible que el link haya expirado."),
+      h('a',{href:appUrl,style:{display:"inline-block",marginTop:20,padding:"10px 24px",background:"#1a3a6b",color:"white",textDecoration:"none",borderRadius:10,fontSize:14,fontWeight:600}},"Ir al inicio")));
+
+  var cat = CATS[rec.cat];
+  var pri = PRIS ? PRIS.find(function(p){return p.id===rec.pri;}) : null;
+  var est = ESTADOS.find(function(e){return e.id===rec.estadoAvance;});
+  var ahora = new Date();
+  var fechaCierre = rec.fechaCierreActualizada || rec.fechaCierreConfirmada || rec.fechaCierre;
+  var demorada = fechaCierre && new Date(fechaCierre) < ahora &&
+    !["completada","consolidada","vinculado_proyecto","esperando_validacion_responsable","esperando_validacion_directivo"].includes(rec.estadoAvance);
+
+  var secStyle = {background:"#f8fafc",borderRadius:10,padding:"14px 16px",marginBottom:12};
+  var labelStyle = {fontSize:11,color:"#94a3b8",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,marginBottom:3};
+  var valStyle = {fontSize:14,color:"#1e293b",fontWeight:500};
+
+  return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#1a3a6b,#0f2347)",padding:"20px 16px 60px"}},
+
+    h('div',{style:{textAlign:"center",marginBottom:20,paddingTop:16}},
+      h('div',{style:{fontSize:11,letterSpacing:3,color:"#a8c4e8",textTransform:"uppercase",marginBottom:6}},"Detalle de solicitud"),
+      h('h1',{style:{fontFamily:"'Playfair Display',serif",fontSize:24,color:"white",fontWeight:900,margin:0}},rec.numero),
+      h('div',{style:{width:40,height:3,background:"#3b82f6",margin:"10px auto 0",borderRadius:2}})),
+
+    h('div',{style:{maxWidth:700,margin:"0 auto"}},
+
+      // Estado + acciones
+      h('div',{style:{background:"white",borderRadius:16,padding:"18px 20px",marginBottom:12}},
+        h('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10}},
+          h('div',null,
+            h('div',{style:labelStyle},"Estado"),
+            h('div',{style:{display:"flex",alignItems:"center",gap:8}},
+              est && h('span',{style:{display:"inline-block",padding:"4px 14px",borderRadius:20,fontSize:13,fontWeight:700,color:est.color,background:est.color+"22"}},(demorada?"Demorada ? ":"")+est.label),
+              demorada && h('span',{style:{fontSize:11,color:"#dc2626",fontWeight:600}},"Fecha de cierre vencida"))),
+          h('div',{style:{display:"flex",gap:8,flexWrap:"wrap"}},
+            rec.estadoAvance!=="completada" && h('a',{
+              href:appUrl+"?completar="+rec.id,
+              style:{display:"inline-block",padding:"8px 16px",background:"#16a34a",color:"white",textDecoration:"none",borderRadius:8,fontSize:12,fontWeight:700}
+            },"Marcar completada"),
+            h('a',{
+              href:appUrl+"?seguimiento="+rec.numero,
+              style:{display:"inline-block",padding:"8px 16px",background:"#3b82f6",color:"white",textDecoration:"none",borderRadius:8,fontSize:12,fontWeight:700}
+            },"Ver seguimiento")))),
+
+      // Info principal
+      h('div',{style:{background:"white",borderRadius:16,padding:"18px 20px",marginBottom:12}},
+        h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}},
+          h('div',null,h('div',{style:labelStyle},"Sector"),h('div',{style:valStyle},rec.sector||"---")),
+          h('div',null,h('div',{style:labelStyle},"Tipo"),h('div',{style:valStyle},cat?cat.icon+" "+cat.label:"---")),
+          h('div',null,h('div',{style:labelStyle},"Prioridad"),h('div',{style:valStyle},rec.pri||(pri&&pri.label)||"---")),
+          h('div',null,h('div',{style:labelStyle},"Ingresado"),h('div',{style:valStyle},fd(rec.createdAt))),
+          rec.nombre&&h('div',null,h('div',{style:labelStyle},"Solicitante"),h('div',{style:valStyle},rec.nombre)),
+          rec.email&&h('div',null,h('div',{style:labelStyle},"Email"),h('div',{style:{fontSize:13,color:"#3b82f6"}},rec.email))),
+        h('div',{style:{marginBottom:8}},
+          h('div',{style:labelStyle},"Descripcion"),
+          h('div',{style:{fontSize:14,color:"#475569",lineHeight:1.6}},rec.desc||"---"))),
+
+      // Fechas
+      h('div',{style:{background:"white",borderRadius:16,padding:"18px 20px",marginBottom:12}},
+        h('div',{style:{fontSize:13,fontWeight:600,color:"#1a3a6b",marginBottom:10}},"Fechas y plazos"),
+        h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}},
+          h('div',null,h('div',{style:labelStyle},"Fecha inicio esperada"),h('div',{style:valStyle},fd(rec.fechaInicioEsperado)||"A definir")),
+          h('div',null,
+            h('div',{style:labelStyle},"Fecha cierre"),
+            h('div',{style:{fontSize:14,fontWeight:600,color:demorada?"#dc2626":"#1e293b"}},
+              fechaCierre?fd(fechaCierre):"A definir"),
+            rec.fechaCierreActualizada&&rec.fechaOriginalCierre&&h('div',{style:{fontSize:11,color:"#f97316"}},"Reprog. (orig: "+fd(rec.fechaOriginalCierre)+")")),
+          rec.horaInicio&&h('div',null,h('div',{style:labelStyle},"Horario"),h('div',{style:valStyle},rec.horaInicio+(rec.horaFin?" a "+rec.horaFin:""))))),
+
+      // Ejecutor
+      (rec.ejecutorMail||rec.ejecutorNombre) && h('div',{style:{background:"white",borderRadius:16,padding:"18px 20px",marginBottom:12}},
+        h('div',{style:{fontSize:13,fontWeight:600,color:"#1a3a6b",marginBottom:10}},"Ejecutor"),
+        h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}},
+          h('div',null,h('div',{style:labelStyle},"Nombre"),h('div',{style:valStyle},rec.ejecutorNombre||"---")),
+          h('div',null,h('div',{style:labelStyle},"Email"),h('div',{style:{fontSize:13,color:"#3b82f6"}},rec.ejecutorMail||"---")),
+          h('div',null,h('div',{style:labelStyle},"Confirmacion"),
+            h('div',{style:{fontSize:13,fontWeight:600,color:rec.ejecutorConfirmado?"#16a34a":rec.ejecutorRechazado?"#dc2626":"#f97316"}},
+              rec.ejecutorConfirmado?"Confirmado":rec.ejecutorRechazado?"Rechazado":"Pendiente")))),
+
+      // Resolucion si completada
+      rec.estadoAvance==="completada"&&rec.descripcionResolucion&&h('div',{style:{background:"#f0fdf4",border:"1.5px solid #bbf7d0",borderRadius:16,padding:"18px 20px",marginBottom:12}},
+        h('div',{style:{fontSize:11,color:"#15803d",fontWeight:700,textTransform:"uppercase",marginBottom:6}},"Resolucion"),
+        h('div',{style:{fontSize:14,color:"#166534",lineHeight:1.6}},rec.descripcionResolucion)),
+
+      // Adjuntos
+      rec.adjuntos&&rec.adjuntos.filter(function(a){return a.url;}).length>0&&h('div',{style:{background:"white",borderRadius:16,padding:"18px 20px",marginBottom:12}},
+        h('div',{style:{fontSize:13,fontWeight:600,color:"#1a3a6b",marginBottom:10}},"Fotos adjuntas"),
+        h('div',{style:{display:"flex",gap:8,flexWrap:"wrap"}},
+          ...rec.adjuntos.filter(function(a){return a.url;}).map(function(a,i){
+            return a.tipo&&a.tipo.startsWith("video")
+              ? h('a',{key:i,href:a.url,target:"_blank",style:{padding:"6px 12px",background:"#f1f5f9",borderRadius:8,fontSize:12,color:"#475569",textDecoration:"none"}},"Video")
+              : h('a',{key:i,href:a.url,target:"_blank"},
+                  h('img',{src:a.url,alt:a.nombre,style:{width:80,height:80,objectFit:"cover",borderRadius:8,border:"1.5px solid #e2e8f0"}}));
+          }))),
+
+      // Comentarios
+      rec.comentarios&&rec.comentarios.length>0&&h('div',{style:{background:"white",borderRadius:16,padding:"18px 20px",marginBottom:12}},
+        h('div',{style:{fontSize:13,fontWeight:600,color:"#1a3a6b",marginBottom:12}},"Historial de comentarios"),
+        h('div',{style:{display:"flex",flexDirection:"column",gap:8}},
+          ...rec.comentarios.slice().reverse().map(function(c,i){
+            var esSistema = c.autor==="Sistema";
+            return h('div',{key:i,style:{background:esSistema?"#f8fafc":"#eff6ff",borderRadius:8,padding:"10px 12px",borderLeft:"3px solid "+(esSistema?"#e2e8f0":"#3b82f6")}},
+              h('div',{style:{display:"flex",justifyContent:"space-between",marginBottom:4}},
+                h('span',{style:{fontSize:11,fontWeight:600,color:esSistema?"#94a3b8":"#1d4ed8"}},c.autor||"---"),
+                h('span',{style:{fontSize:11,color:"#94a3b8"}},fd(c.fecha))),
+              h('div',{style:{fontSize:13,color:"#374151"}},c.texto));
+          })))));
+}
+
+
+  function App() {
   // Detect URL params immediately so seguimiento works without login
   const _params = new URLSearchParams(window.location.search);
   const _segParam  = _params.get("seguimiento");
