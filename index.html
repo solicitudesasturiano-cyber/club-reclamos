@@ -4679,10 +4679,15 @@ function DashboardPanel({recs}) {
       h('div',{style:{textAlign:"center",padding:"8px 0 0",color:"#94a3b8",fontSize:11}},"Centro Asturiano - Sistema de Reclamos"))))));
 }
 
-  function MisSolicitudes({recs, loaded}) {
+function MisSolicitudes({recs, loaded}) {
   var [email, setEmail] = useState("");
   var [emailBuscado, setEmailBuscado] = useState("");
   var [err, setErr] = useState(false);
+  var [filtroEstado, setFiltroEstado] = useState("todos");
+  var [filtroSector, setFiltroSector] = useState("todos");
+  var [filtroTipo, setFiltroTipo] = useState("todos");
+  var [filtroProyecto, setFiltroProyecto] = useState("todos");
+  var [ordenar, setOrdenar] = useState("fecha_creada_desc");
 
   var buscar = function() {
     var e = email.trim().toLowerCase();
@@ -4690,11 +4695,6 @@ function DashboardPanel({recs}) {
     setErr(false);
     setEmailBuscado(e);
   };
-
-  var misSols = emailBuscado
-    ? recs.filter(function(r){ return (r.email||"").toLowerCase().trim() === emailBuscado; })
-        .sort(function(a,b){ return new Date(b.createdAt)-new Date(a.createdAt); })
-    : [];
 
   var getEstadoDisplay = function(r) {
     var ahora = new Date();
@@ -4723,6 +4723,59 @@ function DashboardPanel({recs}) {
 
   var appUrl = window.location.href.split("?")[0];
 
+  // Base: todas las solicitudes del email
+  var misSolsBase = emailBuscado
+    ? recs.filter(function(r){ return (r.email||"").toLowerCase().trim() === emailBuscado; })
+    : [];
+
+  // Opciones para filtros (calculadas sobre el base sin filtrar)
+  var sectoresDisp = misSolsBase.reduce(function(acc,r){ if(r.sector&&!acc.includes(r.sector)) acc.push(r.sector); return acc; },[]).sort();
+  var tiposDisp = misSolsBase.reduce(function(acc,r){ if(r.cat&&!acc.includes(r.cat)) acc.push(r.cat); return acc; },[]).sort();
+  var estadosDisp = misSolsBase.reduce(function(acc,r){
+    var est = getEstadoDisplay(r);
+    var key = esDemorada(r) ? "demorada" : r.estadoAvance;
+    if(!acc.find(function(x){return x.id===key;})) acc.push({id:key, label:est.label});
+    return acc;
+  },[]);
+
+  // Aplicar filtros
+  var misSols = misSolsBase.filter(function(r){
+    if(filtroEstado !== "todos"){
+      var key = esDemorada(r) ? "demorada" : r.estadoAvance;
+      if(key !== filtroEstado) return false;
+    }
+    if(filtroSector !== "todos" && r.sector !== filtroSector) return false;
+    if(filtroTipo !== "todos" && r.cat !== filtroTipo) return false;
+    if(filtroProyecto === "si" && r.estadoAvance !== "vinculado_proyecto") return false;
+    if(filtroProyecto === "no" && r.estadoAvance === "vinculado_proyecto") return false;
+    return true;
+  });
+
+  // Ordenar
+  misSols = misSols.slice().sort(function(a,b){
+    switch(ordenar){
+      case "fecha_creada_desc": return new Date(b.createdAt)-new Date(a.createdAt);
+      case "fecha_creada_asc":  return new Date(a.createdAt)-new Date(b.createdAt);
+      case "sector":            return (a.sector||"").localeCompare(b.sector||"");
+      case "tipo":              return (a.cat||"").localeCompare(b.cat||"");
+      case "estado":            return getEstadoDisplay(a).label.localeCompare(getEstadoDisplay(b).label);
+      case "fecha_res_asc": {
+        var fa=getFechaRes(a)||"9999"; var fb=getFechaRes(b)||"9999";
+        return fa<fb?-1:fa>fb?1:0;
+      }
+      case "fecha_res_desc": {
+        var fa=getFechaRes(a)||"0000"; var fb=getFechaRes(b)||"0000";
+        return fa>fb?-1:fa<fb?1:0;
+      }
+      default: return 0;
+    }
+  });
+
+  var hayFiltros = filtroEstado!=="todos"||filtroSector!=="todos"||filtroTipo!=="todos"||filtroProyecto!=="todos";
+
+  var selStyle = {padding:"6px 10px",borderRadius:8,border:"1px solid rgba(255,255,255,0.2)",
+    background:"rgba(255,255,255,0.1)",color:"white",fontSize:12,cursor:"pointer",minWidth:130};
+
   return h('div', {style:{minHeight:"100vh", background:"linear-gradient(135deg,#1a3a6b,#0f2347)", padding:"20px 16px 80px"}},
     h('div', {style:{textAlign:"center", marginBottom:24, paddingTop:20}},
       h('div', {style:{fontSize:11, letterSpacing:3, color:"#a8c4e8", textTransform:"uppercase", marginBottom:8}}, "Sistema de Gestion"),
@@ -4731,7 +4784,8 @@ function DashboardPanel({recs}) {
 
     h('div', {style:{maxWidth:1100, margin:"0 auto"}},
 
-      h('div', {style:{background:"rgba(255,255,255,0.07)", borderRadius:16, padding:"20px 18px", marginBottom:20}},
+      // Email input
+      h('div', {style:{background:"rgba(255,255,255,0.07)", borderRadius:16, padding:"20px 18px", marginBottom:16}},
         h('div', {style:{fontSize:13, color:"#a8c4e8", marginBottom:10}}, "Ingresa tu email para ver todas tus solicitudes"),
         h('div', {style:{display:"flex", gap:8}},
           h('input', {
@@ -4748,20 +4802,74 @@ function DashboardPanel({recs}) {
             onClick:buscar,
             style:{padding:"11px 22px", background:"#3b82f6", color:"white", border:"none",
               borderRadius:10, cursor:"pointer", fontSize:14, fontWeight:600, whiteSpace:"nowrap"}
-          }, "Ver mis solicitudes"))),
+          }, "Buscar"))),
+
+      // Filtros y orden ? solo si hay resultados base
+      misSolsBase.length > 0 && h('div', {style:{background:"rgba(255,255,255,0.07)", borderRadius:16, padding:"14px 18px", marginBottom:16}},
+        h('div', {style:{display:"flex", gap:10, flexWrap:"wrap", alignItems:"center"}},
+          h('div', {style:{fontSize:11, color:"#a8c4e8", fontWeight:600, marginRight:4, whiteSpace:"nowrap"}}, "Filtrar:"),
+
+          h('select', {value:filtroEstado, onChange:function(e){setFiltroEstado(e.target.value);}, style:selStyle},
+            h('option',{value:"todos",style:{color:"#1a3a6b"}},"Todos los estados"),
+            ...estadosDisp.map(function(e){return h('option',{key:e.id,value:e.id,style:{color:"#1a3a6b"}},e.label);})),
+
+          h('select', {value:filtroSector, onChange:function(e){setFiltroSector(e.target.value);}, style:selStyle},
+            h('option',{value:"todos",style:{color:"#1a3a6b"}},"Todos los sectores"),
+            ...sectoresDisp.map(function(s){return h('option',{key:s,value:s,style:{color:"#1a3a6b"}},s);})),
+
+          h('select', {value:filtroTipo, onChange:function(e){setFiltroTipo(e.target.value);}, style:selStyle},
+            h('option',{value:"todos",style:{color:"#1a3a6b"}},"Todos los tipos"),
+            ...tiposDisp.map(function(t){
+              var cat=CATS[t];
+              return h('option',{key:t,value:t,style:{color:"#1a3a6b"}},cat?cat.icon+" "+cat.label:t);
+            })),
+
+          h('select', {value:filtroProyecto, onChange:function(e){setFiltroProyecto(e.target.value);}, style:selStyle},
+            h('option',{value:"todos",style:{color:"#1a3a6b"}},"Con y sin proyecto"),
+            h('option',{value:"si",style:{color:"#1a3a6b"}},"Vinculadas a proyecto"),
+            h('option',{value:"no",style:{color:"#1a3a6b"}},"Sin proyecto")),
+
+          h('div', {style:{width:"1px",background:"rgba(255,255,255,0.2)",height:28,margin:"0 4px"}}),
+
+          h('div', {style:{fontSize:11, color:"#a8c4e8", fontWeight:600, whiteSpace:"nowrap"}}, "Ordenar:"),
+          h('select', {value:ordenar, onChange:function(e){setOrdenar(e.target.value);}, style:Object.assign({},selStyle,{minWidth:180})},
+            h('option',{value:"fecha_creada_desc",style:{color:"#1a3a6b"}},"Fecha creada (mas reciente)"),
+            h('option',{value:"fecha_creada_asc",style:{color:"#1a3a6b"}},"Fecha creada (mas antigua)"),
+            h('option',{value:"estado",style:{color:"#1a3a6b"}},"Estado"),
+            h('option',{value:"sector",style:{color:"#1a3a6b"}},"Sector"),
+            h('option',{value:"tipo",style:{color:"#1a3a6b"}},"Tipo"),
+            h('option',{value:"fecha_res_asc",style:{color:"#1a3a6b"}},"Fecha resolucion (proxima)"),
+            h('option',{value:"fecha_res_desc",style:{color:"#1a3a6b"}},"Fecha resolucion (lejana)")),
+
+          hayFiltros && h('button', {
+            onClick:function(){setFiltroEstado("todos");setFiltroSector("todos");setFiltroTipo("todos");setFiltroProyecto("todos");},
+            style:{padding:"6px 12px",background:"rgba(239,68,68,0.2)",border:"1px solid rgba(239,68,68,0.4)",
+              color:"#fca5a5",borderRadius:8,cursor:"pointer",fontSize:11,fontWeight:600,whiteSpace:"nowrap"}
+          }, "Limpiar filtros"))),
 
       !loaded && h('div', {style:{textAlign:"center", color:"#a8c4e8", padding:40}}, "Cargando..."),
 
-      loaded && emailBuscado && misSols.length === 0 &&
+      loaded && emailBuscado && misSolsBase.length === 0 &&
         h('div', {style:{background:"rgba(255,255,255,0.07)", borderRadius:16, padding:40, textAlign:"center"}},
-          h('div', {style:{fontSize:40, marginBottom:12}}, "?"),
+          h('div', {style:{fontSize:40, marginBottom:12}}, "\uD83D\uDCED"),
           h('div', {style:{color:"white", fontSize:16, fontWeight:600, marginBottom:6}}, "No encontramos solicitudes"),
           h('div', {style:{color:"#a8c4e8", fontSize:14}}, "No hay solicitudes con el email " + emailBuscado)),
+
+      loaded && misSolsBase.length > 0 && misSols.length === 0 &&
+        h('div', {style:{background:"rgba(255,255,255,0.07)", borderRadius:16, padding:30, textAlign:"center"}},
+          h('div', {style:{fontSize:28, marginBottom:10}}, "\uD83D\uDD0D"),
+          h('div', {style:{color:"white", fontSize:14, fontWeight:600}}, "Ningun resultado con los filtros aplicados"),
+          h('button', {
+            onClick:function(){setFiltroEstado("todos");setFiltroSector("todos");setFiltroTipo("todos");setFiltroProyecto("todos");},
+            style:{marginTop:12,padding:"8px 18px",background:"#3b82f6",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:600}
+          }, "Limpiar filtros")),
 
       loaded && misSols.length > 0 &&
         h('div', null,
           h('div', {style:{color:"#a8c4e8", fontSize:12, marginBottom:10}},
-            misSols.length + " solicitud" + (misSols.length!==1?"es":"") + " encontrada" + (misSols.length!==1?"s":"")),
+            misSols.length + " solicitud" + (misSols.length!==1?"es":"") +
+            (hayFiltros ? " (filtradas de "+misSolsBase.length+")" : "") +
+            " encontrada" + (misSols.length!==1?"s":"")),
 
           h('div', {style:{background:"white", borderRadius:16, overflow:"hidden"}},
             h('div', {style:{overflowX:"auto"}},
@@ -4782,31 +4890,35 @@ function DashboardPanel({recs}) {
                     var comentarios = r.comentarios || [];
                     var ultimaNovedad = comentarios.filter(function(c){ return c.autor !== "Sistema"; }).slice(-1)[0];
                     var rowBg = i%2===0 ? "white" : "#fafafa";
+                    var esProyecto = r.estadoAvance === "vinculado_proyecto";
 
                     return h('tr', {key:r.id, style:{borderBottom:"1px solid #f1f5f9", background:rowBg}},
 
                       h('td', {style:{padding:"12px 14px", whiteSpace:"nowrap"}},
                         h('a', {href:appUrl+"?seguimiento="+r.numero,
                           style:{fontFamily:"monospace", fontSize:12, fontWeight:700, color:"#3b82f6", textDecoration:"none"}},
-                          r.numero)),
+                          r.numero),
+                        esProyecto && h('div', {style:{fontSize:9,color:"#7c3aed",fontWeight:600,marginTop:2}}, "PROYECTO")),
 
                       h('td', {style:{padding:"12px 14px", fontWeight:500, color:"#1e293b",
                         maxWidth:120, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}},
                         r.sector || "---"),
 
                       h('td', {style:{padding:"12px 14px", color:"#64748b", whiteSpace:"nowrap"}},
-                        cat ? cat.icon + " " + cat.label : "---"),
+                        cat ? cat.icon+" "+cat.label : "---"),
 
                       h('td', {style:{padding:"12px 14px", color:"#475569", maxWidth:220}},
                         h('div', {style:{overflow:"hidden", textOverflow:"ellipsis",
                           display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical", lineHeight:1.4}},
                           r.desc || ""),
-                        ultimaNovedad
-                          ? h('div', {style:{fontSize:11, color:"#94a3b8", marginTop:3, fontStyle:"italic",
-                              overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:220}},
-                              "Ult. novedad: " + (ultimaNovedad.texto||"").substring(0,60) +
-                              ((ultimaNovedad.texto||"").length>60?"...":""))
-                          : null),
+                        esProyecto && r.proyectoTitulo
+                          ? h('div', {style:{fontSize:11,color:"#7c3aed",fontWeight:500,marginTop:3}},
+                              "\uD83C\uDFD7 "+r.proyectoTitulo)
+                          : ultimaNovedad
+                            ? h('div', {style:{fontSize:11, color:"#94a3b8", marginTop:3, fontStyle:"italic",
+                                overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:220}},
+                                "Ult. novedad: "+(ultimaNovedad.texto||"").substring(0,60)+((ultimaNovedad.texto||"").length>60?"...":""))
+                            : null),
 
                       h('td', {style:{padding:"12px 14px", color:"#64748b", whiteSpace:"nowrap", fontSize:12}},
                         fd(r.createdAt)),
@@ -4814,18 +4926,12 @@ function DashboardPanel({recs}) {
                       h('td', {style:{padding:"12px 14px", whiteSpace:"nowrap"}},
                         r.estadoAvance === "completada"
                           ? h('span', {style:{fontSize:12, color:"#15803d", fontWeight:500}},
-                              "Completada " + fd(r.fechaCompletada || r.updatedAt))
+                              "Completada "+fd(r.fechaCompletada||r.updatedAt))
                           : fechaRes
                             ? h('div', null,
-                                h('div', {style:{fontSize:12, fontWeight:600, color:demorada?"#dc2626":"#1e293b"}},
-                                  fd(fechaRes)),
-                                reprog
-                                  ? h('div', {style:{fontSize:10, color:"#f97316"}},
-                                      "Reprog. (orig: " + fd(r.fechaOriginalCierre) + ")")
-                                  : null,
-                                demorada
-                                  ? h('div', {style:{fontSize:10, color:"#dc2626", fontWeight:600}}, "Vencida")
-                                  : null)
+                                h('div', {style:{fontSize:12, fontWeight:600, color:demorada?"#dc2626":"#1e293b"}}, fd(fechaRes)),
+                                reprog ? h('div', {style:{fontSize:10, color:"#f97316"}}, "Reprog. (orig: "+fd(r.fechaOriginalCierre)+")") : null,
+                                demorada ? h('div', {style:{fontSize:10, color:"#dc2626", fontWeight:600}}, "Vencida") : null)
                             : h('span', {style:{fontSize:12, color:"#94a3b8", fontStyle:"italic"}}, "A confirmar")),
 
                       h('td', {style:{padding:"12px 14px"}},
@@ -4835,7 +4941,7 @@ function DashboardPanel({recs}) {
 
                       h('td', {style:{padding:"12px 14px", textAlign:"center"}},
                         r.calificacion
-                          ? h('span', {style:{fontSize:13}}, "?".repeat(r.calificacion))
+                          ? h('span', {style:{fontSize:13}}, "\u2605".repeat(r.calificacion))
                           : h('span', {style:{color:"#cbd5e1", fontSize:12}}, "---")),
 
                       h('td', {style:{padding:"12px 14px", whiteSpace:"nowrap"}},
@@ -4848,8 +4954,7 @@ function DashboardPanel({recs}) {
                             ? h('a', {href:appUrl+"?calificar="+r.id,
                                 style:{display:"inline-block", padding:"5px 12px", background:"#fef2f2",
                                   color:"#dc2626", border:"1px solid #fecaca", borderRadius:7, fontSize:11,
-                                  fontWeight:600, textDecoration:"none"}},
-                                "Reabrir")
+                                  fontWeight:600, textDecoration:"none"}}, "Reabrir")
                             : h('a', {href:appUrl+"?seguimiento="+r.numero,
                                 style:{display:"inline-block", padding:"5px 12px", background:"#f1f5f9",
                                   color:"#374151", borderRadius:7, fontSize:11, fontWeight:600, textDecoration:"none"}},
@@ -4857,6 +4962,7 @@ function DashboardPanel({recs}) {
                     );
                   }))))))));
 }
+
 
 function App() {
   // Detect URL params immediately so seguimiento works without login
