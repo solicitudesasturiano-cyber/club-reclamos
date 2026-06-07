@@ -3275,7 +3275,7 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
                 h('div',{style:{fontSize:10,color:"#94a3b8"}},r.tipo||"")),
               h('td',{style:{padding:"6px 4px",fontSize:11}},
                 h('div',{style:{fontWeight:600,color:"#1e293b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:130}},r.sector),
-                h('div',{style:{fontSize:10,color:"#64748b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:130}},cat?.icon+" "+(r.sub||""))),
+                h('div',{style:{fontSize:10,color:"#64748b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:130}},r.desc||"")),
               h('td',{style:{padding:"6px 4px"}},
                 (() => {
                   const socio = PRIS.find(p=>p.id===r.pri);
