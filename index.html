@@ -5537,7 +5537,57 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
               });
               return acc;
             },[])))));
-  };  
+};
+
+  return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#1a3a6b,#0f2347)",padding:"20px 16px 80px"}},
+    h('div',{style:{textAlign:"center",marginBottom:24,paddingTop:20}},
+      h('div',{style:{fontSize:11,letterSpacing:3,color:"#a8c4e8",textTransform:"uppercase",marginBottom:8}},"Sistema de Gestión"),
+      h('h1',{style:{fontFamily:"'Playfair Display',serif",fontSize:28,color:"white",fontWeight:900}},"Mis Tareas"),
+      h('div',{style:{width:40,height:3,background:"#3b82f6",margin:"10px auto 0",borderRadius:2}})),
+    h('div',{style:{maxWidth:800,margin:"0 auto"}},
+      h('div',{style:{background:"rgba(255,255,255,0.07)",borderRadius:16,padding:"20px 18px",marginBottom:16}},
+        h('div',{style:{fontSize:13,color:"#a8c4e8",marginBottom:10}},"Ingresá tu email para ver tu calendario de tareas"),
+        h('div',{style:{display:"flex",gap:8}},
+          h('input',{value:email,onChange:function(e){setEmail(e.target.value);setErr(false);},
+            onKeyDown:function(e){if(e.key==="Enter") buscar();},
+            placeholder:"tu@email.com",type:"email",
+            style:{flex:1,padding:"11px 14px",borderRadius:10,
+              border:err?"2px solid #ef4444":"2px solid rgba(255,255,255,0.2)",
+              background:"rgba(255,255,255,0.1)",color:"white",fontSize:14,outline:"none"}}),
+          h('button',{onClick:buscar,
+            style:{padding:"11px 22px",background:"#3b82f6",color:"white",border:"none",
+              borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:600,whiteSpace:"nowrap"}},
+            "Buscar"))),
+      emailBuscado && loaded && h('div',{style:{background:"white",borderRadius:16,padding:"18px 16px"}},
+        h('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:8}},
+          h('div',{style:{display:"flex",gap:6}},
+            h('button',{onClick:irHoy,
+              style:{padding:"6px 14px",background:"#f1f5f9",border:"1.5px solid #e2e8f0",borderRadius:8,
+                cursor:"pointer",fontSize:12,fontWeight:600,color:"#374151"}},
+              "Hoy"),
+            h('div',{style:{display:"flex",background:"#f1f5f9",borderRadius:8,padding:2}},
+              ...["mes","semana"].map(function(m){
+                return h('button',{key:m,onClick:function(){setVistaMode(m);},
+                  style:{padding:"5px 14px",borderRadius:6,border:"none",cursor:"pointer",fontSize:12,fontWeight:600,
+                    background:vistaMode===m?"white":"transparent",
+                    color:vistaMode===m?"#1a3a6b":"#64748b",
+                    boxShadow:vistaMode===m?"0 1px 4px rgba(0,0,0,0.1)":"none"}},
+                  m==="mes"?"Mes":"Semana");
+              }))),
+          h('div',{style:{display:"flex",gap:12,fontSize:11}},
+            h('span',{style:{display:"flex",alignItems:"center",gap:4}},
+              h('span',{style:{width:10,height:10,borderRadius:2,background:"#ef4444",display:"inline-block"}}),
+              "Sin confirmar"),
+            h('span',{style:{display:"flex",alignItems:"center",gap:4}},
+              h('span',{style:{width:10,height:10,borderRadius:2,background:"#22c55e",display:"inline-block"}}),
+              "Confirmada"))),
+        vistaMode==="mes" ? renderMes() : renderSemana()),
+      emailBuscado && loaded && misTareas.length===0 &&
+        h('div',{style:{background:"rgba(255,255,255,0.07)",borderRadius:16,padding:40,textAlign:"center"}},
+          h('div',{style:{fontSize:40,marginBottom:12}},"📅"),
+          h('div',{style:{color:"white",fontSize:16,fontWeight:600,marginBottom:6}},"Sin tareas asignadas"),
+          h('div',{style:{color:"#a8c4e8",fontSize:14}},"No hay tareas asignadas al email "+emailBuscado)),
+      tareaSeleccionada && h(ModalTarea,{r:tareaSeleccionada,onClose:function(){setTareaSeleccionada(null);}})));
 }
   function App() {
   // Detect URL params immediately so seguimiento works without login
