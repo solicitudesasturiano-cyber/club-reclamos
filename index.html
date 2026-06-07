@@ -813,12 +813,13 @@ function FormularioSocio({onSubmit, reclamos}) {
     if (!validate()) return;
     setSending(true);
     ls.set("datos_solicitante",{nombre:f.nombre.trim(),email:f.email.trim(),celular:f.celular.trim()});
-    // Generate sequential number by category prefix
+    // Generate sequential number using fresh data from Supabase
+    const recsFrescos = await sbGetAll();
     const catPrefixes = {infraestructura:"O",limpieza:"L",mantenimiento:"M",equipamiento:"E",preparacion:"P",servicios:"S",cuotas:"C"};
     const prefix = catPrefixes[f.cat] || "R";
-    const existing = reclamos.filter(r=>r.numero?.startsWith(prefix+"-")).length;
+    const existing = recsFrescos.filter(function(r){return r.numero&&r.numero.startsWith(prefix+"-");}).length;
     const seq = String(existing+1).padStart(3,"0");
-    const total = String(reclamos.length+1).padStart(3,"0");
+    const total = String(recsFrescos.length+1).padStart(3,"0");
     const n = prefix+"-"+total+"-"+seq;
     setNum(n);
     const catConf=CATS[f.cat], pri=PRIS.find(p=>p.id===f.pri);
