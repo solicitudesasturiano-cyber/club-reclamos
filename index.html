@@ -938,6 +938,7 @@ function FormularioSocio({onSubmit, reclamos}) {
         // Adjuntos
         h('div',{style:{marginBottom:22}},lbl("Foto / video del problema"),
           h('input',{ref:fileRef,type:"file",accept:"image/*,video/*",multiple:true,style:{display:"none"},onChange:e=>{Array.from(e.target.files).forEach(file=>{const r=new FileReader();r.onload=ev=>setF(p=>({...p,adjuntos:[...p.adjuntos,{nombre:file.name,tipo:file.type,data:ev.target.result}]}));r.readAsDataURL(file);});e.target.value="";}}),
+          h('input',{ref:cameraRef,type:"file",accept:"image/*,video/*",capture:"environment",style:{display:"none"},onChange:...})
           h('div',{style:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:f.adjuntos.length?8:0}},
             ...f.adjuntos.map((a,i)=>h('div',{key:i,style:{display:"flex",alignItems:"center",gap:6,background:"rgba(255,255,255,0.1)",borderRadius:8,padding:"5px 10px",fontSize:12}},
               h('span',null,a.tipo?.startsWith("video")?"🎥":"📷"),
