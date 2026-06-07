@@ -826,11 +826,12 @@ function FormularioSocio({onSubmit, reclamos}) {
       ejecutorMail:"", ejecutorNombre:"", ejecutorConfirmado:false, ejecutorRechazado:false,
       evidenciaUrl:"", adjuntosResolucion:[]};
     // Upload adjuntos to Supabase Storage
+    await onSubmit(rec);
     if(rec.adjuntos && rec.adjuntos.length > 0) {
       const urls = await uploadAdjuntos(rec.adjuntos, rec.id, "formulario");
       rec.adjuntos = urls;
+      await sbUpsert(rec);
     }
-    await onSubmit(rec);
     const appUrl = window.location.href.split("?")[0];
     const seguimientoUrl = appUrl+"?seguimiento="+n;
     // Cargar config fresca desde Supabase para obtener responsables
