@@ -958,7 +958,7 @@ function PantallaRechazo({onConfirm}) {
   const [motivo,setMotivo] = useState("");
   const [err,setErr] = useState(false);
   const pending = ls.get("pendingRechazar");
-  const rec = pending?.rec;
+  const rec = pending && pending.rec;
   const submit = () => { if(!motivo.trim()){setErr(true);return;} onConfirm(motivo.trim()); };
   return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#1a3a6b,#0f2347)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
     h('div',{style:{background:"white",borderRadius:20,padding:36,maxWidth:460,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}},
