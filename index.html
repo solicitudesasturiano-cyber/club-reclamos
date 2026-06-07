@@ -873,7 +873,8 @@ function FormularioSocio({onSubmit, reclamos}) {
         h('div',{style:{fontSize:12,color:"#64748b",letterSpacing:1,textTransform:"uppercase",marginBottom:4}},"Número de solicitud"),
         h('div',{style:{fontSize:28,fontWeight:800,color:"#15803d",fontFamily:"monospace"}},num)),
       h('p',{style:{fontSize:13,color:"#94a3b8"}},"Guardá este número para hacer seguimiento."),
-      h('button',{onClick:()=>{setDone(false);setF({tipo:"",nombre:"",celular:"",email:"",sector:"",cat:"",sub:"",pri:"media",desc:"",ubicacion:"",adjuntos:[]});setDup(null);},
+      h('button',{onClick:()=>{setDone(false);var _dsR = ls.get("datos_solicitante") || {};
+setF({tipo:"",nombre:_dsR.nombre||"",celular:_dsR.celular||"",email:_dsR.email||"",sector:"",cat:"",sub:"",pri:"media",desc:"",ubicacion:"",adjuntos:[]});setDup(null);},
         style:{marginTop:20,padding:"10px 28px",background:"#1a3a6b",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:600}},"Nueva solicitud")));
 
   const catConf = CATS[f.cat];
