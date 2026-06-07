@@ -784,7 +784,8 @@ function FormularioSocio({onSubmit, reclamos}) {
   const [dup,setDup] = useState(null);
   const [sending,setSending] = useState(false);
   const fileRef = useRef();
-
+  const cameraRef = useRef();
+  
   const set = (k,v) => {
     let extra = {};
     if (k==="cat") {
@@ -945,7 +946,9 @@ function FormularioSocio({onSubmit, reclamos}) {
               a.url ? h('a',{href:a.url,target:"_blank",style:{color:"#a8c4e8",maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:12}},a.nombre)
                     : h('span',{style:{color:"white",maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},a.nombre),
               h('button',{onClick:()=>setF(p=>({...p,adjuntos:p.adjuntos.filter((_,idx)=>idx!==i)})),style:{background:"none",border:"none",cursor:"pointer",color:"#ef4444",fontSize:14,padding:0}},"✕")))),
-          h('button',{onClick:()=>fileRef.current.click(),style:{padding:"9px 16px",borderRadius:9,border:"1.5px dashed rgba(255,255,255,0.25)",background:"transparent",color:"#94a3b8",cursor:"pointer",fontSize:13}},"📎 Adjuntar foto / video")),
+         h('div',{style:{display:"flex",gap:8}},
+            h('button',{onClick:()=>fileRef.current.click(),style:{padding:"9px 16px",borderRadius:9,border:"1.5px dashed rgba(255,255,255,0.25)",background:"transparent",color:"#94a3b8",cursor:"pointer",fontSize:13}},"📎 Adjuntar existente"),
+            h('button',{onClick:()=>cameraRef.current.click(),style:{padding:"9px 16px",borderRadius:9,border:"1.5px dashed rgba(255,255,255,0.25)",background:"transparent",color:"#94a3b8",cursor:"pointer",fontSize:13}},"📷 Sacar foto / grabar"))
         // Submit
         h('button',{onClick:submit,disabled:sending,style:{width:"100%",padding:"15px",background:sending?"#475569":"linear-gradient(135deg,#3b82f6,#1d4ed8)",color:"white",border:"none",borderRadius:12,fontSize:16,fontWeight:700,cursor:sending?"not-allowed":"pointer"}},sending?"Enviando...":"Enviar Solicitud →"))));
 }
