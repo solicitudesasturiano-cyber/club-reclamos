@@ -848,7 +848,7 @@ function FormularioSocio({onSubmit, reclamos}) {
     console.log("catCfgNuevo:", JSON.stringify(catCfgNuevo));
     console.log("respMailsNuevo:", respMailsNuevo);
     console.log("toNuevo:", toNuevo);
-    if(toNuevo.length) {
+    if(toNuevo.length && f.pri === "urgente") {
       await sendEmail({to:toNuevo, subject:`[Asturiano] Nueva solicitud ${n} — ${f.sector}`,
         body:`Nueva solicitud registrada.\n\nNúmero: ${n}\nSolicitante: ${f.tipo} — ${f.nombre}\nCelular: ${f.celular||"—"}\nEmail: ${f.email||"—"}\nSector: ${f.sector}${f.ubicacion?`\nUbicación exacta: ${f.ubicacion}`:""}\nTipo: ${catConf?.label} › ${f.sub}\nPrioridad: ${pri?.label}\nDescripción: ${f.desc}`});
     }
