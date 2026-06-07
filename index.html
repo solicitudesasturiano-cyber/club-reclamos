@@ -777,7 +777,8 @@ function Badge({color, bg, label, sm}) {
 
 // ── FORMULARIO SOCIO ───────────────────────────────────────────────────────
 function FormularioSocio({onSubmit, reclamos}) {
-  const [f,setF] = useState({tipo:"",nombre:"",celular:"",email:"",sector:"",cat:"",sub:"",pri:"media",desc:"",ubicacion:"",adjuntos:[]});
+  const _ds = ls.get("datos_solicitante") || {};
+  const [f,setF] = useState({tipo:"",nombre:_ds.nombre||"",celular:_ds.celular||"",email:_ds.email||"",sector:"",cat:"",sub:"",pri:"media",desc:"",ubicacion:"",adjuntos:[]});
   const [done,setDone] = useState(false);
   const [num,setNum] = useState("");
   const [err,setErr] = useState({});
@@ -811,6 +812,7 @@ function FormularioSocio({onSubmit, reclamos}) {
   const submit = async () => {
     if (!validate()) return;
     setSending(true);
+    ls.set("datos_solicitante",{nombre:f.nombre.trim(),email:f.email.trim(),celular:f.celular.trim()});
     // Generate sequential number by category prefix
     const catPrefixes = {infraestructura:"O",limpieza:"L",mantenimiento:"M",equipamiento:"E",preparacion:"P",servicios:"S",cuotas:"C"};
     const prefix = catPrefixes[f.cat] || "R";
@@ -902,6 +904,11 @@ function FormularioSocio({onSubmit, reclamos}) {
           h('div',{style:{position:"relative"}},
             h('span',{style:{position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",fontSize:16}},"📱"),
             h('input',{value:f.celular,onChange:e=>set("celular",e.target.value),placeholder:"Ej: 11-1234-5678",style:{...iS(false),paddingLeft:38},type:"tel"}))),
+        _ds.email && h('div',{style:{fontSize:11,color:"#a8c4e8",marginBottom:10,marginTop:-4}},
+          "✓ Tus datos fueron recordados. ",
+          h('button',{onClick:function(){ls.set("datos_solicitante",null);setF(function(p){return Object.assign({},p,{nombre:"",email:"",celular:""}); });},
+            style:{background:"none",border:"none",color:"#f87171",cursor:"pointer",fontSize:11,textDecoration:"underline",padding:0}},
+          "Borrar")),
         h('div',{style:{height:1,background:"rgba(255,255,255,0.1)",marginBottom:18}}),
         // Duplicado warning
 
