@@ -5497,6 +5497,8 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
     var [motivoNoPude, setMotivoNoPude] = useState("");
     var [enviandoNoPude, setEnviandoNoPude] = useState(false);
     var estadoEj = getEstadoEj(r);
+    var historialItems = [{texto:"Solicitud creada por "+(r.nombre||"anónimo")+" ("+r.tipo+")", fecha:r.createdAt, autor:"Sistema-creacion"}];
+    (r.comentarios||[]).forEach(function(c){ historialItems.push(c); });
     var cat = CATS[r.cat];
     var crit = r.criticidad||r.pri||"media";
 
