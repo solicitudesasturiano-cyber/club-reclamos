@@ -5179,7 +5179,7 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
   var [email, setEmail] = useState("");
   var [emailBuscado, setEmailBuscado] = useState("");
   var [err, setErr] = useState(false);
-  var [vistaMode, setVistaMode] = useState("mes"); // "mes" | "semana"
+  var [vistaMode, setVistaMode] = useState("semana"); // "mes" | "semana"
   var [fechaBase, setFechaBase] = useState(new Date());
   var [tareaSeleccionada, setTareaSeleccionada] = useState(null);
   var [procesando, setProcesando] = useState(null);
@@ -5715,13 +5715,9 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
             style:{padding:"11px 22px",background:"#3b82f6",color:"white",border:"none",
               borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:600,whiteSpace:"nowrap"}},
             "Buscar"))),
-      emailBuscado && loaded && h('div',{style:{background:"white",borderRadius:16,padding:"18px 16px"}},
+      emailBuscado && loaded && misTareas.length>0 && h('div',{style:{background:"white",borderRadius:16,padding:"18px 16px"}},
         h('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:8}},
           h('div',{style:{display:"flex",gap:6,alignItems:"center"}},
-            h('button',{onClick:irHoy,
-              style:{padding:"6px 14px",background:"#f1f5f9",border:"1.5px solid #e2e8f0",borderRadius:8,
-                cursor:"pointer",fontSize:12,fontWeight:600,color:"#374151"}},
-              "Hoy"),
             h('div',{style:{display:"flex",background:"#f1f5f9",borderRadius:8,padding:2}},
               ...["semana","mes"].map(function(m){
                 return h('button',{key:m,onClick:function(){setVistaMode(m);},
@@ -5740,11 +5736,11 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
               "Confirmada"))),
         vistaMode==="semana" ? renderSemana() : renderMes()),
       emailBuscado && loaded && misTareas.length===0 &&
-        h('div',{style:{background:"rgba(255,255,255,0.07)",borderRadius:16,padding:40,textAlign:"center"}},
-          h('div',{style:{fontSize:40,marginBottom:12}},"📅"),
-          h('div',{style:{color:"white",fontSize:16,fontWeight:600,marginBottom:6}},"Sin tareas asignadas"),
-          h('div',{style:{color:"#a8c4e8",fontSize:14}},"No hay tareas asignadas al email "+emailBuscado)),
-      tareaSeleccionada && h(ModalTarea,{r:tareaSeleccionada,onClose:function(){setTareaSeleccionada(null);}})));
+        h('div',{style:{background:"rgba(239,68,68,0.15)",border:"1.5px solid rgba(239,68,68,0.4)",borderRadius:16,padding:40,textAlign:"center"}},
+          h('div',{style:{fontSize:40,marginBottom:12}},"❌"),
+          h('div',{style:{color:"#fca5a5",fontSize:16,fontWeight:700,marginBottom:6}},"Mail no encontrado"),
+          h('div',{style:{color:"#fca5a5",fontSize:14}},"No hay tareas asignadas al email "+emailBuscado+". Verificá que sea el mail correcto.")),
+      tareaSeleccionada && h(ModalTarea,{r:tareaSeleccionada,onClose:function(){setTareaSeleccionada(null);}}))));
 }
   function App() {
   // Detect URL params immediately so seguimiento works without login
