@@ -5180,7 +5180,7 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
   var [email, setEmail] = useState("");
   var [emailBuscado, setEmailBuscado] = useState("");
   var [err, setErr] = useState(false);
-  var [vistaMode, setVistaMode] = useState("semana"); // "mes" | "semana"
+  var [vistaMode, setVistaMode] = useState("semana");
   var [fechaBase, setFechaBase] = useState(new Date());
   var [tareaSeleccionada, setTareaSeleccionada] = useState(null);
   var [procesando, setProcesando] = useState(null);
@@ -5195,11 +5195,9 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
   var CRIT_COLOR = {urgente:"#ef4444", alta:"#f97316", media:"#eab308", baja:"#22c55e"};
   var CRIT_DOT = {urgente:"🔴", alta:"🟠", media:"🟡", baja:"🟢"};
 
-  // Tareas del ejecutor
   var misTareas = emailBuscado ? recs.filter(function(r) {
     if(!r.fechaInicioEsperado && !r.fechaCierre) return false;
-    if(["consolidada"].includes(r.estadoAvance)) return false;
-    // Verificar si está en ejecutores_lista o es el ejecutorMail directo
+    if(r.estadoAvance==="consolidada") return false;
     var enLista = (r.ejecutores_lista||[]).some(function(e){ return e.mail===emailBuscado; });
     var esDirecto = (r.ejecutorMail||"").toLowerCase() === emailBuscado;
     return enLista || esDirecto;
@@ -5218,12 +5216,10 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
     return "pendiente";
   };
 
-  // Filtrar rechazadas del calendario
   var tareasCalendario = misTareas.filter(function(r){
     return getEstadoEj(r) !== "rechazado";
   });
 
-  // Navegar
   var anterior = function() {
     var d = new Date(fechaBase);
     if(vistaMode==="mes") d.setMonth(d.getMonth()-1);
@@ -5236,19 +5232,7 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
     else d.setDate(d.getDate()+7);
     setFechaBase(d);
   };
-  var irHoy = function() { setFechaBase(new Date()); };
 
-  // Tareas para un día específico
-  var tareasDelDia = function(fecha) {
-    var dStr = fecha.getFullYear()+"-"+String(fecha.getMonth()+1).padStart(2,"0")+"-"+String(fecha.getDate()).padStart(2,"0");
-    return tareasCalendario.filter(function(r){
-      var inicio = r.fechaInicioEsperado||r.fechaCierre;
-      var cierre = r.fechaCierre||r.fechaInicioEsperado;
-      return dStr >= inicio && dStr <= cierre;
-    });
-  };
-
-  // Confirmar tarea
   var confirmar = async function(r) {
     setProcesando(r.id);
     var ahora = new Date().toISOString();
@@ -5268,7 +5252,6 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
     setProcesando(null);
   };
 
-  // Rechazar tarea
   var rechazar = async function(r, motivo) {
     setProcesando(r.id);
     var ahora = new Date().toISOString();
@@ -5288,17 +5271,79 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
     setRecs(function(prev){return prev.map(function(x){return x.id===r.id?updated:x;});});
     setTareaSeleccionada(null);
     setProcesando(null);
-    // Mail al responsable
     var catCfg = getCatCfg(r.cat);
     var respMails = (catCfg.responsables||[]).map(function(x){return x.mail;}).filter(Boolean);
     if(respMails.length) await sendEmail({to:respMails,
       subject:"[Asturiano] Ejecutor rechazó tarea — "+r.numero,
       body:"El ejecutor "+emailBuscado+" rechazó la tarea "+r.numero+" ("+r.sector+").\n\nMotivo: "+motivo+"\n\nDebés reasignarla."});
   };
-  
-      
-  // ── RENDER CALENDARIO MES ────────────────────────────────────────────────
- var renderMes = function() {
+
+  var calcularSpan = function(r, dias) {
+    var inicio = r.fechaInicioEsperado||r.fechaCierre;
+    var cierre = r.fechaCierre||r.fechaInicioEsperado;
+    var colStart=-1; var colEnd=-1;
+    dias.forEach(function(d,i){
+      if(!d) return;
+      var ds = d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+      if(ds>=inicio && ds<=cierre){if(colStart===-1) colStart=i; colEnd=i;}
+    });
+    if(colStart===-1) return null;
+    return {r:r,colStart:colStart,colEnd:colEnd};
+  };
+
+  var calcularFilas = function(tareasConSpan) {
+    var filas = [];
+    tareasConSpan.forEach(function(t){
+      var filaIdx=0;
+      while(true){
+        if(!filas[filaIdx]) filas[filaIdx]=[];
+        var overlap=filas[filaIdx].some(function(ot){return !(ot.colEnd<t.colStart||ot.colStart>t.colEnd);});
+        if(!overlap){filas[filaIdx].push(t);break;}
+        filaIdx++;
+      }
+    });
+    return filas;
+  };
+
+  var renderTareasGrid = function(filas, numFilas, mode) {
+    var items = [];
+    filas.forEach(function(fila, filaIdx){
+      fila.forEach(function(t){
+        var est=getEstadoEj(t.r);
+        var crit=t.r.criticidad||t.r.pri||"media";
+        var bg=est==="confirmado"?"#22c55e":"#ef4444";
+        var bgLight=est==="confirmado"?"#f0fdf4":"#fef2f2";
+        if(mode==="semana") {
+          items.push(h('div',{key:t.r.id,
+            onClick:function(){setTareaSeleccionada(t.r);},
+            style:{gridColumn:(t.colStart+1)+"/"+(t.colEnd+2),
+              gridRow:(filaIdx+1)+"/"+(filaIdx+2),
+              background:bgLight,border:"1.5px solid "+bg,borderLeft:"4px solid "+bg,
+              borderRadius:6,padding:"5px 8px",cursor:"pointer",margin:"3px 2px",
+              overflow:"hidden",zIndex:1,alignSelf:"start"}},
+            h('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:4,marginBottom:2}},
+              h('span',{style:{fontFamily:"monospace",fontSize:10,fontWeight:700,color:"#3b82f6",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},t.r.numero),
+              h('span',{style:{fontSize:10,fontWeight:700,color:CRIT_COLOR[crit],whiteSpace:"nowrap"}},CRIT_DOT[crit])),
+            h('div',{style:{fontSize:11,fontWeight:600,color:"#1e293b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},t.r.sector),
+            h('div',{style:{fontSize:10,color:"#64748b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}},t.r.desc||"")));
+        } else {
+          items.push(h('div',{key:t.r.id,
+            onClick:function(){setTareaSeleccionada(t.r);},
+            style:{gridColumn:(t.colStart+1)+"/"+(t.colEnd+2),
+              gridRow:(filaIdx+1)+"/"+(filaIdx+2),
+              background:bgLight,border:"1.5px solid "+bg,borderLeft:"4px solid "+bg,
+              borderRadius:4,padding:"2px 6px",cursor:"pointer",margin:"2px",
+              overflow:"hidden",zIndex:1,alignSelf:"center"}},
+            h('div',{style:{display:"flex",alignItems:"center",gap:4,overflow:"hidden"}},
+              h('span',{style:{fontSize:9,whiteSpace:"nowrap"}},CRIT_DOT[crit]),
+              h('span',{style:{fontSize:10,fontWeight:600,color:"#1e293b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},t.r.sector))));
+        }
+      });
+    });
+    return items;
+  };
+
+  var renderMes = function() {
     var año = fechaBase.getFullYear();
     var mes = fechaBase.getMonth();
     var primerDia = new Date(año, mes, 1);
@@ -5308,7 +5353,6 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
     var DIAS_HEADER = ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
     var hoy = new Date(); hoy.setHours(0,0,0,0);
 
-    // Generar todas las semanas del mes
     var semanas = [];
     var celdas = [];
     for(var i=0; i<diasAntes; i++) celdas.push(null);
@@ -5316,93 +5360,50 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
     while(celdas.length%7!==0) celdas.push(null);
     for(var s=0; s<celdas.length/7; s++) semanas.push(celdas.slice(s*7,(s+1)*7));
 
+    var headerDias = DIAS_HEADER.map(function(d){
+      return h('div',{key:d,style:{textAlign:"center",fontSize:11,fontWeight:700,color:"#94a3b8",padding:"4px 0",textTransform:"uppercase"}},d);
+    });
+
+    var semanasRender = semanas.map(function(semana, si){
+      var tareasConSpan = tareasCalendario.map(function(r){ return calcularSpan(r,semana); }).filter(Boolean);
+      var filas = calcularFilas(tareasConSpan);
+      var numFilas = Math.max(1,filas.length);
+
+      var numeroDias = semana.map(function(fecha,i){
+        if(!fecha) return h('div',{key:"e"+i,style:{height:24}});
+        var esHoy = fecha.getTime()===hoy.getTime();
+        return h('div',{key:i,style:{height:24,display:"flex",alignItems:"center",justifyContent:"center"}},
+          h('div',{style:{fontSize:12,fontWeight:esHoy?800:400,color:esHoy?"white":"#374151",
+            background:esHoy?"#3b82f6":"transparent",borderRadius:"50%",
+            width:22,height:22,display:"flex",alignItems:"center",justifyContent:"center"}},
+            fecha.getDate()));
+      });
+
+      var fondos = semana.map(function(fecha,i){
+        var esHoy = fecha && fecha.getTime()===hoy.getTime();
+        var esMes = fecha && fecha.getMonth()===mes;
+        return h('div',{key:"bg"+i,style:{
+          gridColumn:(i+1)+"/"+(i+2),
+          gridRow:"1/"+(numFilas+1),
+          background:esHoy?"#eff6ff":esMes?"white":"#f8fafc",
+          border:esHoy?"1.5px solid #bfdbfe":"1px solid #f1f5f9",
+          borderRadius:4}});
+      });
+
+      var tareas = renderTareasGrid(filas, numFilas, "mes");
+
+      return h('div',{key:si,style:{position:"relative"}},
+        React.createElement.apply(React, ['div',{style:{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:2}}].concat(numeroDias)),
+        React.createElement.apply(React, ['div',{style:{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,minHeight:(numFilas*32+4)+"px",position:"relative"}}].concat(fondos.concat(tareas))));
+    });
+
     return h('div',null,
       h('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}},
         h('button',{onClick:anterior,style:{background:"none",border:"1.5px solid #e2e8f0",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:16,color:"#374151"}},"‹"),
         h('div',{style:{fontSize:18,fontWeight:700,color:"#1a3a6b"}},MESES[mes]+" "+año),
         h('button',{onClick:siguiente,style:{background:"none",border:"1.5px solid #e2e8f0",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:16,color:"#374151"}},"›")),
-      h('div',{style:{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:4}},
-        ...DIAS_HEADER.map(function(d){
-          return h('div',{key:d,style:{textAlign:"center",fontSize:11,fontWeight:700,color:"#94a3b8",padding:"4px 0",textTransform:"uppercase"}},d);
-        })),
-      h('div',{style:{display:"flex",flexDirection:"column",gap:2}},
-        ...semanas.map(function(semana, si){
-          // Calcular tareas con span para esta semana
-          var tareasConSpan = tareasCalendario.map(function(r){
-            var inicio = r.fechaInicioEsperado||r.fechaCierre;
-            var cierre = r.fechaCierre||r.fechaInicioEsperado;
-            var colStart=-1; var colEnd=-1;
-            semana.forEach(function(d,i){
-              if(!d) return;
-              var ds = d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
-              if(ds>=inicio && ds<=cierre){
-                if(colStart===-1) colStart=i;
-                colEnd=i;
-              }
-            });
-            if(colStart===-1) return null;
-            return {r:r,colStart:colStart,colEnd:colEnd};
-          }).filter(Boolean);
-
-          var filas = [];
-          tareasConSpan.forEach(function(t){
-            var filaIdx=0;
-            while(true){
-              if(!filas[filaIdx]) filas[filaIdx]=[];
-              var overlap=filas[filaIdx].some(function(ot){return !(ot.colEnd<t.colStart||ot.colStart>t.colEnd);});
-              if(!overlap){filas[filaIdx].push(t);break;}
-              filaIdx++;
-            }
-          });
-          var numFilas = Math.max(1,filas.length);
-
-          return h('div',{key:si,style:{position:"relative"}},
-            // Números de día
-            h('div',{style:{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:2}},
-              ...semana.map(function(fecha,i){
-                if(!fecha) return h('div',{key:"e"+i,style:{height:24}});
-                var esHoy = fecha.getTime()===hoy.getTime();
-                return h('div',{key:i,style:{height:24,display:"flex",alignItems:"center",justifyContent:"center"}},
-                  h('div',{style:{fontSize:12,fontWeight:esHoy?800:400,color:esHoy?"white":"#374151",
-                    background:esHoy?"#3b82f6":"transparent",borderRadius:"50%",
-                    width:22,height:22,display:"flex",alignItems:"center",justifyContent:"center"}},
-                    fecha.getDate()));
-              })),
-            // Grid tareas
-            h('div',{style:{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,
-              minHeight:(numFilas*32+4)+"px",position:"relative"}},
-              // Fondos
-              ...semana.map(function(fecha,i){
-                var esHoy = fecha && fecha.getTime()===hoy.getTime();
-                var esMes = fecha && fecha.getMonth()===mes;
-                return h('div',{key:"bg"+i,style:{
-                  gridColumn:(i+1)+"/"+(i+2),
-                  gridRow:"1/"+(numFilas+1),
-                  background:esHoy?"#eff6ff":esMes?"white":"#f8fafc",
-                  border:esHoy?"1.5px solid #bfdbfe":"1px solid #f1f5f9",
-                  borderRadius:4}});
-              }),
-              // Tareas
-              ...filas.reduce(function(acc,fila,filaIdx){
-                fila.forEach(function(t){
-                  var est=getEstadoEj(t.r);
-                  var crit=t.r.criticidad||t.r.pri||"media";
-                  var bg=est==="confirmado"?"#22c55e":"#ef4444";
-                  var bgLight=est==="confirmado"?"#f0fdf4":"#fef2f2";
-                  acc.push(h('div',{key:t.r.id,
-                    onClick:function(){setTareaSeleccionada(t.r);},
-                    style:{gridColumn:(t.colStart+1)+"/"+(t.colEnd+2),
-                      gridRow:(filaIdx+1)+"/"+(filaIdx+2),
-                      background:bgLight,border:"1.5px solid "+bg,borderLeft:"4px solid "+bg,
-                      borderRadius:4,padding:"2px 6px",cursor:"pointer",margin:"2px",
-                      overflow:"hidden",zIndex:1,alignSelf:"center"}},
-                    h('div',{style:{display:"flex",alignItems:"center",gap:4,overflow:"hidden"}},
-                      h('span',{style:{fontSize:9,whiteSpace:"nowrap"}},CRIT_DOT[crit]),
-                      h('span',{style:{fontSize:10,fontWeight:600,color:"#1e293b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},t.r.sector))));
-                });
-                return acc;
-              },[])));
-        })));
+      React.createElement.apply(React, ['div',{style:{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:4}}].concat(headerDias)),
+      React.createElement.apply(React, ['div',{style:{display:"flex",flexDirection:"column",gap:2}}].concat(semanasRender)));
   };
 
   var renderSemana = function() {
@@ -5419,29 +5420,27 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
     var hoy = new Date(); hoy.setHours(0,0,0,0);
     var dStr = function(d){return d.toLocaleDateString("es-AR",{day:"2-digit",month:"2-digit"});};
 
-    var tareasConSpan = tareasCalendario.map(function(r){
-      var inicio = r.fechaInicioEsperado||r.fechaCierre;
-      var cierre = r.fechaCierre||r.fechaInicioEsperado;
-      var colStart=-1; var colEnd=-1;
-      dias.forEach(function(d,i){
-        var ds = d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
-        if(ds>=inicio && ds<=cierre){if(colStart===-1) colStart=i; colEnd=i;}
-      });
-      if(colStart===-1) return null;
-      return {r:r,colStart:colStart,colEnd:colEnd};
-    }).filter(Boolean);
-
-    var filas = [];
-    tareasConSpan.forEach(function(t){
-      var filaIdx=0;
-      while(true){
-        if(!filas[filaIdx]) filas[filaIdx]=[];
-        var overlap=filas[filaIdx].some(function(ot){return !(ot.colEnd<t.colStart||ot.colStart>t.colEnd);});
-        if(!overlap){filas[filaIdx].push(t);break;}
-        filaIdx++;
-      }
-    });
+    var tareasConSpan = tareasCalendario.map(function(r){ return calcularSpan(r,dias); }).filter(Boolean);
+    var filas = calcularFilas(tareasConSpan);
     var numFilas = Math.max(1,filas.length);
+
+    var headerDias = dias.map(function(d,i){
+      var esHoy = d.getTime()===hoy.getTime();
+      return h('div',{key:i,style:{textAlign:"center",padding:"6px 4px",borderRadius:6,
+        background:esHoy?"#eff6ff":"transparent"}},
+        h('div',{style:{fontSize:10,fontWeight:700,color:esHoy?"#3b82f6":"#94a3b8",textTransform:"uppercase"}},DIAS_LABEL[i]),
+        h('div',{style:{fontSize:20,fontWeight:esHoy?800:500,color:esHoy?"#3b82f6":"#374151"}},d.getDate()));
+    });
+
+    var fondos = dias.map(function(d,i){
+      var esHoy = d.getTime()===hoy.getTime();
+      return h('div',{key:"bg"+i,style:{
+        gridColumn:(i+1)+"/"+(i+2),gridRow:"1/"+(numFilas+1),
+        background:esHoy?"#eff6ff":"white",borderRadius:6,
+        border:esHoy?"1.5px solid #bfdbfe":"1px solid #f1f5f9"}});
+    });
+
+    var tareas = renderTareasGrid(filas, numFilas, "semana");
 
     return h('div',null,
       h('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}},
@@ -5450,44 +5449,8 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
         h('button',{onClick:siguiente,style:{background:"none",border:"1.5px solid #e2e8f0",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:16,color:"#374151"}},"›")),
       h('div',{style:{overflowX:"auto"}},
         h('div',{style:{minWidth:560}},
-          h('div',{style:{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:4}},
-            ...dias.map(function(d,i){
-              var esHoy = d.getTime()===hoy.getTime();
-              return h('div',{key:i,style:{textAlign:"center",padding:"6px 4px",borderRadius:6,
-                background:esHoy?"#eff6ff":"transparent"}},
-                h('div',{style:{fontSize:10,fontWeight:700,color:esHoy?"#3b82f6":"#94a3b8",textTransform:"uppercase"}},DIAS_LABEL[i]),
-                h('div',{style:{fontSize:20,fontWeight:esHoy?800:500,color:esHoy?"#3b82f6":"#374151"}},d.getDate()));
-            })),
-          h('div',{style:{position:"relative",display:"grid",gridTemplateColumns:"repeat(7,1fr)",
-            gap:2,minHeight:(numFilas*52+8)+"px"}},
-            ...dias.map(function(d,i){
-              var esHoy = d.getTime()===hoy.getTime();
-              return h('div',{key:"bg"+i,style:{
-                gridColumn:(i+1)+"/"+(i+2),gridRow:"1/"+(numFilas+1),
-                background:esHoy?"#eff6ff":"white",borderRadius:6,
-                border:esHoy?"1.5px solid #bfdbfe":"1px solid #f1f5f9"}});
-            }),
-            ...filas.reduce(function(acc,fila,filaIdx){
-              fila.forEach(function(t){
-                var est=getEstadoEj(t.r);
-                var crit=t.r.criticidad||t.r.pri||"media";
-                var bg=est==="confirmado"?"#22c55e":"#ef4444";
-                var bgLight=est==="confirmado"?"#f0fdf4":"#fef2f2";
-                acc.push(h('div',{key:t.r.id,
-                  onClick:function(){setTareaSeleccionada(t.r);},
-                  style:{gridColumn:(t.colStart+1)+"/"+(t.colEnd+2),
-                    gridRow:(filaIdx+1)+"/"+(filaIdx+2),
-                    background:bgLight,border:"1.5px solid "+bg,borderLeft:"4px solid "+bg,
-                    borderRadius:6,padding:"5px 8px",cursor:"pointer",margin:"3px 2px",
-                    overflow:"hidden",zIndex:1,alignSelf:"start"}},
-                  h('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:4,marginBottom:2}},
-                    h('span',{style:{fontFamily:"monospace",fontSize:10,fontWeight:700,color:"#3b82f6",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},t.r.numero),
-                    h('span',{style:{fontSize:10,fontWeight:700,color:CRIT_COLOR[crit],whiteSpace:"nowrap"}},CRIT_DOT[crit])),
-                  h('div',{style:{fontSize:11,fontWeight:600,color:"#1e293b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},t.r.sector),
-                  h('div',{style:{fontSize:10,color:"#64748b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}},t.r.desc||"")));
-              });
-              return acc;
-            },[])))));
+          React.createElement.apply(React, ['div',{style:{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:4}}].concat(headerDias)),
+          React.createElement.apply(React, ['div',{style:{position:"relative",display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,minHeight:(numFilas*52+8)+"px"}}].concat(fondos.concat(tareas))))));
   };
 
   function ModalTarea({r, onClose}) {
@@ -5525,6 +5488,22 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
       onClose();
     };
 
+    var historialRender = React.createElement.apply(React, ['div',{style:{display:"flex",flexDirection:"column",gap:6,maxHeight:200,overflowY:"auto"}}].concat(
+      historialItems.map(function(c,i){
+        var esCreacion = c.autor==="Sistema-creacion";
+        var esSistema = c.autor==="Sistema";
+        var esIntendencia = c.autor==="Intendencia"||c.autor==="Administración"||c.autor==="Responsable"||c.autor==="Directivo";
+        var borderColor = esCreacion||esSistema?"#94a3b8":esIntendencia?"#3b82f6":"#8b5cf6";
+        var bg = esCreacion||esSistema?"#f8fafc":esIntendencia?"#eff6ff":"#f5f3ff";
+        var label = esCreacion?"Solicitud creada":c.autor||"Sistema";
+        return h('div',{key:i,style:{background:bg,borderLeft:"3px solid "+borderColor,
+          borderRadius:"0 8px 8px 0",padding:"8px 12px"}},
+          h('div',{style:{display:"flex",justifyContent:"space-between",marginBottom:2}},
+            h('span',{style:{fontSize:11,fontWeight:600,color:borderColor}},label),
+            h('span',{style:{fontSize:10,color:"#94a3b8"}},fdt(c.fecha))),
+          h('div',{style:{fontSize:12,color:"#475569",lineHeight:1.4}},c.texto));
+      })));
+
     return h('div',{style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:2000}},
       h('div',{style:{background:"white",borderRadius:"20px 20px 0 0",width:"100%",maxWidth:560,maxHeight:"90vh",overflowY:"auto"}},
         h('div',{style:{background:"#1a3a6b",padding:"18px 24px",borderRadius:"20px 20px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center"}},
@@ -5533,7 +5512,6 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
             h('div',{style:{color:"white",fontSize:17,fontWeight:700}},r.numero+" — "+r.sector)),
           h('button',{onClick:onClose,style:{background:"none",border:"none",color:"rgba(255,255,255,0.7)",fontSize:22,cursor:"pointer"}},"✕")),
         h('div',{style:{padding:"20px 24px"}},
-          // Estado
           h('div',{style:{background:estadoEj==="confirmado"?"#f0fdf4":estadoEj==="rechazado"?"#fef2f2":"#fff7ed",
             border:"1.5px solid "+(estadoEj==="confirmado"?"#bbf7d0":estadoEj==="rechazado"?"#fecaca":"#fed7aa"),
             borderRadius:10,padding:"10px 14px",marginBottom:16,fontSize:13,fontWeight:600,
@@ -5541,7 +5519,6 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
             estadoEj==="confirmado"?"✅ Confirmada"
             :estadoEj==="rechazado"?"❌ Rechazada"
             :"⏳ Pendiente de confirmación"),
-          // Info
           h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12,background:"#f8fafc",borderRadius:10,padding:12}},
             h('div',null,h('div',{style:{fontSize:10,color:"#94a3b8",fontWeight:600,marginBottom:2}},"CRITICIDAD"),
               h('div',{style:{fontWeight:700,color:CRIT_COLOR[crit]}},CRIT_DOT[crit]+" "+crit.toUpperCase())),
@@ -5551,30 +5528,12 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
               h('div',{style:{fontSize:13,fontWeight:600}},fd(r.fechaInicioEsperado||r.fechaCierre))),
             h('div',null,h('div',{style:{fontSize:10,color:"#94a3b8",fontWeight:600,marginBottom:2}},"CIERRE"),
               h('div',{style:{fontSize:13,fontWeight:600}},fd(r.fechaCierre)))),
-          // Descripción
           h('div',{style:{marginBottom:16}},
             h('div',{style:{fontSize:10,color:"#94a3b8",fontWeight:600,marginBottom:4,textTransform:"uppercase"}},"Descripción"),
             h('div',{style:{fontSize:14,color:"#475569",lineHeight:1.6}},r.desc||"—")),
-          // Historial
           h('div',{style:{marginBottom:16}},
             h('div',{style:{fontSize:10,color:"#94a3b8",fontWeight:600,marginBottom:8,textTransform:"uppercase"}},"Historial"),
-            React.createElement.apply(React, ['div',{style:{display:"flex",flexDirection:"column",gap:6,maxHeight:200,overflowY:"auto"}}].concat(
-              historialItems.map(function(c,i){
-                var esCreacion = c.autor==="Sistema-creacion";
-                var esSistema = c.autor==="Sistema";
-                var esIntendencia = c.autor==="Intendencia"||c.autor==="Administración"||c.autor==="Responsable"||c.autor==="Directivo";
-                var borderColor = esCreacion||esSistema?"#94a3b8":esIntendencia?"#3b82f6":"#8b5cf6";
-                var bg = esCreacion||esSistema?"#f8fafc":esIntendencia?"#eff6ff":"#f5f3ff";
-                var label = esCreacion?"Solicitud creada":c.autor||"Sistema";
-                return h('div',{key:i,style:{background:bg,borderLeft:"3px solid "+borderColor,
-                  borderRadius:"0 8px 8px 0",padding:"8px 12px"}},
-                  h('div',{style:{display:"flex",justifyContent:"space-between",marginBottom:2}},
-                    h('span',{style:{fontSize:11,fontWeight:600,color:borderColor}},label),
-                    h('span',{style:{fontSize:10,color:"#94a3b8"}},fdt(c.fecha))),
-                  h('div',{style:{fontSize:12,color:"#475569",lineHeight:1.4}},c.texto));
-              }))
-            ))),
-          // Botones
+            historialRender),
           estadoEj==="pendiente" && !showRechazo && !showNoPude && h('div',{style:{display:"flex",gap:10}},
             h('button',{onClick:function(){confirmar(r);},disabled:procesando===r.id,
               style:{flex:2,padding:"13px",background:procesando===r.id?"#94a3b8":"linear-gradient(135deg,#22c55e,#15803d)",
