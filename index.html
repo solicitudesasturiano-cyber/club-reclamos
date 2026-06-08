@@ -5573,7 +5573,7 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
                     h('span',{style:{fontSize:10,color:"#94a3b8"}},fdt(c.fecha))),
                   h('div',{style:{fontSize:12,color:"#475569",lineHeight:1.4}},c.texto));
               }))
-            )),
+            ))),
           // Botones
           estadoEj==="pendiente" && !showRechazo && !showNoPude && h('div',{style:{display:"flex",gap:10}},
             h('button',{onClick:function(){confirmar(r);},disabled:procesando===r.id,
