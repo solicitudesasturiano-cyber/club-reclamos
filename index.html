@@ -5628,25 +5628,24 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
           // Historial
           h('div',{style:{marginBottom:16}},
             h('div',{style:{fontSize:10,color:"#94a3b8",fontWeight:600,marginBottom:8,textTransform:"uppercase"}},"Historial"),
-            h('div',{style:{display:"flex",flexDirection:"column",gap:6,maxHeight:200,overflowY:"auto"}},
-              // Entrada de creación
+           h('div',{style:{display:"flex",flexDirection:"column",gap:6,maxHeight:200,overflowY:"auto"}},
               h('div',{style:{background:"#f8fafc",borderLeft:"3px solid #94a3b8",borderRadius:"0 8px 8px 0",padding:"8px 12px"}},
                 h('div',{style:{display:"flex",justifyContent:"space-between",marginBottom:2}},
                   h('span',{style:{fontSize:11,fontWeight:600,color:"#94a3b8"}},"Solicitud creada"),
                   h('span',{style:{fontSize:10,color:"#94a3b8"}},fdt(r.createdAt))),
                 h('div',{style:{fontSize:12,color:"#94a3b8"}},"Por "+(r.nombre||"anónimo")+" ("+r.tipo+")")),
-              // Comentarios
-              ...(r.comentarios||[]).map(function(c,i){
+              (r.comentarios||[]).reduce(function(acc,c,i){
                 var esSistema = c.autor==="Sistema";
                 var esIntendencia = c.autor==="Intendencia"||c.autor==="Administración"||c.autor==="Responsable"||c.autor==="Directivo";
                 var borderColor = esSistema?"#e2e8f0":esIntendencia?"#3b82f6":"#8b5cf6";
-                return h('div',{key:i,style:{background:esSistema?"#f8fafc":esIntendencia?"#eff6ff":"#f5f3ff",
+                acc.push(h('div',{key:i,style:{background:esSistema?"#f8fafc":esIntendencia?"#eff6ff":"#f5f3ff",
                   borderLeft:"3px solid "+borderColor,borderRadius:"0 8px 8px 0",padding:"8px 12px"}},
                   h('div',{style:{display:"flex",justifyContent:"space-between",marginBottom:2}},
                     h('span',{style:{fontSize:11,fontWeight:600,color:borderColor}},c.autor||"Sistema"),
                     h('span',{style:{fontSize:10,color:"#94a3b8"}},fdt(c.fecha))),
-                  h('div',{style:{fontSize:12,color:"#475569",lineHeight:1.4}},c.texto));
-              }))),
+                  h('div',{style:{fontSize:12,color:"#475569",lineHeight:1.4}},c.texto)));
+                return acc;
+              },[]))
           // Botones
           estadoEj==="pendiente" && !showRechazo && !showNoPude && h('div',{style:{display:"flex",gap:10}},
             h('button',{onClick:function(){confirmar(r);},disabled:procesando===r.id,
