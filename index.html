@@ -5295,83 +5295,8 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
       subject:"[Asturiano] Ejecutor rechazó tarea — "+r.numero,
       body:"El ejecutor "+emailBuscado+" rechazó la tarea "+r.numero+" ("+r.sector+").\n\nMotivo: "+motivo+"\n\nDebés reasignarla."});
   };
-
-  // ── MODAL DETALLE TAREA ──────────────────────────────────────────────────
-  function ModalTarea({r, onClose}) {
-    var [motivoRechazo, setMotivoRechazo] = useState("");
-    var [showRechazo, setShowRechazo] = useState(false);
-    var estadoEj = getEstadoEj(r);
-    var historialItems = [{texto:"Solicitud creada por "+(r.nombre||"anónimo")+" ("+r.tipo+")", fecha:r.createdAt, autor:"Sistema-creacion"}];
-    (r.comentarios||[]).forEach(function(c){ historialItems.push(c); });
-    var cat = CATS[r.cat];
-    var crit = r.criticidad||r.pri||"media";
-    var appUrl = window.location.href.split("?")[0];
-
-    return h('div',{style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:2000,padding:"0"}},
-      h('div',{style:{background:"white",borderRadius:"20px 20px 0 0",width:"100%",maxWidth:560,maxHeight:"90vh",overflowY:"auto"}},
-        h('div',{style:{background:"#1a3a6b",padding:"18px 24px",borderRadius:"20px 20px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center"}},
-          h('div',null,
-            h('div',{style:{fontSize:11,color:"#60a5fa",letterSpacing:2,textTransform:"uppercase"}},"Detalle de tarea"),
-            h('div',{style:{color:"white",fontSize:17,fontWeight:700}},r.numero+" — "+r.sector)),
-          h('button',{onClick:onClose,style:{background:"none",border:"none",color:"rgba(255,255,255,0.7)",fontSize:22,cursor:"pointer"}},"✕")),
-        h('div',{style:{padding:"20px 24px"}},
-          // Estado ejecutor
-          h('div',{style:{background:estadoEj==="confirmado"?"#f0fdf4":estadoEj==="rechazado"?"#fef2f2":"#fff7ed",
-            border:"1.5px solid "+(estadoEj==="confirmado"?"#bbf7d0":estadoEj==="rechazado"?"#fecaca":"#fed7aa"),
-            borderRadius:10,padding:"10px 14px",marginBottom:16,fontSize:13,fontWeight:600,
-            color:estadoEj==="confirmado"?"#15803d":estadoEj==="rechazado"?"#dc2626":"#92400e"}},
-            estadoEj==="confirmado"?"✅ Confirmada — ya está en tu calendario"
-            :estadoEj==="rechazado"?"❌ Rechazada"
-            :"⏳ Pendiente de confirmación"),
-          // Info
-          h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14,background:"#f8fafc",borderRadius:10,padding:12}},
-            h('div',null,h('div',{style:{fontSize:10,color:"#94a3b8",fontWeight:600,marginBottom:2}},"CRITICIDAD"),
-              h('div',{style:{fontWeight:700,color:CRIT_COLOR[crit]}},CRIT_DOT[crit]+" "+crit.toUpperCase())),
-            h('div',null,h('div',{style:{fontSize:10,color:"#94a3b8",fontWeight:600,marginBottom:2}},"TIPO"),
-              h('div',{style:{fontSize:13}},(cat&&cat.icon||"")+" "+(cat&&cat.label||r.cat))),
-            h('div',null,h('div',{style:{fontSize:10,color:"#94a3b8",fontWeight:600,marginBottom:2}},"INICIO"),
-              h('div',{style:{fontSize:13,fontWeight:600}},fd(r.fechaInicioEsperado||r.fechaCierre))),
-            h('div',null,h('div',{style:{fontSize:10,color:"#94a3b8",fontWeight:600,marginBottom:2}},"CIERRE"),
-              h('div',{style:{fontSize:13,fontWeight:600}},fd(r.fechaCierre)))),
-          h('div',{style:{marginBottom:16}},
-            h('div',{style:{fontSize:10,color:"#94a3b8",fontWeight:600,marginBottom:4}},"DESCRIPCIÓN"),
-            h('div',{style:{fontSize:14,color:"#475569",lineHeight:1.6}},r.desc||"—")),
-          // Botones según estado
-          estadoEj==="pendiente" && !showRechazo && h('div',{style:{display:"flex",gap:10}},
-            h('button',{
-              onClick:function(){confirmar(r);},
-              disabled:procesando===r.id,
-              style:{flex:2,padding:"13px",background:procesando===r.id?"#94a3b8":"linear-gradient(135deg,#22c55e,#15803d)",
-                color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700}},
-              procesando===r.id?"Procesando...":"✅ Confirmar tarea"),
-            h('button',{
-              onClick:function(){setShowRechazo(true);},
-              style:{flex:1,padding:"13px",background:"#fef2f2",color:"#dc2626",border:"2px solid #fecaca",
-                borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700}},
-              "Rechazar")),
-          estadoEj==="pendiente" && showRechazo && h('div',{style:{background:"#fef2f2",border:"1.5px solid #fecaca",borderRadius:10,padding:14}},
-            h('div',{style:{fontWeight:700,color:"#dc2626",marginBottom:8,fontSize:13}},"Motivo del rechazo *"),
-            h('textarea',{value:motivoRechazo,onChange:function(e){setMotivoRechazo(e.target.value);},rows:3,
-              placeholder:"¿Por qué no podés realizar esta tarea?",
-              style:{width:"100%",padding:"9px 12px",border:"1.5px solid #fecaca",borderRadius:8,fontSize:13,
-                resize:"vertical",outline:"none",boxSizing:"border-box",marginBottom:10}}),
-            h('div',{style:{display:"flex",gap:8}},
-              h('button',{
-                onClick:function(){if(motivoRechazo.trim()) rechazar(r,motivoRechazo.trim());},
-                disabled:!motivoRechazo.trim()||procesando===r.id,
-                style:{flex:2,padding:"11px",background:!motivoRechazo.trim()?"#94a3b8":"#dc2626",
-                  color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:700}},
-                procesando===r.id?"Procesando...":"Confirmar rechazo"),
-              h('button',{onClick:function(){setShowRechazo(false);setMotivoRechazo("");},
-                style:{flex:1,padding:"11px",background:"white",color:"#64748b",border:"1.5px solid #e2e8f0",
-                  borderRadius:8,cursor:"pointer",fontSize:13}},"Cancelar"))),
-          estadoEj==="confirmado" && h('a',{
-            href:window.location.href.split("?")[0]+"?completar="+r.id,
-            style:{display:"block",padding:"13px",background:"linear-gradient(135deg,#3b82f6,#1d4ed8)",
-              color:"white",textDecoration:"none",borderRadius:10,fontSize:14,fontWeight:700,textAlign:"center"}},
-            "✏️ Marcar como completada"))));
-  }
-
+  
+      
   // ── RENDER CALENDARIO MES ────────────────────────────────────────────────
  var renderMes = function() {
     var año = fechaBase.getFullYear();
