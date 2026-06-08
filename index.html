@@ -5630,7 +5630,7 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
           h('div',{style:{fontSize:40,marginBottom:12}},"❌"),
           h('div',{style:{color:"#fca5a5",fontSize:16,fontWeight:700,marginBottom:6}},"Mail no encontrado"),
           h('div',{style:{color:"#fca5a5",fontSize:14}},"No hay tareas asignadas al email "+emailBuscado+". Verificá que sea el mail correcto.")),
-      tareaSeleccionada && h(ModalTarea,{r:tareaSeleccionada,onClose:function(){setTareaSeleccionada(null);}}))));
+      tareaSeleccionada && h(ModalTarea,{r:tareaSeleccionada,onClose:function(){setTareaSeleccionada(null);}})));
 }
   function App() {
   // Detect URL params immediately so seguimiento works without login
