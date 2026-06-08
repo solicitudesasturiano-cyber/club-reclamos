@@ -5634,18 +5634,17 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
                   h('span',{style:{fontSize:11,fontWeight:600,color:"#94a3b8"}},"Solicitud creada"),
                   h('span',{style:{fontSize:10,color:"#94a3b8"}},fdt(r.createdAt))),
                 h('div',{style:{fontSize:12,color:"#94a3b8"}},"Por "+(r.nombre||"anónimo")+" ("+r.tipo+")")),
-              (r.comentarios||[]).reduce(function(acc,c,i){
+              h.apply(null, [React.Fragment, null].concat((r.comentarios||[]).map(function(c,i){
                 var esSistema = c.autor==="Sistema";
                 var esIntendencia = c.autor==="Intendencia"||c.autor==="Administración"||c.autor==="Responsable"||c.autor==="Directivo";
                 var borderColor = esSistema?"#e2e8f0":esIntendencia?"#3b82f6":"#8b5cf6";
-                acc.push(h('div',{key:i,style:{background:esSistema?"#f8fafc":esIntendencia?"#eff6ff":"#f5f3ff",
+                return h('div',{key:i,style:{background:esSistema?"#f8fafc":esIntendencia?"#eff6ff":"#f5f3ff",
                   borderLeft:"3px solid "+borderColor,borderRadius:"0 8px 8px 0",padding:"8px 12px"}},
                   h('div',{style:{display:"flex",justifyContent:"space-between",marginBottom:2}},
                     h('span',{style:{fontSize:11,fontWeight:600,color:borderColor}},c.autor||"Sistema"),
                     h('span',{style:{fontSize:10,color:"#94a3b8"}},fdt(c.fecha))),
-                  h('div',{style:{fontSize:12,color:"#475569",lineHeight:1.4}},c.texto)));
-                return acc;
-              },[]))
+                  h('div',{style:{fontSize:12,color:"#475569",lineHeight:1.4}},c.texto));
+              }))))
           // Botones
           estadoEj==="pendiente" && !showRechazo && !showNoPude && h('div',{style:{display:"flex",gap:10}},
             h('button',{onClick:function(){confirmar(r);},disabled:procesando===r.id,
