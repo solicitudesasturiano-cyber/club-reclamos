@@ -4764,7 +4764,7 @@ function puedeInsistir(r) {
   }
 }
   
-  function MisSolicitudes({recs, loaded}) {
+  function MisSolicitudes({recs, setRecs, loaded}) {
   var [email, setEmail] = useState("");
   var [emailBuscado, setEmailBuscado] = useState("");
   var [err, setErr] = useState(false);
@@ -6102,7 +6102,7 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
         display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}},
       "⚙"),
     view==="socio" && h(FormularioSocio,{onSubmit:add,reclamos:recs}),
-    view==="mis_solicitudes" && h(MisSolicitudes,{recs,loaded}),
+    view==="mis_solicitudes" && h(MisSolicitudes,{recs,setRecs,loaded}),
     view==="mis_tareas" && h(MisTareasEjecutor,{recs,setRecs,loaded}),
     view==="intendencia" && !authInt && h(Login,{area:"intendencia",onLogin:()=>{setAuthInt(true);setShowPanelTabs(true);sessionStorage.setItem('authInt','1');}}),
     view==="intendencia" && authInt && h(PanelAdmin,{recs:recsFiltrados("intendencia"),onUpdate:upd,onRefresh:()=>sbGetAll().then(setRecs),area:"intendencia"}),
