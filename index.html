@@ -4723,6 +4723,7 @@ function puedeInsistir(r) {
   return false;
 }
   async function registrarInsistencia(r, setRecs) {
+  try {
   var ahora = new Date().toISOString();
   var updated = Object.assign({}, r, {
     insistencias: (r.insistencias||0) + 1,
@@ -4733,13 +4734,14 @@ function puedeInsistir(r) {
       autor: "Sistema"
     }])
   });
+  console.log("insistencia step 1 - upsert");
   await sbUpsert(updated);
+  console.log("insistencia step 2 - setRecs");
   setRecs(function(prev){ return prev.map(function(x){ return x.id===r.id?updated:x; }); });
-  // Mail al responsable
+  console.log("insistencia step 3 - getCatCfg");
   var catCfg = getCatCfg(r.cat);
   var respMails = (catCfg.responsables||[]).map(function(x){return x.mail;}).filter(Boolean);
   var dirMails = (catCfg.directivos||[]).map(function(x){return x.mail;}).filter(Boolean);
-  // Si cache vacía, recargar config desde Supabase
   if(!respMails.length && !dirMails.length) {
     await loadConfig();
     var catCfg2 = getCatCfg(r.cat);
@@ -4747,13 +4749,19 @@ function puedeInsistir(r) {
     dirMails = (catCfg2.directivos||[]).map(function(x){return x.mail;}).filter(Boolean);
   }
   var dest = respMails.length ? respMails : dirMails;
+  console.log("insistencia step 4 - dest:", dest);
   if(dest.length) {
     await sendEmail({to: dest,
       subject: "[Asturiano] ⚠️ Insistencia #"+(updated.insistencias)+" — "+r.numero+": "+r.sector,
       body: "El solicitante "+r.nombre+" insistió en la resolución de su solicitud.\n\nNúmero: "+r.numero+"\nSector: "+r.sector+"\nDescripción: "+r.desc+"\nInsistencias acumuladas: "+updated.insistencias+"/3\n\nEsta solicitud requiere atención urgente."
     });
   }
+  console.log("insistencia step 5 - done");
   return updated;
+  } catch(err) {
+    console.error("ERROR en registrarInsistencia:", err);
+    return r;
+  }
 }
   
   function MisSolicitudes({recs, loaded}) {
