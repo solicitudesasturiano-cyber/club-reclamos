@@ -4739,6 +4739,13 @@ function puedeInsistir(r) {
   var catCfg = getCatCfg(r.cat);
   var respMails = (catCfg.responsables||[]).map(function(x){return x.mail;}).filter(Boolean);
   var dirMails = (catCfg.directivos||[]).map(function(x){return x.mail;}).filter(Boolean);
+  // Si cache vacía, recargar config desde Supabase
+  if(!respMails.length && !dirMails.length) {
+    await loadConfig();
+    var catCfg2 = getCatCfg(r.cat);
+    respMails = (catCfg2.responsables||[]).map(function(x){return x.mail;}).filter(Boolean);
+    dirMails = (catCfg2.directivos||[]).map(function(x){return x.mail;}).filter(Boolean);
+  }
   var dest = respMails.length ? respMails : dirMails;
   if(dest.length) {
     await sendEmail({to: dest,
