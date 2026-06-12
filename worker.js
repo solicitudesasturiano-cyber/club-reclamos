@@ -42,7 +42,7 @@ function injectPWA(htmlStr) {
 }
 
 export default {
-  async fetch(request) {
+  async fetch(request, env) {
     const url = new URL(request.url);
     const path = url.pathname;
 
@@ -71,10 +71,10 @@ export default {
         headers: { "Content-Type": "image/x-icon", "Cache-Control": "public, max-age=604800" }
       });
 
-    return new Response(injectPWA(html), {
+    const table = env.SUPABASE_TABLE || "reclamos"; 
+    const finalHtml = injectPWA(html).replace(   'const SUPABASE_TABLE = "reclamos"',   `const SUPABASE_TABLE = "${table}"` ); 
+    return new Response(finalHtml, {
       headers: { "Content-Type": "text/html;charset=UTF-8" },
     });
   },
 };
-
-
