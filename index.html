@@ -260,6 +260,7 @@ const PASS_ADMINISTRACION = "administracion2026";
 const PASS_DASHBOARD = "metricas2026";
 const SUPABASE_URL   = "https://pltfqosqinzufvjpiddr.supabase.co";
 const SUPABASE_KEY   = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBsdGZxb3NxaW56dWZ2anBpZGRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1MjA4NDksImV4cCI6MjA5MTA5Njg0OX0.d-EMCtfVqi6LvtbEdTBvH_ZaXiFJD6oXukPvMpbobXQ";
+const SUPABASE_TABLE = "reclamos";
 const SCRIPT_URL     = "https://script.google.com/macros/s/AKfycbzZh2AxTboR13rjJeUdXSdO7jjUPkZcIPoeWFYUZynkyWkP6LjNbqQxVxpPIvT26Kh6/exec";
 
 // Genera link al panel con deep-link al área correcta
@@ -541,7 +542,7 @@ const SB_HEADERS = {
 
 async function sbGetAll() {
   try {
-    const r = await fetch(SUPABASE_URL+"/rest/v1/reclamos?select=data&order=created_at.desc", {headers: SB_HEADERS});
+    const r = await fetch(SUPABASE_URL+"/rest/v1/${SUPABASE_TABLE}?select=data&order=created_at.desc", {headers: SB_HEADERS});
     const rows = await r.json();
     console.log("sbGetAll:", rows.length, "rows");
     return Array.isArray(rows) ? rows.map(r=>r.data).filter(d=>d&&d.id!==0) : [];
@@ -553,7 +554,7 @@ async function sbSetConfig(cfg) { return sbSetConfigById(1, cfg); }
 
 async function sbGetConfigById(id) {
   try {
-    const r = await fetch(SUPABASE_URL+"/rest/v1/reclamos?id=eq."+id+"&select=data", {headers: SB_HEADERS});
+    const r = await fetch(SUPABASE_URL+"/rest/v1/${SUPABASE_TABLE}?id=eq."+id+"&select=data", {headers: SB_HEADERS});
     const rows = await r.json();
     if(Array.isArray(rows) && rows.length > 0 && rows[0].data) return rows[0].data;
     return null;
@@ -562,7 +563,7 @@ async function sbGetConfigById(id) {
 
 async function sbSetConfigById(id, cfg) {
   try {
-    const r = await fetch(SUPABASE_URL+"/rest/v1/reclamos", {
+    const r = await fetch(SUPABASE_URL+"/rest/v1/${SUPABASE_TABLE}", {
       method: "POST",
       headers: {...SB_HEADERS, "Prefer":"resolution=merge-duplicates,return=minimal"},
       body: JSON.stringify({id, data: {...cfg, id}}),
@@ -573,7 +574,7 @@ async function sbSetConfigById(id, cfg) {
 
 async function sbUpsert(rec) {
   try {
-    const r = await fetch(SUPABASE_URL+"/rest/v1/reclamos", {
+    const r = await fetch(SUPABASE_URL+"/rest/v1/${SUPABASE_TABLE}", {
       method: "POST",
       headers: {...SB_HEADERS, "Prefer":"resolution=merge-duplicates,return=minimal"},
       body: JSON.stringify({id: rec.id, data: rec}),
@@ -628,7 +629,7 @@ async function uploadAdjuntos(adjuntos, reclamoId, prefijo) {
 async function sbClearAll() {
   try {
     // Delete all rows from reclamos table
-    const r = await fetch(SUPABASE_URL+"/rest/v1/reclamos?id=gte.0", {
+    const r = await fetch(SUPABASE_URL+"/rest/v1/${SUPABASE_TABLE}?id=gte.0", {
       method: "DELETE",
       headers: {...SB_HEADERS, "Prefer":"return=minimal"},
     });
@@ -2376,7 +2377,7 @@ const RECURRENCIA_EMPTY = {
 
 async function sbGetAll_reclamos() {
   try {
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/reclamos?select=data`, {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE}?select=data`, {
       headers: {"apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`}
     });
     const rows = await r.json();
@@ -2438,7 +2439,7 @@ async function crearTicketDesdeRecurrencia(rec, fechaOcurrencia) {
       comentarios:[{texto:"Ticket generado automáticamente por recurrencia: "+rec.nombre,
         fecha:new Date().toISOString(),autor:"Sistema"}]
     };
-    await fetch(`${SUPABASE_URL}/rest/v1/reclamos`, {
+    await fetch(`${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE}`, {
       method:"POST",
       headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,
         "Content-Type":"application/json","Prefer":"return=minimal"},
