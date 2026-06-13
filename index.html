@@ -1087,8 +1087,7 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs}) {
     const isSinResolucion = f.estadoAvance==="sin_resolucion";
     if(!isVinculado && !isConsolidando && !isSinResolucion) {
       if(!f.ejecutorMail && f.estadoAvance !== "sin_resolucion") { setSaveErr("Debés asignar un ejecutor antes de guardar."); return; }
-      if(f.ejecutorMail && !f.nuevoComentario.trim() && !rec.comentarios?.some(c=>c.autor==="Intendencia")) { setSaveErr("El comentario para el ejecutor es obligatorio."); setTab("asignacion"); return; }
-      if(f.estadoAvance !== "sin_resolucion") {
+      if(f.ejecutorMail && f.tipoEjecutor !== "externo" && !f.nuevoComentario.trim() && !rec.comentarios?.some(c=>c.autor==="Intendencia")) { setSaveErr("El comentario para el ejecutor es obligatorio."); setTab("asignacion"); return; }      if(f.estadoAvance !== "sin_resolucion") {
         if(!f.fechaInicioEsperado && !rec.fechaInicioOriginal) { setSaveErr("La fecha de inicio es obligatoria."); return; }
         if(!f.fechaCierre && !rec.fechaOriginalCierre) { setSaveErr("La fecha de cierre es obligatoria."); return; }
       }
