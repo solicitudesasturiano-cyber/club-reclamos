@@ -1237,8 +1237,10 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs}) {
       return f.estadoAvance || "bajo_analisis";
     };
     const autoEstado = calcEstado();
-    let savedRec = {...rec,...f,adjuntosResolucion,comentarios,nuevoComentario:undefined,
-      estadoAvance: autoEstado,
+const ejListaFinal = (f.ejecutores_lista||[]).length===0 && f.tipoEjecutor==="tercero" && f.empresaNombre
+  ? [{nombre:f.empresaNombre,mail:"tercero",telefono:f.empresaTelefono||"",confirmado:false,rechazado:false,fechaConfirmacion:null}]
+  : (f.ejecutores_lista||[]);
+let savedRec = {...rec,...f,adjuntosResolucion,comentarios,nuevoComentario:undefined,ejecutores_lista:ejListaFinal,      estadoAvance: autoEstado,
       reabierta: rec.reabierta || false,
       fechaCierreConfirmada,fechaInicioOriginal,fechaOriginalCierre,ejecutorMailOriginal,fechaAsignacion,
       updatedAt:new Date().toISOString()};
