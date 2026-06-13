@@ -3310,7 +3310,7 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
                     const badge = r.ejecutorRechazado ? "Rechazó ✗" : r.ejecutorConfirmado ? "Confirmó ✓" : "Sin resp ⏳";
                     const bc = r.ejecutorRechazado ? "#dc2626" : r.ejecutorConfirmado ? "#15803d" : "#f97316";
                     return h('div',null,
-                      h('div',{style:{fontWeight:600,color:"#1e293b",fontSize:12}},r.ejecutorNombre),
+                      h('div',{style:{fontWeight:600,color:"#1e293b",fontSize:12}},r.tipoEjecutor==="tercero"&&r.empresaNombre ? "🏢 "+r.empresaNombre : r.ejecutorNombre),
                       h('span',{style:{fontSize:10,color:bc,fontWeight:600}},badge));
                   }
                   return h('div',{style:{display:"flex",flexDirection:"column",gap:3}},
