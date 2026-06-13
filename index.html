@@ -3321,7 +3321,7 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
                       const icon   = isRej?"✗":isConf?"✓":"?";
                       const bg     = isRej?"#fef2f2":isConf?"#f0fdf4":"#fff7ed";
                       return h('div',{key:i,style:{display:"flex",alignItems:"center",gap:4}},
-                        h('span',{style:{fontSize:11,color:"#1e293b",fontWeight:500}},ej.nombre),
+                        h('span',{style:{fontSize:11,color:"#1e293b",fontWeight:500}},ej.nombre||(ej.mail==="tercero"?"🏢 Proveedor":ej.mail)),
                         h('span',{style:{display:"inline-block",padding:"1px 6px",borderRadius:4,fontSize:10,fontWeight:700,color,background:bg}},icon));
                     }));
                 })()),
