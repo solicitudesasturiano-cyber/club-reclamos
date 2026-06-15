@@ -1246,7 +1246,7 @@ const ejListaFinal = (f.ejecutores_lista||[]).length===0 && esTercero && f.empre
 let savedRec = {...rec,...f,adjuntosResolucion,comentarios,nuevoComentario:undefined,
   ejecutores_lista:ejListaFinal,
   ejecutorConfirmado: esTercero ? true : (f.ejecutorConfirmado||false),
-  fechaConfirmacion: esTercero ? new Date().toISOString() : (f.fechaConfirmacion||null), && f.empresaNombre
+  fechaConfirmacion: esTercero ? new Date().toISOString() : (f.fechaConfirmacion||null),
   ? [{nombre:f.empresaNombre,mail:"tercero",telefono:f.empresaTelefono||"",confirmado:false,rechazado:false,fechaConfirmacion:null}]
   : (f.ejecutores_lista||[]);
 let savedRec = {...rec,...f,adjuntosResolucion,comentarios,nuevoComentario:undefined,ejecutores_lista:ejListaFinal,      estadoAvance: autoEstado,
