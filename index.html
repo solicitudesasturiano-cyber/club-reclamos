@@ -823,6 +823,7 @@ function FormularioSocio({onSubmit, reclamos}) {
   const [err,setErr] = useState({});
   const [dup,setDup] = useState(null);
   const [sending,setSending] = useState(false);
+  const [saveErr,setSaveErr] = useState("");
   const fileRef = useRef();
   const cameraRef = useRef();
   
