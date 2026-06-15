@@ -1247,8 +1247,6 @@ let savedRec = {...rec,...f,adjuntosResolucion,comentarios,nuevoComentario:undef
   ejecutores_lista:ejListaFinal,
   ejecutorConfirmado: esTercero ? true : (f.ejecutorConfirmado||false),
   fechaConfirmacion: esTercero ? new Date().toISOString() : (f.fechaConfirmacion||null),
-  ? [{nombre:f.empresaNombre,mail:"tercero",telefono:f.empresaTelefono||"",confirmado:false,rechazado:false,fechaConfirmacion:null}]
-  : (f.ejecutores_lista||[]);
 let savedRec = {...rec,...f,adjuntosResolucion,comentarios,nuevoComentario:undefined,ejecutores_lista:ejListaFinal,      estadoAvance: autoEstado,
       reabierta: rec.reabierta || false,
       fechaCierreConfirmada,fechaInicioOriginal,fechaOriginalCierre,ejecutorMailOriginal,fechaAsignacion,
