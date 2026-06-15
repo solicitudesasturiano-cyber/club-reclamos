@@ -977,7 +977,7 @@ setF({tipo:"",nombre:_dsR.nombre||"",celular:_dsR.celular||"",email:_dsR.email||
           ["servicios","cuotas"].includes(f.cat)
             ? h('div',{style:{background:"rgba(59,130,246,0.15)",border:"1.5px solid rgba(59,130,246,0.3)",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#a8c4e8"}},"📍 Sector asignado automáticamente: Administración")
             : h('div',null,
-             lbl("Sector *",err.sector),
+                lbl("Sector *",err.sector),
                 h('select',{value:f.sectorGrande||"",onChange:e=>{set("sectorGrande",e.target.value);set("sector","");set("subEspacio","");set("sectorOtro","");},style:{...iS(err.sector),color:f.sectorGrande?"white":"#94a3b8"}},
                   h('option',{value:"",style:{color:"#333"}},"Covadonga o Polideportivo..."),
                   h('option',{value:"Covadonga",style:{color:"#333"}},"🏛️ Covadonga"),
@@ -993,7 +993,7 @@ setF({tipo:"",nombre:_dsR.nombre||"",celular:_dsR.celular||"",email:_dsR.email||
                   h('select',{value:f.subEspacio||"",onChange:e=>{set("subEspacio",e.target.value);},style:{...iS(false),color:f.subEspacio?"white":"#94a3b8",marginTop:0}},
                     h('option',{value:"",style:{color:"#333"}},"Seleccioná (opcional)..."),
                     ...(UBICACION_DATA[f.sectorGrande][f.sector]||[]).map(s=>h('option',{key:s,value:s,style:{color:"#333"}},s))),
-                  f.subEspacio==="Otros" && h('input',{value:f.subEspacioOtro||"",onChange:e=>set("subEspacioOtro",e.target.value),placeholder:"Describí el sub-espacio...",style:{...iS(false),marginTop:6}}))))),
+                  f.subEspacio==="Otros" && h('input',{value:f.subEspacioOtro||"",onChange:e=>set("subEspacioOtro",e.target.value),placeholder:"Describí el sub-espacio...",style:{...iS(false),marginTop:6}})))),
         // Subcategoría
         f.cat && (f.sector || ["servicios","cuotas"].includes(f.cat)) && h('div',{style:{marginBottom:14}},lbl("Detalle del problema *",err.sub),
           h('select',{value:f.sub,onChange:e=>set("sub",e.target.value),style:{...iS(err.sub),color:f.sub?"white":"#94a3b8"}},
