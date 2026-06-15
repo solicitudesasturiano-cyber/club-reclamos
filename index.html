@@ -1087,8 +1087,7 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs}) {
     const isSinResolucion = f.estadoAvance==="sin_resolucion";
     if(!isVinculado && !isConsolidando && !isSinResolucion) {
       if(!f.ejecutorMail && f.estadoAvance !== "sin_resolucion") { setSaveErr("Debés asignar un ejecutor antes de guardar."); return; }
-      if(f.ejecutorMail && !f.nuevoComentario.trim() && !rec.comentarios?.some(c=>c.autor==="Intendencia")) { setSaveErr("El comentario para el ejecutor es obligatorio."); setTab("asignacion"); return; }
-      if(f.estadoAvance !== "sin_resolucion") {
+      if(f.ejecutorMail && f.tipoEjecutor !== "tercero" && !f.nuevoComentario.trim() && !rec.comentarios?.some(c=>c.autor==="Intendencia")) { setSaveErr("El comentario para el ejecutor es obligatorio."); setTab("asignacion"); return; }      if(f.estadoAvance !== "sin_resolucion") {
         if(!f.fechaInicioEsperado && !rec.fechaInicioOriginal) { setSaveErr("La fecha de inicio es obligatoria."); return; }
         if(!f.fechaCierre && !rec.fechaOriginalCierre) { setSaveErr("La fecha de cierre es obligatoria."); return; }
       }
@@ -1238,8 +1237,10 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs}) {
       return f.estadoAvance || "bajo_analisis";
     };
     const autoEstado = calcEstado();
-    let savedRec = {...rec,...f,adjuntosResolucion,comentarios,nuevoComentario:undefined,
-      estadoAvance: autoEstado,
+const ejListaFinal = (f.ejecutores_lista||[]).length===0 && f.tipoEjecutor==="tercero" && f.empresaNombre
+  ? [{nombre:f.empresaNombre,mail:"tercero",telefono:f.empresaTelefono||"",confirmado:false,rechazado:false,fechaConfirmacion:null}]
+  : (f.ejecutores_lista||[]);
+let savedRec = {...rec,...f,adjuntosResolucion,comentarios,nuevoComentario:undefined,ejecutores_lista:ejListaFinal,      estadoAvance: autoEstado,
       reabierta: rec.reabierta || false,
       fechaCierreConfirmada,fechaInicioOriginal,fechaOriginalCierre,ejecutorMailOriginal,fechaAsignacion,
       updatedAt:new Date().toISOString()};
@@ -3311,7 +3312,7 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
                     const badge = r.ejecutorRechazado ? "Rechazó ✗" : r.ejecutorConfirmado ? "Confirmó ✓" : "Sin resp ⏳";
                     const bc = r.ejecutorRechazado ? "#dc2626" : r.ejecutorConfirmado ? "#15803d" : "#f97316";
                     return h('div',null,
-                      h('div',{style:{fontWeight:600,color:"#1e293b",fontSize:12}},r.ejecutorNombre),
+                      h('div',{style:{fontWeight:600,color:"#1e293b",fontSize:12}},r.tipoEjecutor==="tercero"&&r.empresaNombre ? "🏢 "+r.empresaNombre : r.ejecutorNombre),
                       h('span',{style:{fontSize:10,color:bc,fontWeight:600}},badge));
                   }
                   return h('div',{style:{display:"flex",flexDirection:"column",gap:3}},
@@ -3322,7 +3323,7 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
                       const icon   = isRej?"✗":isConf?"✓":"?";
                       const bg     = isRej?"#fef2f2":isConf?"#f0fdf4":"#fff7ed";
                       return h('div',{key:i,style:{display:"flex",alignItems:"center",gap:4}},
-                        h('span',{style:{fontSize:11,color:"#1e293b",fontWeight:500}},ej.nombre),
+                        h('span',{style:{fontSize:11,color:"#1e293b",fontWeight:500}},ej.nombre||(ej.mail==="tercero"?"🏢 Proveedor":ej.mail)),
                         h('span',{style:{display:"inline-block",padding:"1px 6px",borderRadius:4,fontSize:10,fontWeight:700,color,background:bg}},icon));
                     }));
                 })()),
@@ -6116,7 +6117,6 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
-
 
 
 
