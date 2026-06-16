@@ -1541,8 +1541,8 @@ Resolución: ${descripcion||"—"}`});
 
   const TABS = [["gestion","Gestión"],["asignacion","Asignación"],["resolucion","Resolución"]];
 
-  return h('div',{className:"modal-overlay",style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20,overflowY:"auto"}},
-    h('div',{className:"modal-card",style:{background:"white",borderRadius:20,width:"100%",maxWidth:580,maxHeight:"93vh",overflowY:"auto"}},
+  return h('div',{className:"modal-overlay",style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",display:"flex",alignItems:"flex-start",justifyContent:"center",zIndex:1000,padding:0,overflowY:"auto"}},
+    h('div',{className:"modal-card",style:{background:"white",borderRadius:0,width:"100%",maxWidth:580,minHeight:"100dvh",overflowY:"visible"}},
       // Header
       h('div',{style:{background:"#1a3a6b",padding:"18px 24px",borderRadius:"20px 20px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center"}},
         h('div',null,
@@ -2107,7 +2107,68 @@ function Kanban({recs, onEdit}) {
 
 // ── PANEL ADMIN ────────────────────────────────────────────────────────────
 // ── PROYECTOS ──────────────────────────────────────────────────────────────
-function ModalProyecto({proyecto, onClose, onSave, ejecutores, recs}) {
+function TabComprasProyecto(props) {
+  var f = props.f;
+  var set = props.set;
+  var aS = props.aS;
+  var compras = f.compras || [];
+
+  var total = compras.reduce(function(acc, c) { return acc + (Number(c.monto) || 0); }, 0);
+
+  function addCompra() {
+    var nueva = {id: Date.now(), fecha: new Date().toISOString().slice(0,10), proveedor:"", descripcion:"", monto:"", comprobante:""};
+    set("compras", compras.concat([nueva]));
+  }
+
+  function updateCompra(id, key, val) {
+    set("compras", compras.map(function(c) {
+      if (c.id !== id) return c;
+      var updated = Object.assign({}, c);
+      updated[key] = val;
+      return updated;
+    }));
+  }
+
+  function removeCompra(id) {
+    set("compras", compras.filter(function(c) { return c.id !== id; }));
+  }
+
+var listaEl = compras.length === 0
+    ? h('div', {style:{textAlign:"center",padding:"24px 0",color:"#94a3b8",fontSize:13}}, "Sin compras registradas. Agregá la primera.")
+    : h('div', {style:{display:"flex",flexDirection:"column",gap:8,marginBottom:12}},
+        compras.map(function(c) {
+            return h('div', {key:c.id, style:{border:"1.5px solid #e2e8f0",borderRadius:10,padding:"12px 14px",background:"#fafafa"}},
+              h('div', {style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}},
+                h('div', null,
+                  h('label', {style:{fontSize:10,fontWeight:700,color:"#64748b",textTransform:"uppercase",display:"block",marginBottom:3}}, "Fecha"),
+                  h('input', {type:"date", value:c.fecha, onChange:function(e){updateCompra(c.id,"fecha",e.target.value);}, style:{width:"100%",padding:"7px 10px",borderRadius:7,border:"1.5px solid #e2e8f0",fontSize:13,outline:"none",boxSizing:"border-box"}})),
+                h('div', null,
+                  h('label', {style:{fontSize:10,fontWeight:700,color:"#64748b",textTransform:"uppercase",display:"block",marginBottom:3}}, "Monto ($)"),
+                  h('input', {type:"number", value:c.monto, placeholder:"0", onChange:function(e){updateCompra(c.id,"monto",e.target.value);}, style:{width:"100%",padding:"7px 10px",borderRadius:7,border:"1.5px solid #e2e8f0",fontSize:13,outline:"none",boxSizing:"border-box"}}))),
+              h('div', {style:{marginBottom:8}},
+                h('label', {style:{fontSize:10,fontWeight:700,color:"#64748b",textTransform:"uppercase",display:"block",marginBottom:3}}, "Proveedor"),
+                h('input', {value:c.proveedor, placeholder:"Nombre empresa o persona", onChange:function(e){updateCompra(c.id,"proveedor",e.target.value);}, style:{width:"100%",padding:"7px 10px",borderRadius:7,border:"1.5px solid #e2e8f0",fontSize:13,outline:"none",boxSizing:"border-box"}})),
+              h('div', {style:{marginBottom:8}},
+                h('label', {style:{fontSize:10,fontWeight:700,color:"#64748b",textTransform:"uppercase",display:"block",marginBottom:3}}, "Descripción"),
+                h('input', {value:c.descripcion, placeholder:"¿Qué se compró?", onChange:function(e){updateCompra(c.id,"descripcion",e.target.value);}, style:{width:"100%",padding:"7px 10px",borderRadius:7,border:"1.5px solid #e2e8f0",fontSize:13,outline:"none",boxSizing:"border-box"}})),
+              h('div', {style:{display:"flex",justifyContent:"space-between",alignItems:"center"}},
+                h('div', {style:{flex:1,marginRight:8}},
+                  h('label', {style:{fontSize:10,fontWeight:700,color:"#64748b",textTransform:"uppercase",display:"block",marginBottom:3}}, "Nro. comprobante (opcional)"),
+                  h('input', {value:c.comprobante, placeholder:"Factura / remito / recibo", onChange:function(e){updateCompra(c.id,"comprobante",e.target.value);}, style:{width:"100%",padding:"7px 10px",borderRadius:7,border:"1.5px solid #e2e8f0",fontSize:13,outline:"none",boxSizing:"border-box"}})),
+                h('button', {onClick:function(){removeCompra(c.id);}, style:{background:"#fef2f2",border:"1.5px solid #fecaca",borderRadius:7,cursor:"pointer",color:"#dc2626",fontWeight:700,padding:"7px 12px",fontSize:12,whiteSpace:"nowrap"}}, "✕ Eliminar")));
+          }));
+
+  return h('div', null,
+    h('div', {style:{background:"linear-gradient(135deg,#7c3aed18,#5b21b618)",border:"1.5px solid #c4b5fd",borderRadius:12,padding:"14px 18px",marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"center"}},
+      h('div', null,
+        h('div', {style:{fontSize:11,fontWeight:700,color:"#7c3aed",textTransform:"uppercase",letterSpacing:0.5,marginBottom:2}}, "Total acumulado"),
+        h('div', {style:{fontSize:22,fontWeight:800,color:"#5b21b6"}}, "$ "+total.toLocaleString("es-AR"))),
+      h('div', {style:{fontSize:12,color:"#7c3aed",fontWeight:600}}, compras.length+" compra"+(compras.length!==1?"s":""))),
+    listaEl,
+    h('button', {onClick:addCompra, style:{width:"100%",padding:"10px",background:"#f5f3ff",border:"2px dashed #c4b5fd",borderRadius:10,cursor:"pointer",fontSize:13,color:"#7c3aed",fontWeight:600}}, "+ Registrar compra"));
+}
+  
+  function ModalProyecto({proyecto, onClose, onSave, ejecutores, recs}) {
   const nuevo = !proyecto?.id;
   // Siempre leer desde localStorage para tener reclamosVinculados actualizados
   const proyectoFresh = proyecto?.id
@@ -2236,7 +2297,7 @@ Ingresá al panel:\n${panelLink}`});
           estProj && h('span',{style:{padding:"3px 10px",borderRadius:20,fontSize:12,fontWeight:600,color:estProj.color,background:"rgba(255,255,255,0.2)"}},"● "+estProj.label),
           h('button',{onClick:onClose,style:{background:"none",border:"none",color:"rgba(255,255,255,0.7)",fontSize:22,cursor:"pointer"}},"✕"))),
       h('div',{style:{display:"flex",gap:4,padding:"10px 16px 0",borderBottom:"1px solid #e2e8f0"}},
-        ...[["info","📋 Info"],["hitos","📌 Hitos"],["personas","👥 Personas"],["solicitudes","🔗 Solicitudes"]].map(([id,lbl])=>
+        ...[["info","📋 Info"],["hitos","📌 Hitos"],["personas","👥 Personas"],["solicitudes","🔗 Solicitudes"],["compras","🛒 Compras"]].map(([id,lbl])=>
           h('button',{key:id,onClick:()=>setTab(id),style:tabStyle(id)},lbl))),
       h('div',{style:{padding:"18px 22px"}},
 
@@ -2391,6 +2452,9 @@ Ingresá al panel:\n${panelLink}`});
           // Modal gestión inline
           modalSolicitud && h(EditModal,{rec:modalSolicitud,onClose:()=>setModalSolicitud(null),onSave:async u=>{await onSave(f);setModalSolicitud(null);},ejecutores})),
 
+        // TAB COMPRAS
+        tab==="compras" && h(TabComprasProyecto,{f:f,set:set,aS:aS}),
+
         h('div',{style:{display:"flex",gap:10,marginTop:20}},
           h('button',{onClick:onClose,style:{flex:1,padding:"12px",background:"#f1f5f9",color:"#64748b",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:600}},"Cancelar"),
           h('button',{onClick:save,style:{flex:2,padding:"12px",background:"linear-gradient(135deg,#7c3aed,#5b21b6)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700}},"Guardar proyecto ✓"))));
@@ -2429,7 +2493,9 @@ async function sbDeleteRecurrencia(id) {
 }
 
 const RECURRENCIA_EMPTY = {
-  nombre:"", cat:"", sector:"", sub:"", criticidad:"media",
+  nombre:"", cat:"", sectorGrande:"", sector:"", subEspacio:"", sectorOtro:"", subEspacioOtro:"",
+  turno:"", horaInicio:"", horaFin:"",
+  sub:"", criticidad:"media",
   tipoEjecutor:"interno", // "interno" | "tercero"
   ejecutorMail:"", ejecutorNombre:"",
   empresaNombre:"", empresaTelefono:"",
@@ -2553,7 +2619,7 @@ async function crearTicketDesdeRecurrencia(rec, fechaOcurrencia) {
   } catch(e) { console.error("crearTicketDesdeRecurrencia:", e); }
 }
 
-function RecurrenciasTab({area, ejecutores, recs}) {
+function RecurrenciasTab(props) {   var area = props.area; var ejecutores = props.ejecutores; var recs = props.recs;
   const [lista, setLista] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(null); // null | "nuevo" | recurrencia
@@ -2592,8 +2658,7 @@ function RecurrenciasTab({area, ejecutores, recs}) {
 
         if (esEdicion && ticketPendiente) {
           // Actualizar el ticket pendiente con los nuevos datos de la recurrencia
-          const updatedTicket = {
-            ...ticketPendiente,
+          const updatedTicket = Object.assign({},ticketPendiente,{
             sector: rec.sector,
             cat: rec.cat,
             sub: rec.sub||rec.nombre,
@@ -2605,7 +2670,7 @@ function RecurrenciasTab({area, ejecutores, recs}) {
             nuevoComentario: rec.comentario||"",
             recurrenciaNombre: rec.nombre,
             updatedAt: new Date().toISOString()
-          };
+          });
           await sbUpsert(updatedTicket);
         } else if (diasFaltantes <= (rec.leadTimeDias||0) && !ticketPendiente) {
           // No hay ticket pendiente y ya estamos en ventana → crear uno nuevo
@@ -2618,7 +2683,7 @@ function RecurrenciasTab({area, ejecutores, recs}) {
   };
 
   const toggleActiva = async (rec) => {
-    await sbUpsertRecurrencia({...rec, activa: !rec.activa});
+    await sbUpsertRecurrencia(Object.assign({},rec,{activa:!rec.activa}));
     await cargar();
   };
 
@@ -2683,7 +2748,7 @@ function RecurrenciasTab({area, ejecutores, recs}) {
 
     // Modal crear/editar
     modal && h(RecurrenciaModal,{
-      rec: modal==="nuevo" ? {...RECURRENCIA_EMPTY, id: Date.now()} : modal,
+      rec: modal==="nuevo" ? Object.assign({},RECURRENCIA_EMPTY,{id:Date.now()}) : modal,
       onSave: guardar,
       onClose: ()=>setModal(null),
       ejecutores, cats
@@ -2699,23 +2764,21 @@ function RecurrenciasTab({area, ejecutores, recs}) {
           h('button',{onClick:()=>setConfirmDel(null),style:{flex:1,padding:"10px",background:"#f1f5f9",color:"#374151",border:"none",borderRadius:8,cursor:"pointer"}},"Cancelar")))));
 }
 
-function RecurrenciaModal({rec: recInit, onSave, onClose, ejecutores, cats}) {
-  const [f, setF] = useState({
-    tipoEjecutor:"interno", empresaNombre:"", empresaTelefono:"",
-    ...recInit
-  });
+function RecurrenciaModal(props) {   var recInit = props.rec; var onSave = props.onSave; var onClose = props.onClose; var ejecutores = props.ejecutores; var cats = props.cats;
+  var fInicial = Object.assign({tipoEjecutor:"interno", empresaNombre:"", empresaTelefono:""}, recInit);
+  const [f, setF] = useState(fInicial);
   const [saving, setSaving] = useState(false);
-  const set = (k,v) => setF(p=>({...p,[k]:v}));
+  const set = function(k,v) { setF(function(p){ return Object.assign({},p,{[k]:v}); }); };
   const DIAS_SEMANA = ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
 
   const toggleDiaSemana = (i) => {
     const current = f.diasSemana||[];
-    set("diasSemana", current.includes(i) ? current.filter(d=>d!==i) : [...current,i]);
+    set("diasSemana", current.includes(i) ? current.filter(d=>d!==i) : current.concat([i]));
   };
 
-  const addExclusion = () => set("periodosExclusion", [...(f.periodosExclusion||[]), {desde:"01-01",hasta:"01-31"}]);
-  const removeExclusion = (i) => set("periodosExclusion", (f.periodosExclusion||[]).filter((_,idx)=>idx!==i));
-  const updateExclusion = (i,k,v) => set("periodosExclusion", (f.periodosExclusion||[]).map((p,idx)=>idx===i?{...p,[k]:v}:p));
+  const addExclusion = function() { set("periodosExclusion", (f.periodosExclusion||[]).concat([{desde:"01-01",hasta:"01-31"}])); };
+  const removeExclusion = function(i) { set("periodosExclusion", (f.periodosExclusion||[]).filter(function(_,idx){ return idx!==i; })); };
+  const updateExclusion = function(i,k,v) { set("periodosExclusion", (f.periodosExclusion||[]).map(function(p,idx){ return idx===i ? Object.assign({},p,{[k]:v}) : p; })); };
 
   const save = async () => {
     if(!f.nombre.trim()) return alert("El nombre es obligatorio");
@@ -2746,7 +2809,7 @@ function RecurrenciaModal({rec: recInit, onSave, onClose, ejecutores, cats}) {
           h('input',{value:f.nombre,onChange:e=>set("nombre",e.target.value),placeholder:"Ej: Limpieza de piletas",style:inputStyle})),
 
         // Categoría + Sector
-        h('div',{style:{...sectionStyle,display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}},
+        h('div',{style:Object.assign({},sectionStyle,{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12})},
           h('div',null,
             h('label',{style:labelStyle},"Categoría *"),
             h('select',{value:f.cat,onChange:e=>set("cat",e.target.value),style:inputStyle},
@@ -2756,35 +2819,65 @@ function RecurrenciaModal({rec: recInit, onSave, onClose, ejecutores, cats}) {
             h('label',{style:labelStyle},"Tipo / subtipo"),
             h('input',{value:f.sub,onChange:e=>set("sub",e.target.value),placeholder:"Ej: Limpieza general",style:inputStyle}))),
 
-        // Sector + Criticidad
-        h('div',{style:{...sectionStyle,display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}},
+        // Sector Grande → Espacio → Sub-espacio (igual que Ingresa Tu Solicitud)
+        h('div',{style:sectionStyle},
+          h('label',{style:labelStyle},"Sector *"),
+          h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}},
+            h('select',{value:f.sectorGrande||"",onChange:function(e){set("sectorGrande",e.target.value);set("sector","");set("subEspacio","");set("sectorOtro","");set("subEspacioOtro","");},style:inputStyle},
+              h('option',{value:""},"Sede..."),
+              ...Object.keys(UBICACION_DATA).map(function(sg){return h('option',{key:sg,value:sg},sg);})),
+            f.sectorGrande && h('select',{value:f.sector||"",onChange:function(e){set("sector",e.target.value);set("subEspacio","");set("subEspacioOtro","");},style:inputStyle},
+              h('option',{value:""},"Espacio..."),
+              ...Object.keys((UBICACION_DATA[f.sectorGrande]||{})).map(function(esp){return h('option',{key:esp,value:esp},esp);}),
+              h('option',{value:"Otro"},"Otro")),
+            f.sector && f.sector!=="Otro" && h('select',{value:f.subEspacio||"",onChange:function(e){set("subEspacio",e.target.value);set("subEspacioOtro","");},style:inputStyle},
+              h('option',{value:""},"Sub-espacio..."),
+              ...((UBICACION_DATA[f.sectorGrande]||{})[f.sector]||[]).map(function(sub){return h('option',{key:sub,value:sub},sub);}),
+              h('option',{value:"Otro"},"Otro")))),
+          f.sector==="Otro" && h('input',{value:f.sectorOtro||"",onChange:function(e){set("sectorOtro",e.target.value);},placeholder:"Especificá el espacio",style:Object.assign({},inputStyle,{marginTop:6})}),
+          f.subEspacio==="Otro" && h('input',{value:f.subEspacioOtro||"",onChange:function(e){set("subEspacioOtro",e.target.value);},placeholder:"Especificá el sub-espacio",style:Object.assign({},inputStyle,{marginTop:6})})),
+
+        // Criticidad
+        h('div',{style:sectionStyle},
+          h('label',{style:labelStyle},"Criticidad"),
+          h('select',{value:f.criticidad,onChange:function(e){set("criticidad",e.target.value);},style:Object.assign({},inputStyle,{width:"auto"})},
+            h('option',{value:"urgente"},"Urgente"),
+            h('option',{value:"alta"},"Alta"),
+            h('option',{value:"media"},"Media"),
+            h('option',{value:"baja"},"Baja"))),
+
+        // Turno + Horario (opcionales)
+        h('div',{style:Object.assign({},sectionStyle,{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12})},
           h('div',null,
-            h('label',{style:labelStyle},"Sector *"),
-            h('input',{value:f.sector,onChange:e=>set("sector",e.target.value),placeholder:"Ej: Piscina",style:inputStyle})),
+            h('label',{style:labelStyle},"Turno (opcional)"),
+            h('select',{value:f.turno||"",onChange:function(e){set("turno",e.target.value);},style:inputStyle},
+              h('option',{value:""},"Sin especificar"),
+              h('option',{value:"manana"},"🌅 Mañana"),
+              h('option',{value:"tarde"},"🌤 Tarde"),
+              h('option',{value:"noche"},"🌙 Noche"))),
           h('div',null,
-            h('label',{style:labelStyle},"Criticidad"),
-            h('select',{value:f.criticidad,onChange:e=>set("criticidad",e.target.value),style:inputStyle},
-              h('option',{value:"urgente"},"Urgente"),
-              h('option',{value:"alta"},"Alta"),
-              h('option',{value:"media"},"Media"),
-              h('option',{value:"baja"},"Baja")))),
+            h('label',{style:labelStyle},"Hora inicio (opcional)"),
+            h('input',{type:"time",value:f.horaInicio||"",onChange:function(e){set("horaInicio",e.target.value);},style:inputStyle})),
+          h('div',null,
+            h('label',{style:labelStyle},"Hora fin (opcional)"),
+            h('input',{type:"time",value:f.horaFin||"",onChange:function(e){set("horaFin",e.target.value);},style:inputStyle}))),
 
         // Ejecutor — toggle interno / tercero
         h('div',{style:sectionStyle},
           h('label',{style:labelStyle},"Ejecutor responsable (opcional)"),
           h('div',{style:{display:"flex",gap:8,marginBottom:10}},
-            ...[["interno","👷 Empleado del club"],["tercero","🏢 Proveedor externo"]].map(([tipo,lbl])=>
+            ...[["interno","👷 Empleado del club"],["tercero","🏢 Proveedor externo"]].map(function(tipArr){ var tipo=tipArr[0]; var lbl=tipArr[1]; return (
               h('button',{key:tipo,onClick:()=>{
                 set("tipoEjecutor",tipo);
                 if(tipo==="tercero"){set("ejecutorMail","tercero@externo");set("ejecutorNombre",f.empresaNombre||"");}
                 else{set("ejecutorMail","");set("ejecutorNombre","");set("empresaNombre","");set("empresaTelefono","");}
               },style:{flex:1,padding:"7px",borderRadius:8,border:f.tipoEjecutor===tipo?"2px solid #3b82f6":"2px solid #e2e8f0",
                 background:f.tipoEjecutor===tipo?"#eff6ff":"white",
-                color:f.tipoEjecutor===tipo?"#1d4ed8":"#64748b",cursor:"pointer",fontSize:12,fontWeight:600}},lbl))),
+                color:f.tipoEjecutor===tipo?"#1d4ed8":"#64748b",cursor:"pointer",fontSize:12,fontWeight:600}},lbl)); }),
           f.tipoEjecutor!=="tercero"
             ? h('select',{value:f.ejecutorMail,onChange:e=>{
                 const ej=ejecutores.find(x=>x.mail===e.target.value);
-                setF(p=>({...p,ejecutorMail:e.target.value,ejecutorNombre:(ej&&ej.nombre)||""}));
+                setF(function(p){ return Object.assign({},p,{ejecutorMail:e.target.value,ejecutorNombre:(ej&&ej.nombre)||""}); });
               },style:inputStyle},
                 h('option',{value:""},"Sin ejecutor asignado"),
                 ...(ejecutores||[]).map(e=>h('option',{key:e.mail,value:e.mail},e.nombre||e.mail)))
@@ -2804,7 +2897,7 @@ function RecurrenciaModal({rec: recInit, onSave, onClose, ejecutores, cats}) {
           h('label',{style:labelStyle},"Instrucciones para el ejecutor"),
           h('textarea',{value:f.comentario,onChange:e=>set("comentario",e.target.value),
             rows:2,placeholder:"Qué debe hacer, cómo acceder, herramientas necesarias...",
-            style:{...inputStyle,resize:"vertical"}})),
+            style:Object.assign({},inputStyle,{resize:"vertical"})})),
 
         // Separador
         h('div',{style:{borderTop:"2px solid #f1f5f9",marginBottom:20}}),
@@ -2833,15 +2926,15 @@ function RecurrenciaModal({rec: recInit, onSave, onClose, ejecutores, cats}) {
 
         f.patron==="mensual" && h('div',{style:sectionStyle},
           h('label',{style:labelStyle},"Día del mes"),
-          h('select',{value:f.diaMes,onChange:e=>set("diaMes",Number(e.target.value)),style:{...inputStyle,width:"auto"}},
+          h('select',{value:f.diaMes,onChange:e=>set("diaMes",Number(e.target.value)),style:Object.assign({},inputStyle,{width:"auto"})},
             ...(function(){var opts=[];for(var i=1;i<=28;i++)opts.push(h('option',{key:i,value:i},i));return opts;}()))),
 
         f.patron==="personalizado" && h('div',{style:sectionStyle},
           h('label',{style:labelStyle},"Cada cuántos días"),
-          h('input',{type:"number",min:1,max:365,value:f.intervaloDias,onChange:e=>set("intervaloDias",Number(e.target.value)),style:{...inputStyle,width:100}})),
+          h('input',{type:"number",min:1,max:365,value:f.intervaloDias,onChange:e=>set("intervaloDias",Number(e.target.value)),style:Object.assign({},inputStyle,{width:100})})),
 
         // Fechas
-        h('div',{style:{...sectionStyle,display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}},
+        h('div',{style:Object.assign({},sectionStyle,{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12})},
           h('div',null,
             h('label',{style:labelStyle},"Primera ocurrencia *"),
             h('input',{type:"date",value:f.fechaInicio,onChange:e=>set("fechaInicio",e.target.value),style:inputStyle})),
@@ -2868,11 +2961,11 @@ function RecurrenciaModal({rec: recInit, onSave, onClose, ejecutores, cats}) {
                   h('span',{style:{fontSize:12,color:"#64748b",whiteSpace:"nowrap"}},"Desde"),
                   h('input',{type:"date",value:`2000-${p.desde}`,
                     onChange:e=>updateExclusion(i,"desde",e.target.value.slice(5)),
-                    style:{...inputStyle,width:"auto",flex:1}}),
+                    style:Object.assign({},inputStyle,{width:"auto",flex:1})}),
                   h('span',{style:{fontSize:12,color:"#64748b",whiteSpace:"nowrap"}},"hasta"),
                   h('input',{type:"date",value:`2000-${p.hasta}`,
                     onChange:e=>updateExclusion(i,"hasta",e.target.value.slice(5)),
-                    style:{...inputStyle,width:"auto",flex:1}}),
+                    style:Object.assign({},inputStyle,{width:"auto",flex:1})}),
                   h('button',{onClick:()=>removeExclusion(i),
                     style:{background:"none",border:"none",color:"#ef4444",cursor:"pointer",fontSize:18,padding:"0 4px",lineHeight:1}},
                     "×")))),
@@ -2886,7 +2979,7 @@ function RecurrenciaModal({rec: recInit, onSave, onClose, ejecutores, cats}) {
             saving?"Guardando...":"Guardar recurrencia")))));
 }
 
-function ProyectosTab({recs, onUpdate, ejecutores}) {
+function ProyectosTab(props) {   var recs = props.recs;   var onUpdate = props.onUpdate;   var ejecutores = props.ejecutores;
   const [proyectos,setProyectos] = useState([]);
   const [modal,setModal] = useState(null);
   const [filtroEstado,setFiltroEstado] = useState("");
@@ -2898,7 +2991,7 @@ function ProyectosTab({recs, onUpdate, ejecutores}) {
 
   const saveProyecto=async(p)=>{
     const proyectoAnterior = proyectos.find(x=>x.id===p.id);
-    const lista=proyectos.find(x=>x.id===p.id)?proyectos.map(x=>x.id===p.id?p:x):[p,...proyectos];
+    const lista=proyectos.find(x=>x.id===p.id)?proyectos.map(x=>x.id===p.id?p:x):[p].concat(proyectos);
     setProyectos(lista);
     ls.set("proyectos",lista);
     const appUrl=window.location.href.split("?")[0];
