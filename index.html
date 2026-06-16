@@ -5067,22 +5067,42 @@ function puedeInsistir(r) {
                         est.label)),
                   
                     h('td', {style:{padding:"10px 12px", whiteSpace:"nowrap"}},
-                      h('div', {style:{display:"flex",flexDirection:"column",gap:6}},
-                        r.estadoAvance === "completada" && !r.calificacion
+                    h('div', {style:{display:"flex",flexDirection:"column",gap:6}},
+                      r.estadoAvance === "completada" && !r.calificacion
+                        ? h('a', {href:appUrl+"?calificar="+r.id,
+                            style:{display:"inline-block", padding:"5px 12px", background:"#f97316",
+                              color:"white", borderRadius:7, fontSize:11, fontWeight:600, textDecoration:"none"}},
+                            "Calificar")
+                        : r.estadoAvance === "completada" && r.calificacion && r.calificacion <= 3
                           ? h('a', {href:appUrl+"?calificar="+r.id,
-                              style:{display:"inline-block", padding:"5px 12px", background:"#f97316",
-                                color:"white", borderRadius:7, fontSize:11, fontWeight:600, textDecoration:"none"}},
-                              "Calificar")
-                          : r.estadoAvance === "completada" && r.calificacion && r.calificacion <= 3
-                            ? h('a', {href:appUrl+"?calificar="+r.id,
-                                style:{display:"inline-block", padding:"5px 12px", background:"#fef2f2",
-                                  color:"#dc2626", border:"1px solid #fecaca", borderRadius:7, fontSize:11,
-                                  fontWeight:600, textDecoration:"none"}}, "Reabrir")
-                            : h('a', {href:appUrl+"?seguimiento="+r.numero,
-                                style:{display:"inline-block", padding:"5px 12px", background:"#f1f5f9",
-                                  color:"#374151", borderRadius:7, fontSize:11, fontWeight:600, textDecoration:"none"}},
-                                "Ver detalle")))
-                  );
+                              style:{display:"inline-block", padding:"5px 12px", background:"#fef2f2",
+                                color:"#dc2626", border:"1px solid #fecaca", borderRadius:7, fontSize:11,
+                                fontWeight:600, textDecoration:"none"}}, "Reabrir")
+                          : h('a', {href:appUrl+"?seguimiento="+r.numero,
+                              style:{display:"inline-block", padding:"5px 12px", background:"#f1f5f9",
+                                color:"#374151", borderRadius:7, fontSize:11, fontWeight:600, textDecoration:"none"}},
+                              "Ver detalle"),
+                      puedeInsistir(r) && insistidoId !== r.id
+                        ? h('button', {
+                            disabled: insistiendoId === r.id,
+                            onClick: async function(){
+                              setInsistiendoId(r.id);
+                              await registrarInsistencia(r, setRecs);
+                              setInsistiendoId(null);
+                              setInsistidoId(r.id);
+                              setTimeout(function(){setInsistidoId(null);}, 4000);
+                            },
+                            style:{display:"inline-block",padding:"5px 12px",
+                              background:insistiendoId===r.id?"#94a3b8":"#7c3aed",
+                              color:"white",border:"none",borderRadius:7,fontSize:11,
+                              fontWeight:600,cursor:insistiendoId===r.id?"not-allowed":"pointer"}},
+                            insistiendoId===r.id ? "Enviando..." : "⚠️ Insistir")
+                        : insistidoId === r.id
+                          ? h('span',{style:{fontSize:11,color:"#16a34a",fontWeight:600}},"✓ Insistencia enviada")
+                          : (r.insistencias||0) >= 3
+                            ? h('span',{style:{fontSize:10,color:"#94a3b8"}}, "Máx. insistencias")
+                            : null))
+                );
                   }))))))));
 }
 
