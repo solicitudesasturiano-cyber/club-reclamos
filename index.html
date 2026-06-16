@@ -1541,8 +1541,8 @@ Resolución: ${descripcion||"—"}`});
 
   const TABS = [["gestion","Gestión"],["asignacion","Asignación"],["resolucion","Resolución"]];
 
-  return h('div',{className:"modal-overlay",style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",display:"flex",alignItems:"flex-start",justifyContent:"center",zIndex:1000,padding:0,overflowY:"auto"}},
-    h('div',{className:"modal-card",style:{background:"white",width:"100%",maxWidth:580}},
+  return h('div',{className:"modal-overlay",style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",display:"block",zIndex:1000,padding:0,overflowY:"auto"}},
+    h('div',{className:"modal-card",style:{background:"white",width:"100%",maxWidth:580,boxSizing:"border-box"}},
       // Header
       h('div',{style:{background:"#1a3a6b",padding:"18px 24px",borderRadius:"20px 20px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center"}},
         h('div',null,
