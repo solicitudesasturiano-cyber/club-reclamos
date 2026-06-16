@@ -2982,7 +2982,7 @@ function RecurrenciaModal({rec: recInit, onSave, onClose, ejecutores, cats}) {
             saving?"Guardando...":"Guardar recurrencia")))));
 }
 
-function ProyectosTab({recs, onUpdate, ejecutores}) {
+function ProyectosTab(props) {   var recs = props.recs;   var onUpdate = props.onUpdate;   var ejecutores = props.ejecutores;
   const [proyectos,setProyectos] = useState([]);
   const [modal,setModal] = useState(null);
   const [filtroEstado,setFiltroEstado] = useState("");
