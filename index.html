@@ -1301,21 +1301,14 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs}) {
       if(f.fechaInicioEsperado && fechaInicio > ahora) return "no_iniciada";
       return f.estadoAvance || "bajo_analisis";
     };
-const autoEstado = calcEstado();
-const esTercero = f.tipoEjecutor==="tercero";
-const ejListaFinal = (f.ejecutores_lista||[]).length===0 && esTercero && f.empresaNombre
-  ? [{nombre:f.empresaNombre,mail:"tercero",telefono:f.empresaTelefono||"",confirmado:true,rechazado:false,fechaConfirmacion:new Date().toISOString()}]
-  : esTercero
-    ? (f.ejecutores_lista||[]).map(ej=>({...ej,confirmado:true,rechazado:false,fechaConfirmacion:ej.fechaConfirmacion||new Date().toISOString()}))
-    : (f.ejecutores_lista||[]);
-let savedRec = {...rec,...f,adjuntosResolucion,comentarios,nuevoComentario:undefined,
-  ejecutores_lista:ejListaFinal,
-  ejecutorConfirmado: esTercero ? true : (f.ejecutorConfirmado||false),
-  fechaConfirmacion: esTercero ? new Date().toISOString() : (f.fechaConfirmacion||null),
-  estadoAvance: autoEstado,
-  reabierta: rec.reabierta || false,
-  fechaCierreConfirmada,fechaInicioOriginal,fechaOriginalCierre,ejecutorMailOriginal,fechaAsignacion,
-  updatedAt:new Date().toISOString()};
+    const autoEstado = calcEstado();
+const ejListaFinal = (f.ejecutores_lista||[]).length===0 && f.tipoEjecutor==="tercero" && f.empresaNombre
+  ? [{nombre:f.empresaNombre,mail:"tercero",telefono:f.empresaTelefono||"",confirmado:false,rechazado:false,fechaConfirmacion:null}]
+  : (f.ejecutores_lista||[]);
+let savedRec = {...rec,...f,adjuntosResolucion,comentarios,nuevoComentario:undefined,ejecutores_lista:ejListaFinal,      estadoAvance: autoEstado,
+      reabierta: rec.reabierta || false,
+      fechaCierreConfirmada,fechaInicioOriginal,fechaOriginalCierre,ejecutorMailOriginal,fechaAsignacion,
+      updatedAt:new Date().toISOString()};
     await onSave(savedRec);
     // Consolidación manual: autopopular datos del padre en cada hijo nuevo
     const hijosAnteriores = new Set(rec.reclamosHijos||[]);
