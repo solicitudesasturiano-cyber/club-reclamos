@@ -2992,7 +2992,7 @@ function ProyectosTab(props) {   var recs = props.recs;   var onUpdate = props.o
 
   const saveProyecto=async(p)=>{
     const proyectoAnterior = proyectos.find(x=>x.id===p.id);
-    const lista=proyectos.find(x=>x.id===p.id)?proyectos.map(x=>x.id===p.id?p:x):[p,...proyectos];
+    const lista=proyectos.find(x=>x.id===p.id)?proyectos.map(x=>x.id===p.id?p:x):[p].concat(proyectos);
     setProyectos(lista);
     ls.set("proyectos",lista);
     const appUrl=window.location.href.split("?")[0];
