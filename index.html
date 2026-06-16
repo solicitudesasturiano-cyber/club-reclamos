@@ -3454,7 +3454,7 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
                 h('button',{onClick:()=>setModal(r),style:{padding:"4px 10px",background:"#1a3a6b",color:"white",border:"none",borderRadius:7,cursor:"pointer",fontSize:11,fontWeight:600}},"Gestionar")));
           }))),
       // Paginación
-      filtrados.length > POR_PAGINA && h('div',{style:{display:"flex",justifyContent:"center",alignItems:"center",gap:8,padding:"16px 0",borderTop:"1px solid #f1f5f9"}},
+      filtrados.length > POR_PAGINA && h('div',{style:{display:"flex",justifyContent:"center",alignItems:"center",gap:8,padding:"16px 0 80px 0",borderTop:"1px solid #f1f5f9"}},
         h('button',{onClick:()=>setPagina(p=>Math.max(1,p-1)),disabled:pagina===1,
           style:{padding:"6px 14px",borderRadius:8,border:"1.5px solid #e2e8f0",background:pagina===1?"#f8fafc":"white",color:pagina===1?"#cbd5e1":"#374151",cursor:pagina===1?"default":"pointer",fontSize:13,fontWeight:600}},
           "← Anterior"),
@@ -6154,14 +6154,15 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
     : CATS_ADMINISTRACION.includes(r.cat));
 
   return h('div',null,
-      h('div',{style:{position:"fixed",bottom:16,left:"50%",transform:"translateX(-50%)",zIndex:999,display:"flex",gap:8,padding:"8px 12px",background:"rgba(15,23,42,0.85)",borderRadius:32,backdropFilter:"blur(8px)",boxShadow:"0 4px 24px rgba(0,0,0,0.3)",maxWidth:"calc(100vw - 32px)",overflowX:"auto",WebkitOverflowScrolling:"touch"}},
+   h('div',{style:{position:"fixed",bottom:16,left:"50%",transform:"translateX(-50%)",zIndex:999,display:"flex",gap:8,padding:"8px 12px",background:"rgba(15,23,42,0.85)",borderRadius:32,backdropFilter:"blur(8px)",boxShadow:"0 4px 24px rgba(0,0,0,0.3)",maxWidth:"calc(100vw - 32px)",overflowX:"auto",WebkitOverflowScrolling:"touch"}},
       navBtn("socio","📋 Ingresa", view==="socio"),
       navBtn("mis_solicitudes","📬 Mis solicitudes", view==="mis_solicitudes"),
       showPanelTabs && navBtn("mis_tareas","📅 Mis tareas", view==="mis_tareas"),
       showPanelTabs && navBtn("intendencia","🔧 Intendencia", view==="intendencia"),
       showPanelTabs && navBtn("administracion","📊 Administración", view==="administracion"),
-      showPanelTabs && navBtn("dashboard","📈 Dashboard", view==="dashboard")),
-      !showPanelTabs && h('button',{
+      showPanelTabs && navBtn("dashboard","📈 Dashboard", view==="dashboard"),
+      showPanelTabs && h('button',{onClick:()=>setShowPanelTabs(false),style:{padding:"8px 12px",borderRadius:20,border:"none",background:"rgba(255,255,255,0.15)",color:"white",cursor:"pointer",fontSize:13,fontWeight:600,boxShadow:"0 2px 12px rgba(0,0,0,0.2)",whiteSpace:"nowrap"}},"✕")),
+    !showPanelTabs && h('button',{
       onClick:()=>setShowPanelTabs(true),
       style:{position:"fixed",bottom:16,left:16,zIndex:999,background:"rgba(0,0,0,0.15)",border:"none",
         borderRadius:"50%",width:32,height:32,cursor:"pointer",fontSize:14,color:"rgba(0,0,0,0.3)",
