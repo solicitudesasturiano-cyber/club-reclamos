@@ -270,20 +270,58 @@ function panelUrl(appUrl, area) {
 }
 
 const SECTORES_ADMIN = ["Administración"];
-const SECTORES_TODOS = [
-  "Cabina Control Entrada Campo","Covadonga Hall De Entrada","Cancha Playón Entrada Covadonga",
-  "Salón de Socios Confitería","Salón Canasta","Biblioteca Oficina Contaduría 1er piso",
-  "Salón Juvenil","Salón Presidente","Gimnasio Aparatos","Gimnasio Principal","Salón Yoga",
-  "Piletas","Área Lockers bajo Pileta","Espacio bajo pileta","Área Mesas Campo","Quincho",
-  "Playón Horreo","Plaza Juegos Infantiles","Consultorio Médico","Parque cercano al Vial Costero",
-  "Pasillo conexión Covadonga y Deportes","Cancha de Tejo","Cancha de Jockey",
-  "Pasillo Angosto y Largo Lado Deportes","Cancha Fútbol 11","Canchas Sintético",
-  "Playones semicubiertos Lado Deportes","Oficina Tenis","Estacionamiento",
-  "Puente Conexión Canchas de Fútbol","Chiringuito","Vestuarios General","Cancha de Bolos",
-  "Zona Parrillas","Oficina Estacionamiento","Zona Palestra","Baños Hall Entrada",
-  "Baños Canasta","Baños Campo","Baños Vestuarios","Baños Chiringuito",
-  "Pasillo Covadonga","Unidad Sanitaria","Administración"
-];
+
+const UBICACION_DATA = {
+  "Covadonga": {
+    "Administración": [],
+    "Bajo Pileta": ["Lockers","Otro"],
+    "Biblioteca / Contaduría": ["Baños Biblioteca / Contaduría","Otro"],
+    "Cancha Fútbol 5 Covadonga": [],
+    "Consultorio Médico": [],
+    "Gimnasio de Aparatos": [],
+    "Gimnasio Principal": [],
+    "Hall de Entrada": ["Baños Hall de Entrada","Otro"],
+    "Leñero": [],
+    "Mesas Campo": ["Baños Campo","Otro"],
+    "Parque Verde Vial Costero": [],
+    "Pasillos / Conexiones": ["Pasillo Covadonga","Pasillo conexión Polideportivo","Otro"],
+    "Piletas": ["Pileta Mayores","Pileta Niños","Otro"],
+    "Plaza de Juegos": [],
+    "Quincho": [],
+    "Salón Canasta": ["Baños Canasta","Otro"],
+    "Salón de Socios": [],
+    "Salón Juvenil": [],
+    "Salón Presidente": [],
+    "Unidad Sanitaria": [],
+    "Vestuarios Covadonga": ["Baños Vestuarios Covadonga","Otro"],
+    "Otro": []
+  },
+  "Polideportivo": {
+    "Básquet": [],
+    "Bolos": [],
+    "Canchas Sintético": ["Cancha 11","Canchas 5","Otro"],
+    "Chiringuito": ["Vestuarios Chiringuito","Baños Chiringuito","Otro"],
+    "Estacionamiento": ["Oficina Estacionamiento","Playón","Otro"],
+    "Golf": [],
+    "Jockey": [],
+    "Nuevo Bodegón Asturiano": [],
+    "Pádel": [],
+    "Palestra": [],
+    "Tejo": [],
+    "Tenis": ["Cabina Tenis","Cancha Rápida","Oficina Tenis","Polvo de Ladrillo","Otro"],
+    "Tinglado": [],
+    "Otro": []
+  }
+};
+
+const SECTORES_TODOS = Object.keys(UBICACION_DATA["Covadonga"]).concat(Object.keys(UBICACION_DATA["Polideportivo"]));
+
+function getSectoresByCat(cat) {
+  if (["servicios","cuotas"].includes(cat)) return SECTORES_ADMIN;
+  return SECTORES_TODOS;
+}
+
+function getGrupo(sector) { return ""; }
 // Sectores según categoría
 function getSectoresByCat(cat) {
   if (["servicios","cuotas"].includes(cat)) return SECTORES_ADMIN;
@@ -779,12 +817,13 @@ function Badge({color, bg, label, sm}) {
 // ── FORMULARIO SOCIO ───────────────────────────────────────────────────────
 function FormularioSocio({onSubmit, reclamos}) {
   const _ds = ls.get("datos_solicitante") || {};
-  const [f,setF] = useState({tipo:"",nombre:_ds.nombre||"",celular:_ds.celular||"",email:_ds.email||"",sector:"",cat:"",sub:"",pri:"media",desc:"",ubicacion:"",adjuntos:[]});
+  const [f,setF] = useState({tipo:"",nombre:_ds.nombre||"",celular:_ds.celular||"",email:_ds.email||"",sector:"",sectorGrande:"",sectorOtro:"",subEspacio:"",subEspacioOtro:"",cat:"",sub:"",pri:"media",desc:"",ubicacion:"",adjuntos:[]});
   const [done,setDone] = useState(false);
   const [num,setNum] = useState("");
   const [err,setErr] = useState({});
   const [dup,setDup] = useState(null);
   const [sending,setSending] = useState(false);
+  const [saveErr,setSaveErr] = useState("");
   const fileRef = useRef();
   const cameraRef = useRef();
   
@@ -801,17 +840,30 @@ function FormularioSocio({onSubmit, reclamos}) {
 
   const validate = () => {
     const e={};
-    if(!f.tipo) e.tipo=true; if(!f.nombre.trim()) e.nombre=true;
+    if(!f.tipo) e.tipo=true;
+    if(!f.nombre.trim()) e.nombre=true;
     if(!f.email.trim()) e.email=true;
     if(!f.cat) e.cat=true;
-    if(!["servicios","cuotas"].includes(f.cat) && !f.sector) e.sector=true;
+    if(!["servicios","cuotas"].includes(f.cat) && (!f.sectorGrande || !f.sector)) e.sector=true;
     if((f.sector||["servicios","cuotas"].includes(f.cat)) && !f.sub) e.sub=true;
     if(!f.desc.trim()) e.desc=true;
     setErr(e); return !Object.keys(e).length;
   };
-
   const submit = async () => {
-    if (!validate()) return;
+    if (!validate()) {
+    const mensajes = [];
+    if(!f.tipo) mensajes.push("¿Quién sos?");
+    if(!f.nombre.trim()) mensajes.push("Nombre y apellido");
+    if(!f.email.trim()) mensajes.push("Email");
+    if(!f.cat) mensajes.push("Tipo de problema");
+    if(!["servicios","cuotas"].includes(f.cat) && !f.sectorGrande) mensajes.push("Sector (Covadonga o Polideportivo)");
+    if(!["servicios","cuotas"].includes(f.cat) && f.sectorGrande && !f.sector) mensajes.push("Espacio");
+    if((f.sector||["servicios","cuotas"].includes(f.cat)) && !f.sub) mensajes.push("Detalle del problema");
+    if(!f.desc.trim()) mensajes.push("Descripción");
+    setSaveErr("Por favor completá: " + mensajes.join(" · "));
+    return;
+  }
+  setSaveErr("");
     setSending(true);
     ls.set("datos_solicitante",{nombre:f.nombre.trim(),email:f.email.trim(),celular:f.celular.trim()});
     // Generate sequential number using fresh data from Supabase
@@ -876,7 +928,7 @@ function FormularioSocio({onSubmit, reclamos}) {
         h('div',{style:{fontSize:28,fontWeight:800,color:"#15803d",fontFamily:"monospace"}},num)),
       h('p',{style:{fontSize:13,color:"#94a3b8"}},"Guardá este número para hacer seguimiento."),
       h('button',{onClick:()=>{setDone(false);var _dsR = ls.get("datos_solicitante") || {};
-setF({tipo:"",nombre:_dsR.nombre||"",celular:_dsR.celular||"",email:_dsR.email||"",sector:"",cat:"",sub:"",pri:"media",desc:"",ubicacion:"",adjuntos:[]});setDup(null);},
+setF({tipo:"",nombre:_dsR.nombre||"",celular:_dsR.celular||"",email:_dsR.email||"",sector:"",sectorGrande:"",sectorOtro:"",subEspacio:"",subEspacioOtro:"",cat:"",sub:"",pri:"media",desc:"",ubicacion:"",adjuntos:[]});setDup(null);},
         style:{marginTop:20,padding:"10px 28px",background:"#1a3a6b",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:600}},"Nueva solicitud")));
 
   const catConf = CATS[f.cat];
@@ -927,9 +979,22 @@ setF({tipo:"",nombre:_dsR.nombre||"",celular:_dsR.celular||"",email:_dsR.email||
             ? h('div',{style:{background:"rgba(59,130,246,0.15)",border:"1.5px solid rgba(59,130,246,0.3)",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#a8c4e8"}},"📍 Sector asignado automáticamente: Administración")
             : h('div',null,
                 lbl("Sector *",err.sector),
-                h('select',{value:f.sector,onChange:e=>set("sector",e.target.value),style:{...iS(err.sector),color:f.sector?"white":"#94a3b8"}},
-                  h('option',{value:"",style:{color:"#333"}},"Seleccioná el sector..."),
-                  ...getSectoresByCat(f.cat).map(s=>h('option',{key:s,value:s,style:{color:"#333"}},s))))),
+                h('select',{value:f.sectorGrande||"",onChange:e=>{set("sectorGrande",e.target.value);set("sector","");set("subEspacio","");set("sectorOtro","");},style:{...iS(err.sector),color:f.sectorGrande?"white":"#94a3b8"}},
+                  h('option',{value:"",style:{color:"#333"}},"Covadonga o Polideportivo..."),
+                  h('option',{value:"Covadonga",style:{color:"#333"}},"🏛️ Covadonga"),
+                  h('option',{value:"Polideportivo",style:{color:"#333"}},"🏟️ Polideportivo")),
+                f.sectorGrande && h('div',{style:{marginTop:8}},
+                  lbl("Espacio *",err.sector),
+                  h('select',{value:f.sector,onChange:e=>{set("sector",e.target.value);set("subEspacio","");set("sectorOtro","");},style:{...iS(err.sector),color:f.sector?"white":"#94a3b8"}},
+                    h('option',{value:"",style:{color:"#333"}},"Seleccioná el espacio..."),
+                    ...Object.keys(UBICACION_DATA[f.sectorGrande]).map(s=>h('option',{key:s,value:s,style:{color:"#333"}},s))),
+                  f.sector==="Otro" && h('input',{value:f.sectorOtro||"",onChange:e=>set("sectorOtro",e.target.value),placeholder:"Describí el espacio...",style:{...iS(false),marginTop:6}})),
+                f.sectorGrande && f.sector && f.sector!=="Otro" && (UBICACION_DATA[f.sectorGrande][f.sector]||[]).length>0 && h('div',{style:{marginTop:8}},
+                  lbl("Sub-espacio (opcional)"),
+                  h('select',{value:f.subEspacio||"",onChange:e=>{set("subEspacio",e.target.value);},style:{...iS(false),color:f.subEspacio?"white":"#94a3b8",marginTop:0}},
+                    h('option',{value:"",style:{color:"#333"}},"Seleccioná (opcional)..."),
+                    ...(UBICACION_DATA[f.sectorGrande][f.sector]||[]).map(s=>h('option',{key:s,value:s,style:{color:"#333"}},s))),
+                  f.subEspacio==="Otros" && h('input',{value:f.subEspacioOtro||"",onChange:e=>set("subEspacioOtro",e.target.value),placeholder:"Describí el sub-espacio...",style:{...iS(false),marginTop:6}})))),
         // Subcategoría
         f.cat && (f.sector || ["servicios","cuotas"].includes(f.cat)) && h('div',{style:{marginBottom:14}},lbl("Detalle del problema *",err.sub),
           h('select',{value:f.sub,onChange:e=>set("sub",e.target.value),style:{...iS(err.sub),color:f.sub?"white":"#94a3b8"}},
@@ -960,8 +1025,8 @@ setF({tipo:"",nombre:_dsR.nombre||"",celular:_dsR.celular||"",email:_dsR.email||
             h('button',{onClick:()=>fileRef.current.click(),style:{padding:"9px 16px",borderRadius:9,border:"1.5px dashed rgba(255,255,255,0.25)",background:"transparent",color:"#94a3b8",cursor:"pointer",fontSize:13}},"📎 Adjuntar existente"),
             h('button',{onClick:()=>cameraRef.current.click(),style:{padding:"9px 16px",borderRadius:9,border:"1.5px dashed rgba(255,255,255,0.25)",background:"transparent",color:"#94a3b8",cursor:"pointer",fontSize:13}},"📷 Sacar foto / grabar"))),
         // Submit
-        h('button',{onClick:submit,disabled:sending,style:{width:"100%",padding:"15px",background:sending?"#475569":"linear-gradient(135deg,#3b82f6,#1d4ed8)",color:"white",border:"none",borderRadius:12,fontSize:16,fontWeight:700,cursor:sending?"not-allowed":"pointer"}},sending?"Enviando...":"Enviar Solicitud →"))));
-}
+saveErr && h('div',{style:{background:"rgba(220,38,38,0.15)",border:"1.5px solid #ef4444",borderRadius:10,padding:"10px 14px",marginBottom:12,fontSize:13,color:"#fca5a5",fontWeight:500}},saveErr),
+h('button',{onClick:submit,disabled:sending,style:{width:"100%",padding:"15px",background:sending?"#475569":"linear-gradient(135deg,#3b82f6,#1d4ed8)",color:"white",border:"none",borderRadius:12,fontSize:16,fontWeight:700,cursor:sending?"not-allowed":"pointer"}},sending?"Enviando...":"Enviar Solicitud →"))));}
 
 // ── PANTALLA RECHAZO ───────────────────────────────────────────────────────
 function PantallaRechazo({onConfirm}) {
@@ -6117,7 +6182,6 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
-
 
 
 
