@@ -2867,13 +2867,13 @@ function RecurrenciaModal(props) {   var recInit = props.rec; var onSave = props
           h('label',{style:labelStyle},"Ejecutor responsable (opcional)"),
           h('div',{style:{display:"flex",gap:8,marginBottom:10}},
             ...[["interno","👷 Empleado del club"],["tercero","🏢 Proveedor externo"]].map(function(tipArr){ var tipo=tipArr[0]; var lbl=tipArr[1]; return (
-              return h('button',{key:tipo,onClick:()=>{
+              h('button',{key:tipo,onClick:()=>{
                 set("tipoEjecutor",tipo);
                 if(tipo==="tercero"){set("ejecutorMail","tercero@externo");set("ejecutorNombre",f.empresaNombre||"");}
                 else{set("ejecutorMail","");set("ejecutorNombre","");set("empresaNombre","");set("empresaTelefono","");}
               },style:{flex:1,padding:"7px",borderRadius:8,border:f.tipoEjecutor===tipo?"2px solid #3b82f6":"2px solid #e2e8f0",
                 background:f.tipoEjecutor===tipo?"#eff6ff":"white",
-                color:f.tipoEjecutor===tipo?"#1d4ed8":"#64748b",cursor:"pointer",fontSize:12,fontWeight:600}},lbl); })),
+                color:f.tipoEjecutor===tipo?"#1d4ed8":"#64748b",cursor:"pointer",fontSize:12,fontWeight:600}},lbl)); }),
           f.tipoEjecutor!=="tercero"
             ? h('select',{value:f.ejecutorMail,onChange:e=>{
                 const ej=ejecutores.find(x=>x.mail===e.target.value);
