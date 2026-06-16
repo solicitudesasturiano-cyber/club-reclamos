@@ -2658,8 +2658,7 @@ function RecurrenciasTab(props) {   var area = props.area; var ejecutores = prop
 
         if (esEdicion && ticketPendiente) {
           // Actualizar el ticket pendiente con los nuevos datos de la recurrencia
-          const updatedTicket = {
-            ...ticketPendiente,
+          const updatedTicket = Object.assign({},ticketPendiente,{
             sector: rec.sector,
             cat: rec.cat,
             sub: rec.sub||rec.nombre,
@@ -2671,7 +2670,7 @@ function RecurrenciasTab(props) {   var area = props.area; var ejecutores = prop
             nuevoComentario: rec.comentario||"",
             recurrenciaNombre: rec.nombre,
             updatedAt: new Date().toISOString()
-          };
+          });
           await sbUpsert(updatedTicket);
         } else if (diasFaltantes <= (rec.leadTimeDias||0) && !ticketPendiente) {
           // No hay ticket pendiente y ya estamos en ventana → crear uno nuevo
@@ -2684,7 +2683,7 @@ function RecurrenciasTab(props) {   var area = props.area; var ejecutores = prop
   };
 
   const toggleActiva = async (rec) => {
-    await sbUpsertRecurrencia({...rec, activa: !rec.activa});
+    await sbUpsertRecurrencia(Object.assign({},rec,{activa:!rec.activa}));
     await cargar();
   };
 
@@ -2749,7 +2748,7 @@ function RecurrenciasTab(props) {   var area = props.area; var ejecutores = prop
 
     // Modal crear/editar
     modal && h(RecurrenciaModal,{
-      rec: modal==="nuevo" ? {...RECURRENCIA_EMPTY, id: Date.now()} : modal,
+      rec: modal==="nuevo" ? Object.assign({},RECURRENCIA_EMPTY,{id:Date.now()}) : modal,
       onSave: guardar,
       onClose: ()=>setModal(null),
       ejecutores, cats
