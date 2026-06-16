@@ -2867,7 +2867,7 @@ function RecurrenciaModal(props) {   var recInit = props.rec; var onSave = props
           h('label',{style:labelStyle},"Ejecutor responsable (opcional)"),
           h('div',{style:{display:"flex",gap:8,marginBottom:10}},
             ...[["interno","👷 Empleado del club"],["tercero","🏢 Proveedor externo"]].map(function(tipArr){ var tipo=tipArr[0]; var lbl=tipArr[1]; return (
-              h('button',{key:tipo,onClick:()=>{
+              return h('button',{key:tipo,onClick:()=>{
                 set("tipoEjecutor",tipo);
                 if(tipo==="tercero"){set("ejecutorMail","tercero@externo");set("ejecutorNombre",f.empresaNombre||"");}
                 else{set("ejecutorMail","");set("ejecutorNombre","");set("empresaNombre","");set("empresaTelefono","");}
