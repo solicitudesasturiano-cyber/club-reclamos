@@ -2773,7 +2773,7 @@ function RecurrenciaModal(props) {   var recInit = props.rec; var onSave = props
 
   const toggleDiaSemana = (i) => {
     const current = f.diasSemana||[];
-    set("diasSemana", current.includes(i) ? current.filter(d=>d!==i) : [...current,i]);
+    set("diasSemana", current.includes(i) ? current.filter(d=>d!==i) : current.concat([i]));
   };
 
   const addExclusion = function() { set("periodosExclusion", (f.periodosExclusion||[]).concat([{desde:"01-01",hasta:"01-31"}])); };
@@ -2809,7 +2809,7 @@ function RecurrenciaModal(props) {   var recInit = props.rec; var onSave = props
           h('input',{value:f.nombre,onChange:e=>set("nombre",e.target.value),placeholder:"Ej: Limpieza de piletas",style:inputStyle})),
 
         // Categoría + Sector
-        h('div',{style:{...sectionStyle,display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}},
+        h('div',{style:Object.assign({},sectionStyle,{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12})},
           h('div',null,
             h('label',{style:labelStyle},"Categoría *"),
             h('select',{value:f.cat,onChange:e=>set("cat",e.target.value),style:inputStyle},
@@ -2834,20 +2834,20 @@ function RecurrenciaModal(props) {   var recInit = props.rec; var onSave = props
               h('option',{value:""},"Sub-espacio..."),
               ...((UBICACION_DATA[f.sectorGrande]||{})[f.sector]||[]).map(function(sub){return h('option',{key:sub,value:sub},sub);}),
               h('option',{value:"Otro"},"Otro")))),
-          f.sector==="Otro" && h('input',{value:f.sectorOtro||"",onChange:function(e){set("sectorOtro",e.target.value);},placeholder:"Especificá el espacio",style:{...inputStyle,marginTop:6}}),
-          f.subEspacio==="Otro" && h('input',{value:f.subEspacioOtro||"",onChange:function(e){set("subEspacioOtro",e.target.value);},placeholder:"Especificá el sub-espacio",style:{...inputStyle,marginTop:6}})),
+          f.sector==="Otro" && h('input',{value:f.sectorOtro||"",onChange:function(e){set("sectorOtro",e.target.value);},placeholder:"Especificá el espacio",style:Object.assign({},inputStyle,{marginTop:6})}),
+          f.subEspacio==="Otro" && h('input',{value:f.subEspacioOtro||"",onChange:function(e){set("subEspacioOtro",e.target.value);},placeholder:"Especificá el sub-espacio",style:Object.assign({},inputStyle,{marginTop:6})})),
 
         // Criticidad
         h('div',{style:sectionStyle},
           h('label',{style:labelStyle},"Criticidad"),
-          h('select',{value:f.criticidad,onChange:function(e){set("criticidad",e.target.value);},style:{...inputStyle,width:"auto"}},
+          h('select',{value:f.criticidad,onChange:function(e){set("criticidad",e.target.value);},style:Object.assign({},inputStyle,{width:"auto"})},
             h('option',{value:"urgente"},"Urgente"),
             h('option',{value:"alta"},"Alta"),
             h('option',{value:"media"},"Media"),
             h('option',{value:"baja"},"Baja"))),
 
         // Turno + Horario (opcionales)
-        h('div',{style:{...sectionStyle,display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}},
+        h('div',{style:Object.assign({},sectionStyle,{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12})},
           h('div',null,
             h('label',{style:labelStyle},"Turno (opcional)"),
             h('select',{value:f.turno||"",onChange:function(e){set("turno",e.target.value);},style:inputStyle},
@@ -2866,18 +2866,18 @@ function RecurrenciaModal(props) {   var recInit = props.rec; var onSave = props
         h('div',{style:sectionStyle},
           h('label',{style:labelStyle},"Ejecutor responsable (opcional)"),
           h('div',{style:{display:"flex",gap:8,marginBottom:10}},
-            ...[["interno","👷 Empleado del club"],["tercero","🏢 Proveedor externo"]].map(([tipo,lbl])=>
+            ...[["interno","👷 Empleado del club"],["tercero","🏢 Proveedor externo"]].map(function(tipArr){ var tipo=tipArr[0]; var lbl=tipArr[1]; return (
               h('button',{key:tipo,onClick:()=>{
                 set("tipoEjecutor",tipo);
                 if(tipo==="tercero"){set("ejecutorMail","tercero@externo");set("ejecutorNombre",f.empresaNombre||"");}
                 else{set("ejecutorMail","");set("ejecutorNombre","");set("empresaNombre","");set("empresaTelefono","");}
               },style:{flex:1,padding:"7px",borderRadius:8,border:f.tipoEjecutor===tipo?"2px solid #3b82f6":"2px solid #e2e8f0",
                 background:f.tipoEjecutor===tipo?"#eff6ff":"white",
-                color:f.tipoEjecutor===tipo?"#1d4ed8":"#64748b",cursor:"pointer",fontSize:12,fontWeight:600}},lbl))),
+                color:f.tipoEjecutor===tipo?"#1d4ed8":"#64748b",cursor:"pointer",fontSize:12,fontWeight:600}},lbl); })),
           f.tipoEjecutor!=="tercero"
             ? h('select',{value:f.ejecutorMail,onChange:e=>{
                 const ej=ejecutores.find(x=>x.mail===e.target.value);
-                setF(p=>({...p,ejecutorMail:e.target.value,ejecutorNombre:(ej&&ej.nombre)||""}));
+                setF(function(p){ return Object.assign({},p,{ejecutorMail:e.target.value,ejecutorNombre:(ej&&ej.nombre)||""}); });
               },style:inputStyle},
                 h('option',{value:""},"Sin ejecutor asignado"),
                 ...(ejecutores||[]).map(e=>h('option',{key:e.mail,value:e.mail},e.nombre||e.mail)))
@@ -2897,7 +2897,7 @@ function RecurrenciaModal(props) {   var recInit = props.rec; var onSave = props
           h('label',{style:labelStyle},"Instrucciones para el ejecutor"),
           h('textarea',{value:f.comentario,onChange:e=>set("comentario",e.target.value),
             rows:2,placeholder:"Qué debe hacer, cómo acceder, herramientas necesarias...",
-            style:{...inputStyle,resize:"vertical"}})),
+            style:Object.assign({},inputStyle,{resize:"vertical"})})),
 
         // Separador
         h('div',{style:{borderTop:"2px solid #f1f5f9",marginBottom:20}}),
@@ -2926,15 +2926,15 @@ function RecurrenciaModal(props) {   var recInit = props.rec; var onSave = props
 
         f.patron==="mensual" && h('div',{style:sectionStyle},
           h('label',{style:labelStyle},"Día del mes"),
-          h('select',{value:f.diaMes,onChange:e=>set("diaMes",Number(e.target.value)),style:{...inputStyle,width:"auto"}},
+          h('select',{value:f.diaMes,onChange:e=>set("diaMes",Number(e.target.value)),style:Object.assign({},inputStyle,{width:"auto"})},
             ...(function(){var opts=[];for(var i=1;i<=28;i++)opts.push(h('option',{key:i,value:i},i));return opts;}()))),
 
         f.patron==="personalizado" && h('div',{style:sectionStyle},
           h('label',{style:labelStyle},"Cada cuántos días"),
-          h('input',{type:"number",min:1,max:365,value:f.intervaloDias,onChange:e=>set("intervaloDias",Number(e.target.value)),style:{...inputStyle,width:100}})),
+          h('input',{type:"number",min:1,max:365,value:f.intervaloDias,onChange:e=>set("intervaloDias",Number(e.target.value)),style:Object.assign({},inputStyle,{width:100})})),
 
         // Fechas
-        h('div',{style:{...sectionStyle,display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}},
+        h('div',{style:Object.assign({},sectionStyle,{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12})},
           h('div',null,
             h('label',{style:labelStyle},"Primera ocurrencia *"),
             h('input',{type:"date",value:f.fechaInicio,onChange:e=>set("fechaInicio",e.target.value),style:inputStyle})),
@@ -2961,11 +2961,11 @@ function RecurrenciaModal(props) {   var recInit = props.rec; var onSave = props
                   h('span',{style:{fontSize:12,color:"#64748b",whiteSpace:"nowrap"}},"Desde"),
                   h('input',{type:"date",value:`2000-${p.desde}`,
                     onChange:e=>updateExclusion(i,"desde",e.target.value.slice(5)),
-                    style:{...inputStyle,width:"auto",flex:1}}),
+                    style:Object.assign({},inputStyle,{width:"auto",flex:1})}),
                   h('span',{style:{fontSize:12,color:"#64748b",whiteSpace:"nowrap"}},"hasta"),
                   h('input',{type:"date",value:`2000-${p.hasta}`,
                     onChange:e=>updateExclusion(i,"hasta",e.target.value.slice(5)),
-                    style:{...inputStyle,width:"auto",flex:1}}),
+                    style:Object.assign({},inputStyle,{width:"auto",flex:1})}),
                   h('button',{onClick:()=>removeExclusion(i),
                     style:{background:"none",border:"none",color:"#ef4444",cursor:"pointer",fontSize:18,padding:"0 4px",lineHeight:1}},
                     "×")))),
