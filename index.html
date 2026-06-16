@@ -2766,12 +2766,10 @@ function RecurrenciasTab(props) {   var area = props.area; var ejecutores = prop
 }
 
 function RecurrenciaModal(props) {   var recInit = props.rec; var onSave = props.onSave; var onClose = props.onClose; var ejecutores = props.ejecutores; var cats = props.cats;
-  const [f, setF] = useState({
-    tipoEjecutor:"interno", empresaNombre:"", empresaTelefono:"",
-    ...recInit
-  });
+  var fInicial = Object.assign({tipoEjecutor:"interno", empresaNombre:"", empresaTelefono:""}, recInit);
+  const [f, setF] = useState(fInicial);
   const [saving, setSaving] = useState(false);
-  const set = (k,v) => setF(p=>({...p,[k]:v}));
+  const set = function(k,v) { setF(function(p){ return Object.assign({},p,{[k]:v}); }); };
   const DIAS_SEMANA = ["Lun","Mar","Mié","Jue","Vie","Sáb","Dom"];
 
   const toggleDiaSemana = (i) => {
@@ -2779,9 +2777,9 @@ function RecurrenciaModal(props) {   var recInit = props.rec; var onSave = props
     set("diasSemana", current.includes(i) ? current.filter(d=>d!==i) : [...current,i]);
   };
 
-  const addExclusion = () => set("periodosExclusion", [...(f.periodosExclusion||[]), {desde:"01-01",hasta:"01-31"}]);
-  const removeExclusion = (i) => set("periodosExclusion", (f.periodosExclusion||[]).filter((_,idx)=>idx!==i));
-  const updateExclusion = (i,k,v) => set("periodosExclusion", (f.periodosExclusion||[]).map((p,idx)=>idx===i?{...p,[k]:v}:p));
+  const addExclusion = function() { set("periodosExclusion", (f.periodosExclusion||[]).concat([{desde:"01-01",hasta:"01-31"}])); };
+  const removeExclusion = function(i) { set("periodosExclusion", (f.periodosExclusion||[]).filter(function(_,idx){ return idx!==i; })); };
+  const updateExclusion = function(i,k,v) { set("periodosExclusion", (f.periodosExclusion||[]).map(function(p,idx){ return idx===i ? Object.assign({},p,{[k]:v}) : p; })); };
 
   const save = async () => {
     if(!f.nombre.trim()) return alert("El nombre es obligatorio");
