@@ -2107,7 +2107,70 @@ function Kanban({recs, onEdit}) {
 
 // ── PANEL ADMIN ────────────────────────────────────────────────────────────
 // ── PROYECTOS ──────────────────────────────────────────────────────────────
-function ModalProyecto({proyecto, onClose, onSave, ejecutores, recs}) {
+function TabComprasProyecto(props) {
+  var f = props.f;
+  var set = props.set;
+  var aS = props.aS;
+  var compras = f.compras || [];
+
+  var total = compras.reduce(function(acc, c) { return acc + (Number(c.monto) || 0); }, 0);
+
+  function addCompra() {
+    var nueva = {id: Date.now(), fecha: new Date().toISOString().slice(0,10), proveedor:"", descripcion:"", monto:"", comprobante:""};
+    set("compras", compras.concat([nueva]));
+  }
+
+  function updateCompra(id, key, val) {
+    set("compras", compras.map(function(c) {
+      if (c.id !== id) return c;
+      var updated = Object.assign({}, c);
+      updated[key] = val;
+      return updated;
+    }));
+  }
+
+  function removeCompra(id) {
+    set("compras", compras.filter(function(c) { return c.id !== id; }));
+  }
+
+  return h('div', null,
+    // Resumen total
+    h('div', {style:{background:"linear-gradient(135deg,#7c3aed18,#5b21b618)",border:"1.5px solid #c4b5fd",borderRadius:12,padding:"14px 18px",marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"center"}},
+      h('div', null,
+        h('div', {style:{fontSize:11,fontWeight:700,color:"#7c3aed",textTransform:"uppercase",letterSpacing:0.5,marginBottom:2}}, "Total acumulado"),
+        h('div', {style:{fontSize:22,fontWeight:800,color:"#5b21b6"}}, "$ "+total.toLocaleString("es-AR"))),
+      h('div', {style:{fontSize:12,color:"#7c3aed",fontWeight:600}}, compras.length+" compra"+(compras.length!==1?"s":""))),
+
+    // Lista
+    compras.length === 0
+      ? h('div', {style:{textAlign:"center",padding:"24px 0",color:"#94a3b8",fontSize:13}}, "Sin compras registradas. Agregá la primera.")
+      : h('div', {style:{display:"flex",flexDirection:"column",gap:8,marginBottom:12}},
+          compras.map(function(c) {
+            return h('div', {key:c.id, style:{border:"1.5px solid #e2e8f0",borderRadius:10,padding:"12px 14px",background:"#fafafa"}},
+              h('div', {style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}},
+                h('div', null,
+                  h('label', {style:{fontSize:10,fontWeight:700,color:"#64748b",textTransform:"uppercase",display:"block",marginBottom:3}}, "Fecha"),
+                  h('input', {type:"date", value:c.fecha, onChange:function(e){updateCompra(c.id,"fecha",e.target.value);}, style:{width:"100%",padding:"7px 10px",borderRadius:7,border:"1.5px solid #e2e8f0",fontSize:13,outline:"none",boxSizing:"border-box"}})),
+                h('div', null,
+                  h('label', {style:{fontSize:10,fontWeight:700,color:"#64748b",textTransform:"uppercase",display:"block",marginBottom:3}}, "Monto ($)"),
+                  h('input', {type:"number", value:c.monto, placeholder:"0", onChange:function(e){updateCompra(c.id,"monto",e.target.value);}, style:{width:"100%",padding:"7px 10px",borderRadius:7,border:"1.5px solid #e2e8f0",fontSize:13,outline:"none",boxSizing:"border-box"}}))),
+              h('div', {style:{marginBottom:8}},
+                h('label', {style:{fontSize:10,fontWeight:700,color:"#64748b",textTransform:"uppercase",display:"block",marginBottom:3}}, "Proveedor"),
+                h('input', {value:c.proveedor, placeholder:"Nombre empresa o persona", onChange:function(e){updateCompra(c.id,"proveedor",e.target.value);}, style:{width:"100%",padding:"7px 10px",borderRadius:7,border:"1.5px solid #e2e8f0",fontSize:13,outline:"none",boxSizing:"border-box"}})),
+              h('div', {style:{marginBottom:8}},
+                h('label', {style:{fontSize:10,fontWeight:700,color:"#64748b",textTransform:"uppercase",display:"block",marginBottom:3}}, "Descripción"),
+                h('input', {value:c.descripcion, placeholder:"¿Qué se compró?", onChange:function(e){updateCompra(c.id,"descripcion",e.target.value);}, style:{width:"100%",padding:"7px 10px",borderRadius:7,border:"1.5px solid #e2e8f0",fontSize:13,outline:"none",boxSizing:"border-box"}})),
+              h('div', {style:{display:"flex",justifyContent:"space-between",alignItems:"center"}},
+                h('div', {style:{flex:1,marginRight:8}},
+                  h('label', {style:{fontSize:10,fontWeight:700,color:"#64748b",textTransform:"uppercase",display:"block",marginBottom:3}}, "Nro. comprobante (opcional)"),
+                  h('input', {value:c.comprobante, placeholder:"Factura / remito / recibo", onChange:function(e){updateCompra(c.id,"comprobante",e.target.value);}, style:{width:"100%",padding:"7px 10px",borderRadius:7,border:"1.5px solid #e2e8f0",fontSize:13,outline:"none",boxSizing:"border-box"}})),
+                h('button', {onClick:function(){removeCompra(c.id);}, style:{background:"#fef2f2",border:"1.5px solid #fecaca",borderRadius:7,cursor:"pointer",color:"#dc2626",fontWeight:700,padding:"7px 12px",fontSize:12,whiteSpace:"nowrap"}}, "✕ Eliminar")));
+          })),
+
+    h('button', {onClick:addCompra, style:{width:"100%",padding:"10px",background:"#f5f3ff",border:"2px dashed #c4b5fd",borderRadius:10,cursor:"pointer",fontSize:13,color:"#7c3aed",fontWeight:600}}, "+ Registrar compra"));
+}
+  
+  function ModalProyecto({proyecto, onClose, onSave, ejecutores, recs}) {
   const nuevo = !proyecto?.id;
   // Siempre leer desde localStorage para tener reclamosVinculados actualizados
   const proyectoFresh = proyecto?.id
@@ -2236,7 +2299,7 @@ Ingresá al panel:\n${panelLink}`});
           estProj && h('span',{style:{padding:"3px 10px",borderRadius:20,fontSize:12,fontWeight:600,color:estProj.color,background:"rgba(255,255,255,0.2)"}},"● "+estProj.label),
           h('button',{onClick:onClose,style:{background:"none",border:"none",color:"rgba(255,255,255,0.7)",fontSize:22,cursor:"pointer"}},"✕"))),
       h('div',{style:{display:"flex",gap:4,padding:"10px 16px 0",borderBottom:"1px solid #e2e8f0"}},
-        ...[["info","📋 Info"],["hitos","📌 Hitos"],["personas","👥 Personas"],["solicitudes","🔗 Solicitudes"]].map(([id,lbl])=>
+        ...[["info","📋 Info"],["hitos","📌 Hitos"],["personas","👥 Personas"],["solicitudes","🔗 Solicitudes"],["compras","🛒 Compras"]].map(([id,lbl])=>
           h('button',{key:id,onClick:()=>setTab(id),style:tabStyle(id)},lbl))),
       h('div',{style:{padding:"18px 22px"}},
 
@@ -2391,6 +2454,9 @@ Ingresá al panel:\n${panelLink}`});
           // Modal gestión inline
           modalSolicitud && h(EditModal,{rec:modalSolicitud,onClose:()=>setModalSolicitud(null),onSave:async u=>{await onSave(f);setModalSolicitud(null);},ejecutores})),
 
+        // TAB COMPRAS
+        tab==="compras" && h(TabComprasProyecto,{f:f,set:set,aS:aS}),
+
         h('div',{style:{display:"flex",gap:10,marginTop:20}},
           h('button',{onClick:onClose,style:{flex:1,padding:"12px",background:"#f1f5f9",color:"#64748b",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:600}},"Cancelar"),
           h('button',{onClick:save,style:{flex:2,padding:"12px",background:"linear-gradient(135deg,#7c3aed,#5b21b6)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700}},"Guardar proyecto ✓"))));
@@ -2429,7 +2495,9 @@ async function sbDeleteRecurrencia(id) {
 }
 
 const RECURRENCIA_EMPTY = {
-  nombre:"", cat:"", sector:"", sub:"", criticidad:"media",
+  nombre:"", cat:"", sectorGrande:"", sector:"", subEspacio:"", sectorOtro:"", subEspacioOtro:"",
+  turno:"", horaInicio:"", horaFin:"",
+  sub:"", criticidad:"media",
   tipoEjecutor:"interno", // "interno" | "tercero"
   ejecutorMail:"", ejecutorNombre:"",
   empresaNombre:"", empresaTelefono:"",
@@ -2756,18 +2824,48 @@ function RecurrenciaModal({rec: recInit, onSave, onClose, ejecutores, cats}) {
             h('label',{style:labelStyle},"Tipo / subtipo"),
             h('input',{value:f.sub,onChange:e=>set("sub",e.target.value),placeholder:"Ej: Limpieza general",style:inputStyle}))),
 
-        // Sector + Criticidad
-        h('div',{style:{...sectionStyle,display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}},
+        // Sector Grande → Espacio → Sub-espacio (igual que Ingresa Tu Solicitud)
+        h('div',{style:sectionStyle},
+          h('label',{style:labelStyle},"Sector *"),
+          h('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}},
+            h('select',{value:f.sectorGrande||"",onChange:function(e){set("sectorGrande",e.target.value);set("sector","");set("subEspacio","");set("sectorOtro","");set("subEspacioOtro","");},style:inputStyle},
+              h('option',{value:""},"Sede..."),
+              ...Object.keys(UBICACION_DATA).map(function(sg){return h('option',{key:sg,value:sg},sg);})),
+            f.sectorGrande && h('select',{value:f.sector||"",onChange:function(e){set("sector",e.target.value);set("subEspacio","");set("subEspacioOtro","");},style:inputStyle},
+              h('option',{value:""},"Espacio..."),
+              ...Object.keys((UBICACION_DATA[f.sectorGrande]||{})).map(function(esp){return h('option',{key:esp,value:esp},esp);}),
+              h('option',{value:"Otro"},"Otro")),
+            f.sector && f.sector!=="Otro" && h('select',{value:f.subEspacio||"",onChange:function(e){set("subEspacio",e.target.value);set("subEspacioOtro","");},style:inputStyle},
+              h('option',{value:""},"Sub-espacio..."),
+              ...((UBICACION_DATA[f.sectorGrande]||{})[f.sector]||[]).map(function(sub){return h('option',{key:sub,value:sub},sub);}),
+              h('option',{value:"Otro"},"Otro")))),
+          f.sector==="Otro" && h('input',{value:f.sectorOtro||"",onChange:function(e){set("sectorOtro",e.target.value);},placeholder:"Especificá el espacio",style:{...inputStyle,marginTop:6}}),
+          f.subEspacio==="Otro" && h('input',{value:f.subEspacioOtro||"",onChange:function(e){set("subEspacioOtro",e.target.value);},placeholder:"Especificá el sub-espacio",style:{...inputStyle,marginTop:6}})),
+
+        // Criticidad
+        h('div',{style:sectionStyle},
+          h('label',{style:labelStyle},"Criticidad"),
+          h('select',{value:f.criticidad,onChange:function(e){set("criticidad",e.target.value);},style:{...inputStyle,width:"auto"}},
+            h('option',{value:"urgente"},"Urgente"),
+            h('option',{value:"alta"},"Alta"),
+            h('option',{value:"media"},"Media"),
+            h('option',{value:"baja"},"Baja"))),
+
+        // Turno + Horario (opcionales)
+        h('div',{style:{...sectionStyle,display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}},
           h('div',null,
-            h('label',{style:labelStyle},"Sector *"),
-            h('input',{value:f.sector,onChange:e=>set("sector",e.target.value),placeholder:"Ej: Piscina",style:inputStyle})),
+            h('label',{style:labelStyle},"Turno (opcional)"),
+            h('select',{value:f.turno||"",onChange:function(e){set("turno",e.target.value);},style:inputStyle},
+              h('option',{value:""},"Sin especificar"),
+              h('option',{value:"manana"},"🌅 Mañana"),
+              h('option',{value:"tarde"},"🌤 Tarde"),
+              h('option',{value:"noche"},"🌙 Noche"))),
           h('div',null,
-            h('label',{style:labelStyle},"Criticidad"),
-            h('select',{value:f.criticidad,onChange:e=>set("criticidad",e.target.value),style:inputStyle},
-              h('option',{value:"urgente"},"Urgente"),
-              h('option',{value:"alta"},"Alta"),
-              h('option',{value:"media"},"Media"),
-              h('option',{value:"baja"},"Baja")))),
+            h('label',{style:labelStyle},"Hora inicio (opcional)"),
+            h('input',{type:"time",value:f.horaInicio||"",onChange:function(e){set("horaInicio",e.target.value);},style:inputStyle})),
+          h('div',null,
+            h('label',{style:labelStyle},"Hora fin (opcional)"),
+            h('input',{type:"time",value:f.horaFin||"",onChange:function(e){set("horaFin",e.target.value);},style:inputStyle}))),
 
         // Ejecutor — toggle interno / tercero
         h('div',{style:sectionStyle},
