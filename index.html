@@ -838,18 +838,7 @@ function FormularioSocio({onSubmit, reclamos}) {
     setF(p => ({...p,[k]:v,...extra}));
     // Duplicate detection removed from public form — handled internally by panel
   };
-React.useEffect(function(){
-  window._voiceApply = function(p){
-    if(p.nombre) set('nombre', p.nombre);
-    if(p.email) set('email', p.email);
-    if(p.cat && CATS[p.cat]) set('cat', p.cat);
-    if(p.sectorGrande && UBICACION_DATA[p.sectorGrande]) set('sectorGrande', p.sectorGrande);
-    if(p.sector) set('sector', p.sector);
-    if(p.pri) set('pri', p.pri);
-    if(p.desc) set('desc', p.desc);
-  };
-  return function(){ window._voiceApply = null; };
-}, []);
+
   const validate = () => {
     const e={};
     if(!f.tipo) e.tipo=true;
@@ -1019,14 +1008,6 @@ setF({tipo:"",nombre:_dsR.nombre||"",celular:_dsR.celular||"",email:_dsR.email||
               style:{padding:"8px 4px",borderRadius:8,border:f.pri===p.id?`2px solid ${p.color}`:"2px solid rgba(255,255,255,0.15)",background:f.pri===p.id?p.color+"33":"rgba(255,255,255,0.07)",color:f.pri===p.id?p.color:"#94a3b8",cursor:"pointer",fontSize:11,fontWeight:600}},
               p.label)))),
         // Descripción
-        h('div',{style:{marginBottom:14}},
-          h('button',{
-            id:"voice-btn-asturiano",
-            onClick:function(){window._voiceToggle && window._voiceToggle();},
-            style:{width:"100%",padding:"12px 16px",borderRadius:10,border:"1.5px dashed rgba(255,255,255,0.3)",background:"rgba(255,255,255,0.07)",color:"white",cursor:"pointer",fontSize:14,fontWeight:500,display:"flex",alignItems:"center",justifyContent:"center",gap:8}
-          },"🎙 Hablar para completar la solicitud"),
-          h('div',{id:"voice-status-asturiano",style:{fontSize:12,color:"#a8c4e8",textAlign:"center",padding:"5px 0",minHeight:20}},"Presioná el botón y describí el problema en voz alta"),
-          h('div',{id:"voice-transcript-asturiano",style:{display:"none",fontStyle:"italic",fontSize:12,color:"#cbd5e1",background:"rgba(255,255,255,0.06)",padding:"8px 12px",borderRadius:8,marginTop:6}})),
         h('div',{style:{marginBottom:14}},lbl("Descripción *",err.desc),
           h('textarea',{value:f.desc,onChange:e=>set("desc",e.target.value),rows:4,placeholder:"Describí el problema con el mayor detalle posible...",style:{...iS(err.desc),resize:"vertical"}})),
         h('div',{style:{marginBottom:14}},lbl("Ubicación exacta (opcional)"),
@@ -6262,147 +6243,5 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
 
 ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
 </script>
-(function(){
-  var rec = null, active = false, finalT = '';
-
-  var UBICACION_PLANA = [];
-  Object.keys(UBICACION_DATA).forEach(function(sg){
-    Object.keys(UBICACION_DATA[sg]).forEach(function(esp){ UBICACION_PLANA.push(esp); });
-  });
-
-  var CATS_LABELS = {
-    infraestructura:"Obras / infraestructura",
-    mantenimiento:"Mantenimiento",
-    limpieza:"Limpieza",
-    preparacion:"Preparación / eventos",
-    servicios:"Servicios al socio",
-    cuotas:"Cuotas / pagos"
-  };
-
-  var PRIS_LABELS = {baja:"baja",media:"media",alta:"alta",urgente:"urgente"};
-
-  function setStatus(txt){ var el=document.getElementById('voice-status-asturiano'); if(el) el.textContent=txt; }
-  function setTranscript(txt){
-    var el=document.getElementById('voice-transcript-asturiano');
-    if(!el) return;
-    el.style.display = txt ? 'block' : 'none';
-    el.textContent = txt ? '"'+txt+'"' : '';
-  }
-  function setBtn(recording){
-    var el=document.getElementById('voice-btn-asturiano');
-    if(!el) return;
-    el.textContent = recording ? '⏹ Detener grabación' : '🎙 Hablar para completar la solicitud';
-    el.style.borderColor = recording ? '#f87171' : 'rgba(255,255,255,0.3)';
-    el.style.color = recording ? '#fca5a5' : 'white';
-  }
-
-  function initRec(){
-    var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if(!SR){ setStatus('Grabación no disponible. Usá Chrome o Edge.'); return null; }
-    var r = new SR();
-    r.continuous = false; r.interimResults = true; r.lang = 'es-AR';
-    r.onstart = function(){ active=true; setBtn(true); setStatus('● Grabando... hablá ahora'); };
-    r.onresult = function(e){
-      finalT = '';
-      var interim = '';
-      for(var i=e.resultIndex;i<e.results.length;i++){
-        if(e.results[i].isFinal) finalT += e.results[i][0].transcript;
-        else interim += e.results[i][0].transcript;
-      }
-      setTranscript(finalT || interim);
-    };
-    r.onend = function(){
-      active = false; setBtn(false);
-      if(finalT){ setStatus('Interpretando con IA...'); parseVoice(finalT); }
-      else setStatus('No se detectó audio. Intentá de nuevo.');
-    };
-    r.onerror = function(e){ active=false; setBtn(false); setStatus('Error: '+e.error); };
-    return r;
-  }
-
-  window._voiceToggle = function(){
-    if(active){ if(rec) rec.stop(); return; }
-    finalT = '';
-    if(!rec) rec = initRec();
-    if(!rec) return;
-    try{ rec.start(); } catch(e){ rec=initRec(); if(rec) rec.start(); }
-  };
-
-  async function parseVoice(text){
-    document.getElementById('voice-btn-asturiano').disabled = true;
-
-    var sectoresStr = UBICACION_PLANA.join(', ');
-    var catsStr = Object.entries(CATS_LABELS).map(function(e){return e[0]+' ('+e[1]+')';}).join(', ');
-
-    var prompt = 'Extraé datos de este reclamo de un club deportivo. Respondé SOLO con JSON válido, sin markdown ni texto extra.\n'+
-      'Campos:\n'+
-      '- sectorGrande: "Covadonga" o "Polideportivo" o "" si no se menciona\n'+
-      '- sector: uno de estos espacios exactos: '+sectoresStr+'. Vacío si no se menciona.\n'+
-      '- cat: uno de: '+catsStr+'. Inferílo del problema descripto.\n'+
-      '- pri: uno de: baja, media, alta, urgente. Inferílo del tono.\n'+
-      '- nombre: nombre del solicitante si lo menciona, si no vacío\n'+
-      '- email: email si lo menciona, si no vacío\n'+
-      '- desc: resumen claro del problema en 1-2 oraciones\n'+
-      'Reclamo: '+text;
-
-    try{
-      var resp = await fetch('https://api.anthropic.com/v1/messages',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:400,messages:[{role:'user',content:prompt}]})
-      });
-      var data = await resp.json();
-      var raw = (data.content[0].text||'{}').replace(/```json|```/g,'').trim();
-      var p = JSON.parse(raw);
-      applyFields(p);
-    } catch(e){
-      setStatus('Error al interpretar. Completá los campos manualmente.');
-    }
-    document.getElementById('voice-btn-asturiano').disabled = false;
-  }
-
-  function triggerReact(el, val){
-    var nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value') ||
-                                 Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype,'value') ||
-                                 Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype,'value');
-    // Para React controlado, dispará evento nativo
-    var event = new Event('input', {bubbles:true});
-    Object.defineProperty(event,'target',{writable:false,value:el});
-    el.dispatchEvent(event);
-    var event2 = new Event('change', {bubbles:true});
-    Object.defineProperty(event2,'target',{writable:false,value:el});
-    el.dispatchEvent(event2);
-  }
-
-  function setSelectByText(el, text){
-    if(!el || !text) return false;
-    for(var i=0;i<el.options.length;i++){
-      if(el.options[i].text.toLowerCase()===text.toLowerCase() ||
-         el.options[i].value.toLowerCase()===text.toLowerCase()){
-        el.selectedIndex = i;
-        triggerReact(el, text);
-        return true;
-      }
-    }
-    return false;
-  }
-
-  function applyFields(p){
-    var filled = 0;
-
-    // desc → textarea de descripción (React state via window._voiceApply)
-    if(window._voiceApply){
-      window._voiceApply(p);
-      filled = Object.values(p).filter(function(v){return v && String(v).trim();}).length;
-      setStatus('Completado: '+filled+' campos. Revisá y corregí si hace falta.');
-    } else {
-      setStatus('Campos interpretados — recargá si no se aplicaron.');
-    }
-  }
-})();
-</script>
 </body>
 </html>
-
-
-
