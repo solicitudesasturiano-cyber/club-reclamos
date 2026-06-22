@@ -3001,7 +3001,7 @@ useEffect(function(){
     const lista=proyectos.find(x=>x.id===p.id)?proyectos.map(x=>x.id===p.id?p:x):[p].concat(proyectos);
     setProyectos(lista);
     ls.set("proyectos",lista);
-    sbUpsert(Object.assign({}, p, {_type:"proyecto"}));
+    await sbUpsert(Object.assign({}, p, {_type:"proyecto"}));
     const appUrl=window.location.href.split("?")[0];
 
     // Detectar si la fecha fin cambió más de 7 días
