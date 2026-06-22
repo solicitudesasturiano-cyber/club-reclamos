@@ -199,6 +199,7 @@ window.onerror = function(msg, src, line, col, err) {
   d.innerHTML += '<b>ERROR:</b> ' + msg + '<br><b>Línea:</b> ' + line + '<br><b>Stack:</b> ' + (err && err.stack ? err.stack : 'N/A') + '<hr>';
 };
 </script>
+  <button onclick="alert(localStorage.getItem('proyectos'))" style="position:fixed;top:0;right:0;z-index:99999;background:red;color:white;padding:8px;font-size:11px">VER LS</button>
 <div id="root"></div>
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
