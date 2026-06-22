@@ -2986,26 +2986,23 @@ function ProyectosTab(props) {   var recs = props.recs;   var onUpdate = props.o
   const [modal,setModal] = useState(null);
   const [filtroEstado,setFiltroEstado] = useState("");
 
-useEffect(function(){
-
-  const saveProyecto=async(p)=>{
-    console.log("saveProyecto llamado:", p.titulo, p.id);
-    const proyectoAnterior = proyectos.find(x=>x.id===p.id);
-    const lista=proyectos.find(x=>x.id===p.id)?proyectos.map(x=>x.id===p.id?p:x):[p].concat(proyectos);
-    setProyectos(lista);
-    ls.set("proyectos",lista);
-    await sbUpsert(Object.assign({}, p, {_type:"proyecto"}));
-    const appUrl=window.location.href.split("?")[0];
-
-    // Detectar si la fecha fin cambió más de 7 días
-    const fechaFinAnterior = proyectoAnterior?.fechaFin;
-    const fechaFinNueva = p.fechaFin;
-    let fechaExtendidaMas7 = false;
-    if(fechaFinAnterior && fechaFinNueva && fechaFinNueva !== fechaFinAnterior) {
-      const diffDias = (pld(fechaFinNueva) - pld(fechaFinAnterior)) / 86400000;
-      if(diffDias > 7) fechaExtendidaMas7 = true;
-    }
-
+  useEffect(function(){
+    fetch(SUPABASE_URL+"/rest/v1/reclamos?select=data&order=created_at.desc", {headers: SB_HEADERS})
+      .then(function(r){ return r.json(); })
+      .then(function(rows){
+        var deSupabase = (Array.isArray(rows) ? rows.map(function(r){ return r.data; }) : [])
+          .filter(function(r){ return r && r._type === "proyecto" && !r._deleted; });
+        var deLocal = ls.get("proyectos") || [];
+        deLocal.forEach(function(p){
+          var yaEsta = deSupabase.find(function(s){ return s.id === p.id; });
+          if(!yaEsta){
+            sbUpsert(Object.assign({}, p, {_type:"proyecto"}));
+            deSupabase = deSupabase.concat([Object.assign({}, p, {_type:"proyecto"})]);
+          }
+        });
+      setProyectos(deSupabase);
+    });
+},[]);
     // Parsear ejecutores del proyecto (formato "Nombre (mail)")
     const ejsProyecto = (p.empleados||[]).map(e=>{
       const match = e.match(/^(.+)\s+\(([^)]+)\)$/);
