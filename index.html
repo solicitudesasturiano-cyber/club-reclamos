@@ -1160,7 +1160,8 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs}) {
       // Block save if fechaCierre is in the past without updated date (unless completada)
       if(f.estadoAvance !== "completada") {
         const fechaEfectiva = f.fechaCierreActualizada || f.fechaCierre || rec.fechaOriginalCierre;
-        if(fechaEfectiva && pld(fechaEfectiva) < new Date() && !f.fechaCierreActualizada && !f.motivoActualizacion?.trim()) {
+        const hoyNormalizado = new Date(); hoyNormalizado.setHours(0,0,0,0);
+        if(fechaEfectiva && pld(fechaEfectiva) < hoyNormalizado && !f.fechaCierreActualizada && !f.motivoActualizacion?.trim()) {
           setSaveErr("La fecha de cierre está vencida. Debés ingresar una nueva fecha y el motivo del cambio.");
           setTab("gestion");
           return;
@@ -1716,7 +1717,7 @@ Resolución: ${descripcion||"—"}`});
             h('div',null,
               h('select',{value:f.proyectoVinculadoId||"",onChange:e=>{
                 const pId=Number(e.target.value);
-                const proyectos=ls.get("proyectos")||[];
+                const proyectos = ls.get("proyectos") || [];
                 const p=proyectos.find(x=>x.id===pId);
                 set("proyectoVinculadoId",pId||null);
                 set("proyectoTitulo",p?.titulo||"");
@@ -2985,9 +2986,14 @@ function ProyectosTab(props) {   var recs = props.recs;   var onUpdate = props.o
   const [modal,setModal] = useState(null);
   const [filtroEstado,setFiltroEstado] = useState("");
 
-  useEffect(()=>{
-    const saved=ls.get("proyectos");
-    if(saved) setProyectos(saved);
+useEffect(function(){
+    fetch(SUPABASE_URL+"/rest/v1/"+SUPABASE_TABLE+"?select=data&order=created_at.desc", {headers: SB_HEADERS})
+      .then(function(r){ return r.json(); })
+      .then(function(rows){
+        var proyectos = (Array.isArray(rows) ? rows.map(function(r){ return r.data; }) : [])
+          .filter(function(r){ return r && r._type === "proyecto"; });
+        setProyectos(proyectos);
+      });
   },[]);
 
   const saveProyecto=async(p)=>{
@@ -2995,6 +3001,7 @@ function ProyectosTab(props) {   var recs = props.recs;   var onUpdate = props.o
     const lista=proyectos.find(x=>x.id===p.id)?proyectos.map(x=>x.id===p.id?p:x):[p].concat(proyectos);
     setProyectos(lista);
     ls.set("proyectos",lista);
+    sbUpsert(Object.assign({}, p, {_type:"proyecto"}));
     const appUrl=window.location.href.split("?")[0];
 
     // Detectar si la fecha fin cambió más de 7 días
@@ -3119,7 +3126,8 @@ function ProyectosTab(props) {   var recs = props.recs;   var onUpdate = props.o
                 "✏️ Editar"),
               h('button',{onClick:e=>{e.stopPropagation();if(confirm("¿Eliminar el proyecto \""+p.titulo+"\"? Esta acción no se puede deshacer.")){
                 const lista=(ls.get("proyectos")||[]).filter(x=>x.id!==p.id);
-                ls.set("proyectos",lista);setProyectos(lista);}},
+                ls.set("proyectos",lista);setProyectos(lista);
+                sbUpsert(Object.assign({},{id:p.id,_type:"proyecto",estadoAvance:"cancelado",_deleted:true}));}},
                 style:{background:"#fef2f2",border:"1px solid #fecaca",borderRadius:7,cursor:"pointer",fontSize:12,color:"#dc2626",padding:"3px 8px",fontWeight:600}},
                 "🗑️"))),
           p.sector && h('div',{style:{fontSize:12,color:"#64748b",marginBottom:6}},"📍 "+p.sector),
@@ -3128,9 +3136,9 @@ function ProyectosTab(props) {   var recs = props.recs;   var onUpdate = props.o
             p.fechaInicio && h('span',null,"🗓 Inicio: "+fd(p.fechaInicio)),
             p.fechaFin && h('span',{style:{color:vencido?"#ef4444":"inherit",fontWeight:vencido?700:400}},vencido?"⚠️ Vencido: "+fd(p.fechaFin):"🏁 Fin: "+fd(p.fechaFin))),
           h('div',{style:{display:"flex",gap:8,fontSize:12}},
-            p.reclamosVinculados?.length>0 && h('span',{style:{background:"#f3f4f6",borderRadius:6,padding:"2px 8px",color:"#374151"}},"🔗 "+p.reclamosVinculados.length+" reclamos"),
+            p.reclamosVinculados&&p.reclamosVinculados.length>0 && h('span',{style:{background:"#f3f4f6",borderRadius:6,padding:"2px 8px",color:"#374151"}},"🔗 "+p.reclamosVinculados.length+" reclamos"),
             p.presupuesto && h('span',{style:{background:"#f3f4f6",borderRadius:6,padding:"2px 8px",color:"#374151"}},"💰 $"+Number(p.presupuesto).toLocaleString("es-AR")),
-            p.alertas?.length>0 && h('span',{style:{background:"#fff7ed",borderRadius:6,padding:"2px 8px",color:"#c2410c",fontWeight:600}},"⚠️ "+p.alertas.length+" alertas")));
+            p.alertas&&p.alertas.length>0 && h('span',{style:{background:"#fff7ed",borderRadius:6,padding:"2px 8px",color:"#c2410c",fontWeight:600}},"⚠️ "+p.alertas.length+" alertas")));
       })),
     modal!==null && h(ModalProyecto,{proyecto:modal.id?modal:null,onClose:()=>setModal(null),onSave:saveProyecto,ejecutores,recs}));
 }
@@ -6245,6 +6253,3 @@ ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(
 </script>
 </body>
 </html>
-
-
-
