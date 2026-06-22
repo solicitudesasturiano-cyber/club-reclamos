@@ -1716,7 +1716,8 @@ Resolución: ${descripcion||"—"}`});
             h('div',null,
               h('select',{value:f.proyectoVinculadoId||"",onChange:e=>{
                 const pId=Number(e.target.value);
-                const proyectos=ls.get("proyectos")||[];
+                const proyectosAll = await sbGetAll();
+                const proyectos = proyectosAll.filter(r => r && r._type === "proyecto" && !r._deleted);
                 const p=proyectos.find(x=>x.id===pId);
                 set("proyectoVinculadoId",pId||null);
                 set("proyectoTitulo",p?.titulo||"");
@@ -2986,8 +2987,11 @@ function ProyectosTab(props) {   var recs = props.recs;   var onUpdate = props.o
   const [filtroEstado,setFiltroEstado] = useState("");
 
   useEffect(()=>{
-    const saved=ls.get("proyectos");
-    if(saved) setProyectos(saved);
+    (async()=>{
+      const rows = await sbGetAll();
+      const proyectos = rows.filter(r => r && r._type === "proyecto");
+      setProyectos(proyectos);
+    })();
   },[]);
 
   const saveProyecto=async(p)=>{
@@ -2995,6 +2999,7 @@ function ProyectosTab(props) {   var recs = props.recs;   var onUpdate = props.o
     const lista=proyectos.find(x=>x.id===p.id)?proyectos.map(x=>x.id===p.id?p:x):[p].concat(proyectos);
     setProyectos(lista);
     ls.set("proyectos",lista);
+    await sbUpsert({...p, _type:"proyecto"});
     const appUrl=window.location.href.split("?")[0];
 
     // Detectar si la fecha fin cambió más de 7 días
@@ -3119,7 +3124,8 @@ function ProyectosTab(props) {   var recs = props.recs;   var onUpdate = props.o
                 "✏️ Editar"),
               h('button',{onClick:e=>{e.stopPropagation();if(confirm("¿Eliminar el proyecto \""+p.titulo+"\"? Esta acción no se puede deshacer.")){
                 const lista=(ls.get("proyectos")||[]).filter(x=>x.id!==p.id);
-                ls.set("proyectos",lista);setProyectos(lista);}},
+                ls.set("proyectos",lista);setProyectos(lista);
+                await sbUpsert({id:p.id, _type:"proyecto", estadoAvance:"cancelado", _deleted:true});}},
                 style:{background:"#fef2f2",border:"1px solid #fecaca",borderRadius:7,cursor:"pointer",fontSize:12,color:"#dc2626",padding:"3px 8px",fontWeight:600}},
                 "🗑️"))),
           p.sector && h('div',{style:{fontSize:12,color:"#64748b",marginBottom:6}},"📍 "+p.sector),
