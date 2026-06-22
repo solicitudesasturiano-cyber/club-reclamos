@@ -1160,7 +1160,8 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs}) {
       // Block save if fechaCierre is in the past without updated date (unless completada)
       if(f.estadoAvance !== "completada") {
         const fechaEfectiva = f.fechaCierreActualizada || f.fechaCierre || rec.fechaOriginalCierre;
-        if(fechaEfectiva && pld(fechaEfectiva) < new Date() && !f.fechaCierreActualizada && !f.motivoActualizacion?.trim()) {
+        const hoyNormalizado = new Date(); hoyNormalizado.setHours(0,0,0,0);
+        if(fechaEfectiva && pld(fechaEfectiva) < hoyNormalizado && !f.fechaCierreActualizada && !f.motivoActualizacion?.trim()) {
           setSaveErr("La fecha de cierre está vencida. Debés ingresar una nueva fecha y el motivo del cambio.");
           setTab("gestion");
           return;
