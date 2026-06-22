@@ -3135,7 +3135,7 @@ useEffect(function(){
             p.fechaInicio && h('span',null,"🗓 Inicio: "+fd(p.fechaInicio)),
             p.fechaFin && h('span',{style:{color:vencido?"#ef4444":"inherit",fontWeight:vencido?700:400}},vencido?"⚠️ Vencido: "+fd(p.fechaFin):"🏁 Fin: "+fd(p.fechaFin))),
           h('div',{style:{display:"flex",gap:8,fontSize:12}},
-            p.reclamosVinculados?.length>0 && h('span',{style:{background:"#f3f4f6",borderRadius:6,padding:"2px 8px",color:"#374151"}},"🔗 "+p.reclamosVinculados.length+" reclamos"),
+            p.reclamosVinculados&&p.reclamosVinculados.length>0 && h('span',{style:{background:"#f3f4f6",borderRadius:6,padding:"2px 8px",color:"#374151"}},"🔗 "+p.reclamosVinculados.length+" reclamos"),
             p.presupuesto && h('span',{style:{background:"#f3f4f6",borderRadius:6,padding:"2px 8px",color:"#374151"}},"💰 $"+Number(p.presupuesto).toLocaleString("es-AR")),
             p.alertas?.length>0 && h('span',{style:{background:"#fff7ed",borderRadius:6,padding:"2px 8px",color:"#c2410c",fontWeight:600}},"⚠️ "+p.alertas.length+" alertas")));
       })),
