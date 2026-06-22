@@ -2987,95 +2987,89 @@ function ProyectosTab(props) {   var recs = props.recs;   var onUpdate = props.o
   const [filtroEstado,setFiltroEstado] = useState("");
 
   useEffect(function(){
-    fetch(SUPABASE_URL+"/rest/v1/reclamos?select=data&order=created_at.desc", {headers: SB_HEADERS})
-      .then(function(r){ return r.json(); })
-      .then(function(rows){
-        var deSupabase = (Array.isArray(rows) ? rows.map(function(r){ return r.data; }) : [])
-          .filter(function(r){ return r && r._type === "proyecto" && !r._deleted; });
-        var deLocal = ls.get("proyectos") || [];
-        deLocal.forEach(function(p){
-          var yaEsta = deSupabase.find(function(s){ return s.id === p.id; });
-          if(!yaEsta){
-            sbUpsert(Object.assign({}, p, {_type:"proyecto"}));
-            deSupabase = deSupabase.concat([Object.assign({}, p, {_type:"proyecto"})]);
-          }
-        });
+  fetch(SUPABASE_URL+"/rest/v1/reclamos?select=data&order=created_at.desc", {headers: SB_HEADERS})
+    .then(function(r){ return r.json(); })
+    .then(function(rows){
+      var deSupabase = (Array.isArray(rows) ? rows.map(function(r){ return r.data; }) : [])
+        .filter(function(r){ return r && r._type === "proyecto" && !r._deleted; });
+      var deLocal = ls.get("proyectos") || [];
+      deLocal.forEach(function(p){
+        var yaEsta = deSupabase.find(function(s){ return s.id === p.id; });
+        if(!yaEsta){
+          sbUpsert(Object.assign({}, p, {_type:"proyecto"}));
+          deSupabase = deSupabase.concat([Object.assign({}, p, {_type:"proyecto"})]);
+        }
+      });
       setProyectos(deSupabase);
     });
 },[]);
-    // Parsear ejecutores del proyecto (formato "Nombre (mail)")
-    const ejsProyecto = (p.empleados||[]).map(e=>{
-      const match = e.match(/^(.+)\s+\(([^)]+)\)$/);
-      return match ? {nombre:match[1].trim(), mail:match[2].trim()} : {nombre:e, mail:""};
-    }).filter(ej=>ej.mail);
 
-    // Update linked reclamos with project data
-    for(const num of (p.reclamosVinculados||[])){
-      const rec=recs.find(r=>r.numero===num);
-      if(!rec) continue;
-
-      const esNuevaVinculacion = rec.proyectoVinculado !== p.id;
-
-      // Autopopular ejecutores desde el proyecto
-      let ejecutores_lista = rec.ejecutores_lista || [];
-      let ejecutorMail = rec.ejecutorMail || "";
-      let ejecutorNombre = rec.ejecutorNombre || "";
-      if(ejsProyecto.length > 0) {
-        ejecutores_lista = ejsProyecto.map(ej=>({
-          ...ej,
-          confirmado: false, rechazado: false, fechaConfirmacion: null
-        }));
-        ejecutorMail = ejsProyecto[0].mail;
-        ejecutorNombre = ejsProyecto.map(e=>e.nombre).join(", ");
-      }
-
-      const recActualizado = {
-        ...rec,
-        estadoAvance:"vinculado_proyecto",
-        proyectoVinculado:p.id,
-        proyectoTitulo:p.titulo,
-        fechaInicioEsperado: p.fechaInicio||rec.fechaInicioEsperado,
-        fechaCierre: p.fechaFin||rec.fechaCierre,
-        fechaCierreConfirmada: p.fechaFin||rec.fechaCierreConfirmada,
-        descripcionProyecto: p.descripcion,
-        ejecutores_lista,
-        ejecutorMail,
-        ejecutorNombre,
-        comentarios:[...(rec.comentarios||[]),{
-          texto:`Vinculado al proyecto "${p.titulo}". Fechas y ejecutores actualizados automáticamente.`,
-          fecha:new Date().toISOString(),autor:"Sistema"
-        }]
-      };
-      await onUpdate(recActualizado, rec);
-
-      // Email al solicitante al vincular por primera vez
-      if(esNuevaVinculacion && rec.email) {
-        await sendEmail({to:rec.email,
-          subject:`[Asturiano] Tu solicitud fue vinculada al proyecto "${p.titulo}" — ${rec.numero}`,
-          body:`Hola ${rec.nombre},\n\nTu solicitud ${rec.numero} (${rec.sector}) fue vinculada a un proyecto integral del club.\n\n` +
-          `📋 PROYECTO: ${p.titulo}\n` +
-          (p.descripcion?`📝 Descripción: ${p.descripcion}\n`:"") +
-          (p.objetivo?`🎯 Objetivo: ${p.objetivo}\n`:"") +
-          (p.fechaInicio?`📅 Inicio previsto: ${new Date(p.fechaInicio).toLocaleDateString("es-AR")}\n`:"") +
-          (p.fechaFin?`🏁 Resolución prevista: ${new Date(p.fechaFin).toLocaleDateString("es-AR")}\n`:"") +
-          (p.proximosPasos?`\n⏭️ Próximos pasos: ${p.proximosPasos}\n`:"") +
-          `\nTu problema será resuelto como parte de este proyecto. Te notificaremos cuando haya avances o cuando se complete.\n\nPodés seguir el estado de tu solicitud:\n${appUrl}?seguimiento=${rec.numero}\n\n— Equipo de Intendencia Asturiano`
-        });
-      }
-
-      // Email si fecha se extendió más de 7 días
-      if(!esNuevaVinculacion && fechaExtendidaMas7 && rec.email) {
-        await sendEmail({to:rec.email,
-          subject:`[Asturiano] Actualización de fecha — Proyecto "${p.titulo}" — ${rec.numero}`,
-          body:`Hola ${rec.nombre},\n\nEl proyecto "${p.titulo}", al que está vinculada tu solicitud ${rec.numero} (${rec.sector}), tiene una nueva fecha estimada de resolución.\n\n` +
-          `📅 Fecha anterior: ${pld(fechaFinAnterior).toLocaleDateString("es-AR")}\n` +
-          `🏁 Nueva fecha estimada: ${pld(fechaFinNueva).toLocaleDateString("es-AR")}\n\n` +
-          `Lamentamos el inconveniente. Te avisaremos cuando el proyecto sea completado.\n\nSeguí el estado de tu solicitud:\n${appUrl}?seguimiento=${rec.numero}\n\n— Equipo de Intendencia Asturiano`
-        });
-      }
+const saveProyecto = async function(p){
+  const proyectoAnterior = proyectos.find(function(x){ return x.id===p.id; });
+  const lista = proyectos.find(function(x){ return x.id===p.id; })
+    ? proyectos.map(function(x){ return x.id===p.id?p:x; })
+    : [p].concat(proyectos);
+  setProyectos(lista);
+  ls.set("proyectos", lista);
+  await sbUpsert(Object.assign({}, p, {_type:"proyecto"}));
+  const appUrl = window.location.href.split("?")[0];
+  const fechaFinAnterior = proyectoAnterior ? proyectoAnterior.fechaFin : null;
+  const fechaFinNueva = p.fechaFin;
+  var fechaExtendidaMas7 = false;
+  if(fechaFinAnterior && fechaFinNueva && fechaFinNueva !== fechaFinAnterior){
+    const diffDias = (pld(fechaFinNueva) - pld(fechaFinAnterior)) / 86400000;
+    if(diffDias > 7) fechaExtendidaMas7 = true;
+  }
+  const ejsProyecto = (p.empleados||[]).map(function(e){
+    var match = e.match(/^(.+)\s+\(([^)]+)\)$/);
+    return match ? {nombre:match[1].trim(), mail:match[2].trim()} : {nombre:e, mail:""};
+  }).filter(function(ej){ return ej.mail; });
+  for(var i=0; i<(p.reclamosVinculados||[]).length; i++){
+    var num = p.reclamosVinculados[i];
+    var rec = recs.find(function(r){ return r.numero===num; });
+    if(!rec) continue;
+    var esNuevaVinculacion = rec.proyectoVinculado !== p.id;
+    var ejecutores_lista = rec.ejecutores_lista || [];
+    var ejecutorMail = rec.ejecutorMail || "";
+    var ejecutorNombre = rec.ejecutorNombre || "";
+    if(ejsProyecto.length > 0){
+      ejecutores_lista = ejsProyecto.map(function(ej){
+        return Object.assign({}, ej, {confirmado:false, rechazado:false, fechaConfirmacion:null});
+      });
+      ejecutorMail = ejsProyecto[0].mail;
+      ejecutorNombre = ejsProyecto.map(function(e){ return e.nombre; }).join(", ");
     }
-  };
-
+    var recActualizado = Object.assign({}, rec, {
+      estadoAvance:"vinculado_proyecto",
+      proyectoVinculado:p.id,
+      proyectoTitulo:p.titulo,
+      fechaInicioEsperado: p.fechaInicio||rec.fechaInicioEsperado,
+      fechaCierre: p.fechaFin||rec.fechaCierre,
+      fechaCierreConfirmada: p.fechaFin||rec.fechaCierreConfirmada,
+      descripcionProyecto: p.descripcion,
+      ejecutores_lista: ejecutores_lista,
+      ejecutorMail: ejecutorMail,
+      ejecutorNombre: ejecutorNombre,
+      comentarios:(rec.comentarios||[]).concat([{
+        texto:"Vinculado al proyecto \""+p.titulo+"\". Fechas y ejecutores actualizados automaticamente.",
+        fecha:new Date().toISOString(), autor:"Sistema"
+      }])
+    });
+    await onUpdate(recActualizado, rec);
+    if(esNuevaVinculacion && rec.email){
+      await sendEmail({to:rec.email,
+        subject:"[Asturiano] Tu solicitud fue vinculada al proyecto \""+p.titulo+"\" — "+rec.numero,
+        body:"Hola "+rec.nombre+",\n\nTu solicitud "+rec.numero+" ("+rec.sector+") fue vinculada a un proyecto integral del club.\n\nPROYECTO: "+p.titulo+"\n"+(p.fechaFin?"Resolucion prevista: "+new Date(p.fechaFin).toLocaleDateString("es-AR")+"\n":"")+"\nTe notificaremos cuando haya avances.\n\n— Equipo de Intendencia Asturiano"
+      });
+    }
+    if(!esNuevaVinculacion && fechaExtendidaMas7 && rec.email){
+      await sendEmail({to:rec.email,
+        subject:"[Asturiano] Actualizacion de fecha — Proyecto \""+p.titulo+"\" — "+rec.numero,
+        body:"Hola "+rec.nombre+",\n\nEl proyecto \""+p.titulo+"\" tiene nueva fecha estimada.\n\nNueva fecha: "+new Date(p.fechaFin).toLocaleDateString("es-AR")+"\n\n— Equipo de Intendencia Asturiano"
+      });
+    }
+  }
+};
   const ESTADOS_PROJ=[
     {id:"planificacion",label:"Planificación",color:"#0ea5e9"},
     {id:"en_curso",label:"En curso",color:"#3b82f6"},
