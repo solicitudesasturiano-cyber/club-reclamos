@@ -261,7 +261,7 @@ const PASS_ADMINISTRACION = "administracion2026";
 const PASS_DASHBOARD = "metricas2026";
 const SUPABASE_URL   = "https://pltfqosqinzufvjpiddr.supabase.co";
 const SUPABASE_KEY   = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBsdGZxb3NxaW56dWZ2anBpZGRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1MjA4NDksImV4cCI6MjA5MTA5Njg0OX0.d-EMCtfVqi6LvtbEdTBvH_ZaXiFJD6oXukPvMpbobXQ";
-const SUPABASE_TABLE = "reclamos_dev";
+const SUPABASE_TABLE = "reclamos";
 const SCRIPT_URL     = "https://script.google.com/macros/s/AKfycbzZh2AxTboR13rjJeUdXSdO7jjUPkZcIPoeWFYUZynkyWkP6LjNbqQxVxpPIvT26Kh6/exec";
 
 // Genera link al panel con deep-link al área correcta
@@ -2987,14 +2987,6 @@ function ProyectosTab(props) {   var recs = props.recs;   var onUpdate = props.o
   const [filtroEstado,setFiltroEstado] = useState("");
 
 useEffect(function(){
-    fetch(SUPABASE_URL+"/rest/v1/"+SUPABASE_TABLE+"?select=data&order=created_at.desc", {headers: SB_HEADERS})
-      .then(function(r){ return r.json(); })
-      .then(function(rows){
-        var proyectos = (Array.isArray(rows) ? rows.map(function(r){ return r.data; }) : [])
-          .filter(function(r){ return r && r._type === "proyecto"; });
-        setProyectos(proyectos);
-      });
-  },[]);
 
   const saveProyecto=async(p)=>{
     console.log("saveProyecto llamado:", p.titulo, p.id);
