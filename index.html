@@ -261,7 +261,7 @@ const PASS_ADMINISTRACION = "administracion2026";
 const PASS_DASHBOARD = "metricas2026";
 const SUPABASE_URL   = "https://pltfqosqinzufvjpiddr.supabase.co";
 const SUPABASE_KEY   = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBsdGZxb3NxaW56dWZ2anBpZGRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1MjA4NDksImV4cCI6MjA5MTA5Njg0OX0.d-EMCtfVqi6LvtbEdTBvH_ZaXiFJD6oXukPvMpbobXQ";
-const SUPABASE_TABLE = "reclamos";
+const SUPABASE_TABLE = "reclamos_dev";
 const SCRIPT_URL     = "https://script.google.com/macros/s/AKfycbzZh2AxTboR13rjJeUdXSdO7jjUPkZcIPoeWFYUZynkyWkP6LjNbqQxVxpPIvT26Kh6/exec";
 
 // Genera link al panel con deep-link al área correcta
@@ -2997,11 +2997,12 @@ useEffect(function(){
   },[]);
 
   const saveProyecto=async(p)=>{
+    console.log("saveProyecto llamado:", p.titulo, p.id);
     const proyectoAnterior = proyectos.find(x=>x.id===p.id);
     const lista=proyectos.find(x=>x.id===p.id)?proyectos.map(x=>x.id===p.id?p:x):[p].concat(proyectos);
     setProyectos(lista);
     ls.set("proyectos",lista);
-    sbUpsert(Object.assign({}, p, {_type:"proyecto"}));
+    await sbUpsert(Object.assign({}, p, {_type:"proyecto"}));
     const appUrl=window.location.href.split("?")[0];
 
     // Detectar si la fecha fin cambió más de 7 días
