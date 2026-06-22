@@ -1716,8 +1716,7 @@ Resolución: ${descripcion||"—"}`});
             h('div',null,
               h('select',{value:f.proyectoVinculadoId||"",onChange:e=>{
                 const pId=Number(e.target.value);
-                const proyectosAll = await sbGetAll();
-                const proyectos = proyectosAll.filter(r => r && r._type === "proyecto" && !r._deleted);
+                const proyectos = ls.get("proyectos") || [];
                 const p=proyectos.find(x=>x.id===pId);
                 set("proyectoVinculadoId",pId||null);
                 set("proyectoTitulo",p?.titulo||"");
