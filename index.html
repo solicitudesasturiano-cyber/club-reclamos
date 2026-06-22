@@ -3126,7 +3126,7 @@ useEffect(function(){
               h('button',{onClick:e=>{e.stopPropagation();if(confirm("¿Eliminar el proyecto \""+p.titulo+"\"? Esta acción no se puede deshacer.")){
                 const lista=(ls.get("proyectos")||[]).filter(x=>x.id!==p.id);
                 ls.set("proyectos",lista);setProyectos(lista);
-                await sbUpsert({id:p.id, _type:"proyecto", estadoAvance:"cancelado", _deleted:true});}},
+                sbUpsert(Object.assign({},{id:p.id,_type:"proyecto",estadoAvance:"cancelado",_deleted:true}));}},
                 style:{background:"#fef2f2",border:"1px solid #fecaca",borderRadius:7,cursor:"pointer",fontSize:12,color:"#dc2626",padding:"3px 8px",fontWeight:600}},
                 "🗑️"))),
           p.sector && h('div',{style:{fontSize:12,color:"#64748b",marginBottom:6}},"📍 "+p.sector),
@@ -3137,7 +3137,7 @@ useEffect(function(){
           h('div',{style:{display:"flex",gap:8,fontSize:12}},
             p.reclamosVinculados&&p.reclamosVinculados.length>0 && h('span',{style:{background:"#f3f4f6",borderRadius:6,padding:"2px 8px",color:"#374151"}},"🔗 "+p.reclamosVinculados.length+" reclamos"),
             p.presupuesto && h('span',{style:{background:"#f3f4f6",borderRadius:6,padding:"2px 8px",color:"#374151"}},"💰 $"+Number(p.presupuesto).toLocaleString("es-AR")),
-            p.alertas?.length>0 && h('span',{style:{background:"#fff7ed",borderRadius:6,padding:"2px 8px",color:"#c2410c",fontWeight:600}},"⚠️ "+p.alertas.length+" alertas")));
+            p.alertas&&p.alertas.length>0 && h('span',{style:{background:"#fff7ed",borderRadius:6,padding:"2px 8px",color:"#c2410c",fontWeight:600}},"⚠️ "+p.alertas.length+" alertas")));
       })),
     modal!==null && h(ModalProyecto,{proyecto:modal.id?modal:null,onClose:()=>setModal(null),onSave:saveProyecto,ejecutores,recs}));
 }
