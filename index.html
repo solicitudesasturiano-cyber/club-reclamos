@@ -2997,6 +2997,7 @@ useEffect(function(){
   },[]);
 
   const saveProyecto=async(p)=>{
+    console.log("saveProyecto llamado:", p.titulo, p.id);
     const proyectoAnterior = proyectos.find(x=>x.id===p.id);
     const lista=proyectos.find(x=>x.id===p.id)?proyectos.map(x=>x.id===p.id?p:x):[p].concat(proyectos);
     setProyectos(lista);
