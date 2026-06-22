@@ -2987,14 +2987,6 @@ function ProyectosTab(props) {   var recs = props.recs;   var onUpdate = props.o
   const [filtroEstado,setFiltroEstado] = useState("");
 
 useEffect(function(){
-    fetch(SUPABASE_URL+"/rest/v1/"+SUPABASE_TABLE+"?select=data&order=created_at.desc", {headers: SB_HEADERS})
-      .then(function(r){ return r.json(); })
-      .then(function(rows){
-        var proyectos = (Array.isArray(rows) ? rows.map(function(r){ return r.data; }) : [])
-          .filter(function(r){ return r && r._type === "proyecto"; });
-        setProyectos(proyectos);
-      });
-  },[]);
 
   const saveProyecto=async(p)=>{
     console.log("saveProyecto llamado:", p.titulo, p.id);
