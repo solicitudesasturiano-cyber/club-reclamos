@@ -3111,8 +3111,9 @@ const saveProyecto = async function(p){
               h('button',{onClick:e=>{e.stopPropagation();if(confirm("¿Eliminar el proyecto \""+p.titulo+"\"? Esta acción no se puede deshacer.")){
                   fetch(SUPABASE_URL+"/rest/v1/reclamos?id=eq."+p.id, {
                   method:"DELETE",
-                  headers:SB_HEADERS
-                }).then(function(){
+                  headers:Object.assign({}, SB_HEADERS, {"Prefer":"return=minimal"})
+                }).then(function(r){
+                  console.log("delete status:", r.status);
                   setProyectos(function(prev){ return prev.filter(function(x){ return x.id!==p.id; }); });
                   ls.set("proyectos",(ls.get("proyectos")||[]).filter(function(x){ return x.id!==p.id; }));
                 });}},
