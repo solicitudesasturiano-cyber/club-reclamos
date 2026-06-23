@@ -3000,6 +3000,7 @@ function ProyectosTab(props) {   var recs = props.recs;   var onUpdate = props.o
           deSupabase = deSupabase.concat([Object.assign({}, p, {_type:"proyecto"})]);
         }
       });
+      ls.set("proyectos", []);
       setProyectos(deSupabase);
     });
 },[]);
