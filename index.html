@@ -3011,6 +3011,7 @@ const saveProyecto = async function(p){
     : [p].concat(proyectos);
   setProyectos(lista);
   ls.set("proyectos", lista);
+  console.log("sbUpsert payload:", JSON.stringify({id: p.id, data: Object.assign({}, p, {_type:"proyecto"})}));
   await sbUpsert(Object.assign({}, p, {_type:"proyecto"}));
   const appUrl = window.location.href.split("?")[0];
   const fechaFinAnterior = proyectoAnterior ? proyectoAnterior.fechaFin : null;
