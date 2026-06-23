@@ -3114,10 +3114,8 @@ const saveProyecto = async function(p){
                   }).then(function(){
                     setModal(null);
                     cargar();
-                  });
+                 });
                 }},
-                  ls.set("proyectos",(ls.get("proyectos")||[]).filter(function(x){ return String(x.id) !== String(p.id); }));
-                });}},
                 style:{background:"#fef2f2",border:"1px solid #fecaca",borderRadius:7,cursor:"pointer",fontSize:12,color:"#dc2626",padding:"3px 8px",fontWeight:600}},
                 "🗑️"))),
           p.sector && h('div',{style:{fontSize:12,color:"#64748b",marginBottom:6}},"📍 "+p.sector),
