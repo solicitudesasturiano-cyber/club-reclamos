@@ -2981,97 +2981,104 @@ function RecurrenciaModal(props) {   var recInit = props.rec; var onSave = props
             saving?"Guardando...":"Guardar recurrencia")))));
 }
 
-function ProyectosTab(props) {   var recs = props.recs;   var onUpdate = props.onUpdate;   var ejecutores = props.ejecutores;
-  const [proyectos,setProyectos] = useState([]);
-  const [modal,setModal] = useState(null);
-  const [filtroEstado,setFiltroEstado] = useState("");
+function ProyectosTab(props) {
+  var recs = props.recs;
+  var onUpdate = props.onUpdate;
+  var ejecutores = props.ejecutores;
+  const [proyectos, setProyectos] = useState([]);
+  const [modal, setModal] = useState(null);
+  const [filtroEstado, setFiltroEstado] = useState("");
+  const [confirmDel, setConfirmDel] = useState(null);
 
-  useEffect(function(){
-  fetch(SUPABASE_URL+"/rest/v1/"+SUPABASE_TABLE+"?select=data&order=created_at.desc", {headers: SB_HEADERS})
-    .then(function(r){ return r.json(); })
-    .then(function(rows){
-      var deSupabase = (Array.isArray(rows) ? rows.map(function(r){ return r.data; }) : [])
-        .filter(function(r){ return r && r._type === "proyecto" && !r._deleted; });
-      setProyectos(deSupabase);
-    });
-},[]);
-const cargar = function(){
-  fetch(SUPABASE_URL+"/rest/v1/"+SUPABASE_TABLE+"?select=data&order=created_at.desc", {headers: SB_HEADERS})
-    .then(function(r){ return r.json(); })
-    .then(function(rows){
-      var lista = (Array.isArray(rows) ? rows.map(function(r){ return r.data; }) : [])
-        .filter(function(r){ return r && r._type === "proyecto" && !r._deleted; });
-      setProyectos(lista);
-    });
-};
-const saveProyecto = async function(p){
-  const proyectoAnterior = proyectos.find(function(x){ return x.id===p.id; });
-  const lista = proyectos.find(function(x){ return x.id===p.id; })
-    ? proyectos.map(function(x){ return x.id===p.id?p:x; })
-    : [p].concat(proyectos);
-  setProyectos(lista);
-  ls.set("proyectos", lista);
-  console.log("sbUpsert payload:", JSON.stringify({id: p.id, data: Object.assign({}, p, {_type:"proyecto"})}));
-  await sbUpsert(Object.assign({}, p, {_type:"proyecto"}));
-  const appUrl = window.location.href.split("?")[0];
-  const fechaFinAnterior = proyectoAnterior ? proyectoAnterior.fechaFin : null;
-  const fechaFinNueva = p.fechaFin;
-  var fechaExtendidaMas7 = false;
-  if(fechaFinAnterior && fechaFinNueva && fechaFinNueva !== fechaFinAnterior){
-    const diffDias = (pld(fechaFinNueva) - pld(fechaFinAnterior)) / 86400000;
-    if(diffDias > 7) fechaExtendidaMas7 = true;
-  }
-  const ejsProyecto = (p.empleados||[]).map(function(e){
-    var match = e.match(/^(.+)\s+\(([^)]+)\)$/);
-    return match ? {nombre:match[1].trim(), mail:match[2].trim()} : {nombre:e, mail:""};
-  }).filter(function(ej){ return ej.mail; });
-  for(var i=0; i<(p.reclamosVinculados||[]).length; i++){
-    var num = p.reclamosVinculados[i];
-    var rec = recs.find(function(r){ return r.numero===num; });
-    if(!rec) continue;
-    var esNuevaVinculacion = rec.proyectoVinculado !== p.id;
-    var ejecutores_lista = rec.ejecutores_lista || [];
-    var ejecutorMail = rec.ejecutorMail || "";
-    var ejecutorNombre = rec.ejecutorNombre || "";
-    if(ejsProyecto.length > 0){
-      ejecutores_lista = ejsProyecto.map(function(ej){
-        return Object.assign({}, ej, {confirmado:false, rechazado:false, fechaConfirmacion:null});
+  useEffect(function(){ cargar(); }, []);
+
+  const cargar = function(){
+    fetch(SUPABASE_URL+"/rest/v1/"+SUPABASE_TABLE+"?select=data&order=created_at.desc", {headers: SB_HEADERS})
+      .then(function(r){ return r.json(); })
+      .then(function(rows){
+        var lista = (Array.isArray(rows) ? rows.map(function(r){ return r.data; }) : [])
+          .filter(function(r){ return r && r._type === "proyecto" && !r._deleted; });
+        setProyectos(lista);
       });
-      ejecutorMail = ejsProyecto[0].mail;
-      ejecutorNombre = ejsProyecto.map(function(e){ return e.nombre; }).join(", ");
-    }
-    var recActualizado = Object.assign({}, rec, {
-      estadoAvance:"vinculado_proyecto",
-      proyectoVinculado:p.id,
-      proyectoTitulo:p.titulo,
-      fechaInicioEsperado: p.fechaInicio||rec.fechaInicioEsperado,
-      fechaCierre: p.fechaFin||rec.fechaCierre,
-      fechaCierreConfirmada: p.fechaFin||rec.fechaCierreConfirmada,
-      descripcionProyecto: p.descripcion,
-      ejecutores_lista: ejecutores_lista,
-      ejecutorMail: ejecutorMail,
-      ejecutorNombre: ejecutorNombre,
-      comentarios:(rec.comentarios||[]).concat([{
-        texto:"Vinculado al proyecto \""+p.titulo+"\". Fechas y ejecutores actualizados automaticamente.",
-        fecha:new Date().toISOString(), autor:"Sistema"
-      }])
+  };
+
+  const eliminar = async function(p){
+    await fetch(SUPABASE_URL+"/rest/v1/"+SUPABASE_TABLE+"?id=eq."+p.id, {
+      method:"DELETE",
+      headers:Object.assign({}, SB_HEADERS, {"Prefer":"return=minimal"})
     });
-    await onUpdate(recActualizado, rec);
-    if(esNuevaVinculacion && rec.email){
-      await sendEmail({to:rec.email,
-        subject:"[Asturiano] Tu solicitud fue vinculada al proyecto \""+p.titulo+"\" — "+rec.numero,
-        body:"Hola "+rec.nombre+",\n\nTu solicitud "+rec.numero+" ("+rec.sector+") fue vinculada a un proyecto integral del club.\n\nPROYECTO: "+p.titulo+"\n"+(p.fechaFin?"Resolucion prevista: "+new Date(p.fechaFin).toLocaleDateString("es-AR")+"\n":"")+"\nTe notificaremos cuando haya avances.\n\n— Equipo de Intendencia Asturiano"
-      });
+    await cargar();
+    setConfirmDel(null);
+  };
+
+  const saveProyecto = async function(p){
+    const proyectoAnterior = proyectos.find(function(x){ return x.id===p.id; });
+    const lista = proyectos.find(function(x){ return x.id===p.id; })
+      ? proyectos.map(function(x){ return x.id===p.id?p:x; })
+      : [p].concat(proyectos);
+    setProyectos(lista);
+    ls.set("proyectos", lista);
+    await sbUpsert(Object.assign({}, p, {_type:"proyecto"}));
+    const appUrl = window.location.href.split("?")[0];
+    const fechaFinAnterior = proyectoAnterior ? proyectoAnterior.fechaFin : null;
+    const fechaFinNueva = p.fechaFin;
+    var fechaExtendidaMas7 = false;
+    if(fechaFinAnterior && fechaFinNueva && fechaFinNueva !== fechaFinAnterior){
+      const diffDias = (pld(fechaFinNueva) - pld(fechaFinAnterior)) / 86400000;
+      if(diffDias > 7) fechaExtendidaMas7 = true;
     }
-    if(!esNuevaVinculacion && fechaExtendidaMas7 && rec.email){
-      await sendEmail({to:rec.email,
-        subject:"[Asturiano] Actualizacion de fecha — Proyecto \""+p.titulo+"\" — "+rec.numero,
-        body:"Hola "+rec.nombre+",\n\nEl proyecto \""+p.titulo+"\" tiene nueva fecha estimada.\n\nNueva fecha: "+new Date(p.fechaFin).toLocaleDateString("es-AR")+"\n\n— Equipo de Intendencia Asturiano"
+    const ejsProyecto = (p.empleados||[]).map(function(e){
+      var match = e.match(/^(.+)\s+\(([^)]+)\)$/);
+      return match ? {nombre:match[1].trim(), mail:match[2].trim()} : {nombre:e, mail:""};
+    }).filter(function(ej){ return ej.mail; });
+    for(var i=0; i<(p.reclamosVinculados||[]).length; i++){
+      var num = p.reclamosVinculados[i];
+      var rec = recs.find(function(r){ return r.numero===num; });
+      if(!rec) continue;
+      var esNuevaVinculacion = rec.proyectoVinculado !== p.id;
+      var ejecutores_lista = rec.ejecutores_lista || [];
+      var ejecutorMail = rec.ejecutorMail || "";
+      var ejecutorNombre = rec.ejecutorNombre || "";
+      if(ejsProyecto.length > 0){
+        ejecutores_lista = ejsProyecto.map(function(ej){
+          return Object.assign({}, ej, {confirmado:false, rechazado:false, fechaConfirmacion:null});
+        });
+        ejecutorMail = ejsProyecto[0].mail;
+        ejecutorNombre = ejsProyecto.map(function(e){ return e.nombre; }).join(", ");
+      }
+      var recActualizado = Object.assign({}, rec, {
+        estadoAvance:"vinculado_proyecto",
+        proyectoVinculado:p.id,
+        proyectoTitulo:p.titulo,
+        fechaInicioEsperado: p.fechaInicio||rec.fechaInicioEsperado,
+        fechaCierre: p.fechaFin||rec.fechaCierre,
+        fechaCierreConfirmada: p.fechaFin||rec.fechaCierreConfirmada,
+        descripcionProyecto: p.descripcion,
+        ejecutores_lista: ejecutores_lista,
+        ejecutorMail: ejecutorMail,
+        ejecutorNombre: ejecutorNombre,
+        comentarios:(rec.comentarios||[]).concat([{
+          texto:"Vinculado al proyecto \""+p.titulo+"\". Fechas y ejecutores actualizados automaticamente.",
+          fecha:new Date().toISOString(), autor:"Sistema"
+        }])
       });
+      await onUpdate(recActualizado, rec);
+      if(esNuevaVinculacion && rec.email){
+        await sendEmail({to:rec.email,
+          subject:"[Asturiano] Tu solicitud fue vinculada al proyecto \""+p.titulo+"\" — "+rec.numero,
+          body:"Hola "+rec.nombre+",\n\nTu solicitud "+rec.numero+" ("+rec.sector+") fue vinculada a un proyecto integral del club.\n\nPROYECTO: "+p.titulo+"\n"+(p.fechaFin?"Resolucion prevista: "+new Date(p.fechaFin).toLocaleDateString("es-AR")+"\n":"")+"\nTe notificaremos cuando haya avances.\n\n— Equipo de Intendencia Asturiano"
+        });
+      }
+      if(!esNuevaVinculacion && fechaExtendidaMas7 && rec.email){
+        await sendEmail({to:rec.email,
+          subject:"[Asturiano] Actualizacion de fecha — Proyecto \""+p.titulo+"\" — "+rec.numero,
+          body:"Hola "+rec.nombre+",\n\nEl proyecto \""+p.titulo+"\" tiene nueva fecha estimada.\n\nNueva fecha: "+new Date(p.fechaFin).toLocaleDateString("es-AR")+"\n\n— Equipo de Intendencia Asturiano"
+        });
+      }
     }
-  }
-};
-  const ESTADOS_PROJ=[
+  };
+
+  const ESTADOS_PROJ = [
     {id:"planificacion",label:"Planificación",color:"#0ea5e9"},
     {id:"en_curso",label:"En curso",color:"#3b82f6"},
     {id:"pausado",label:"Pausado",color:"#f97316"},
@@ -3079,43 +3086,34 @@ const saveProyecto = async function(p){
     {id:"cancelado",label:"Cancelado",color:"#ef4444"},
   ];
 
-  const filtrados=proyectos.filter(p=>!filtroEstado||p.estado===filtroEstado);
+  const filtrados = proyectos.filter(function(p){ return !filtroEstado || p.estado===filtroEstado; });
 
   return h('div',{style:{padding:"16px 24px 40px"}},
     h('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}},
       h('div',{style:{display:"flex",gap:8}},
-        h('select',{value:filtroEstado,onChange:e=>setFiltroEstado(e.target.value),style:{padding:"7px 12px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:13,outline:"none"}},
+        h('select',{value:filtroEstado,onChange:function(e){setFiltroEstado(e.target.value);},style:{padding:"7px 12px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:13,outline:"none"}},
           h('option',{value:""},"Todos los estados"),
-          ...ESTADOS_PROJ.map(e=>h('option',{key:e.id,value:e.id},e.label))),
+          ...ESTADOS_PROJ.map(function(e){ return h('option',{key:e.id,value:e.id},e.label); })),
         h('span',{style:{alignSelf:"center",fontSize:13,color:"#94a3b8"}},filtrados.length+" proyectos")),
-      h('button',{onClick:()=>setModal({}),style:{padding:"9px 18px",background:"linear-gradient(135deg,#7c3aed,#5b21b6)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:13,fontWeight:700}},"+ Nuevo proyecto")),
+      h('button',{onClick:function(){setModal({});},style:{padding:"9px 18px",background:"linear-gradient(135deg,#7c3aed,#5b21b6)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:13,fontWeight:700}},"+ Nuevo proyecto")),
     filtrados.length===0 && h('div',{style:{textAlign:"center",padding:"60px 0",color:"#94a3b8"}},
       h('div',{style:{fontSize:40,marginBottom:12}},"📋"),
       h('div',{style:{fontSize:16,fontWeight:600,marginBottom:8}},"No hay proyectos"),
       h('div',{style:{fontSize:14}},"Creá el primero con el botón de arriba.")),
     h('div',{style:{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:14}},
-      ...filtrados.map(p=>{
-        const est=ESTADOS_PROJ.find(e=>e.id===p.estado);
-        const diasRestantes=p.fechaFin?(new Date(p.fechaFin)-new Date())/86400000:null;
-        const vencido=diasRestantes!==null&&diasRestantes<0&&p.estado!=="completado";
-        return h('div',{key:p.id,style:{background:"white",borderRadius:14,padding:"18px 20px",boxShadow:"0 2px 8px rgba(0,0,0,0.07)",borderTop:`4px solid ${est?.color||"#e2e8f0"}`}},
+      ...filtrados.map(function(p){
+        const est = ESTADOS_PROJ.find(function(e){ return e.id===p.estado; });
+        const diasRestantes = p.fechaFin?(new Date(p.fechaFin)-new Date())/86400000:null;
+        const vencido = diasRestantes!==null&&diasRestantes<0&&p.estado!=="completado";
+        return h('div',{key:p.id,style:{background:"white",borderRadius:14,padding:"18px 20px",boxShadow:"0 2px 8px rgba(0,0,0,0.07)",borderTop:"4px solid "+(est&&est.color||"#e2e8f0")}},
           h('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}},
-            h('div',{style:{fontSize:15,fontWeight:700,color:"#1a3a6b",lineHeight:1.3,flex:1,cursor:"pointer"},onClick:()=>{ setModal(p); }
-            },p.titulo||"Sin título"),
+            h('div',{style:{fontSize:15,fontWeight:700,color:"#1a3a6b",lineHeight:1.3,flex:1,cursor:"pointer"},onClick:function(){ setModal(p); }},p.titulo||"Sin título"),
             h('div',{style:{display:"flex",gap:4,alignItems:"center",marginLeft:8}},
-              h('span',{style:{padding:"2px 8px",borderRadius:20,fontSize:11,fontWeight:600,color:est?.color,background:est?.color+"22",whiteSpace:"nowrap"}},est?.label),
-              h('button',{onClick:e=>{e.stopPropagation();setModal(p);},
+              h('span',{style:{padding:"2px 8px",borderRadius:20,fontSize:11,fontWeight:600,color:est&&est.color,background:est&&est.color+"22",whiteSpace:"nowrap"}},est&&est.label),
+              h('button',{onClick:function(e){e.stopPropagation();setModal(p);},
                 style:{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:7,cursor:"pointer",fontSize:12,color:"#1d4ed8",padding:"3px 8px",fontWeight:600,whiteSpace:"nowrap"}},
                 "✏️ Editar"),
-              h('button',{onClick:function(e){e.stopPropagation();if(confirm("¿Eliminar el proyecto \""+p.titulo+"\"? Esta acción no se puede deshacer.")){
-                  fetch(SUPABASE_URL+"/rest/v1/"+SUPABASE_TABLE+"?id=eq."+p.id, {
-                    method:"DELETE",
-                    headers:Object.assign({}, SB_HEADERS, {"Prefer":"return=minimal"})
-                  }).then(function(){
-                    setModal(null);
-                    cargar();
-                 });
-                }},
+              h('button',{onClick:function(e){e.stopPropagation();setConfirmDel(p);},
                 style:{background:"#fef2f2",border:"1px solid #fecaca",borderRadius:7,cursor:"pointer",fontSize:12,color:"#dc2626",padding:"3px 8px",fontWeight:600}},
                 "🗑️"))),
           p.sector && h('div',{style:{fontSize:12,color:"#64748b",marginBottom:6}},"📍 "+p.sector),
@@ -3128,7 +3126,14 @@ const saveProyecto = async function(p){
             p.presupuesto && h('span',{style:{background:"#f3f4f6",borderRadius:6,padding:"2px 8px",color:"#374151"}},"💰 $"+Number(p.presupuesto).toLocaleString("es-AR")),
             p.alertas&&p.alertas.length>0 && h('span',{style:{background:"#fff7ed",borderRadius:6,padding:"2px 8px",color:"#c2410c",fontWeight:600}},"⚠️ "+p.alertas.length+" alertas")));
       })),
-    modal!==null && h(ModalProyecto,{proyecto:modal.id?modal:null,onClose:()=>setModal(null),onSave:saveProyecto,ejecutores,recs}));
+    confirmDel && h('div',{style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2000}},
+      h('div',{style:{background:"white",borderRadius:16,padding:28,maxWidth:380,width:"100%",margin:"0 16px"}},
+        h('div',{style:{fontSize:16,fontWeight:700,color:"#1e293b",marginBottom:8}},"Eliminar proyecto"),
+        h('div',{style:{fontSize:14,color:"#64748b",marginBottom:20}},"Se eliminará \""+confirmDel.titulo+"\". Esta acción no se puede deshacer."),
+        h('div',{style:{display:"flex",gap:10}},
+          h('button',{onClick:function(){eliminar(confirmDel);},style:{flex:1,padding:"10px",background:"#dc2626",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontWeight:700}},"Eliminar"),
+          h('button',{onClick:function(){setConfirmDel(null);},style:{flex:1,padding:"10px",background:"#f1f5f9",color:"#374151",border:"none",borderRadius:8,cursor:"pointer"}},"Cancelar")))),
+    modal!==null && h(ModalProyecto,{proyecto:modal.id?modal:null,onClose:function(){setModal(null);},onSave:saveProyecto,ejecutores,recs}));
 }
 
 function PanelAdmin({recs, onUpdate, onRefresh, area}) {
