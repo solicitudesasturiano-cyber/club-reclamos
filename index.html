@@ -3109,9 +3109,13 @@ const saveProyecto = async function(p){
                 style:{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:7,cursor:"pointer",fontSize:12,color:"#1d4ed8",padding:"3px 8px",fontWeight:600,whiteSpace:"nowrap"}},
                 "✏️ Editar"),
               h('button',{onClick:e=>{e.stopPropagation();if(confirm("¿Eliminar el proyecto \""+p.titulo+"\"? Esta acción no se puede deshacer.")){
-                const lista=(ls.get("proyectos")||[]).filter(x=>x.id!==p.id);
-                ls.set("proyectos",lista);setProyectos(lista);
-                sbUpsert(Object.assign({},{id:p.id,_type:"proyecto",estadoAvance:"cancelado",_deleted:true}));}},
+                  fetch(SUPABASE_URL+"/rest/v1/reclamos?id=eq."+p.id, {
+                  method:"DELETE",
+                  headers:SB_HEADERS
+                }).then(function(){
+                  setProyectos(function(prev){ return prev.filter(function(x){ return x.id!==p.id; }); });
+                  ls.set("proyectos",(ls.get("proyectos")||[]).filter(function(x){ return x.id!==p.id; }));
+                });}},
                 style:{background:"#fef2f2",border:"1px solid #fecaca",borderRadius:7,cursor:"pointer",fontSize:12,color:"#dc2626",padding:"3px 8px",fontWeight:600}},
                 "🗑️"))),
           p.sector && h('div',{style:{fontSize:12,color:"#64748b",marginBottom:6}},"📍 "+p.sector),
