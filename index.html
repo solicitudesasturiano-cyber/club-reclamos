@@ -3003,11 +3003,19 @@ function ProyectosTab(props) {
   };
 
   const eliminar = function(p){
-    fetch(SUPABASE_URL+"/rest/v1/"+SUPABASE_TABLE+"?id=eq."+p.id, {
+    if (!p || !p.id) return;
+    setConfirmDel(null);
+    
+    fetch(SUPABASE_URL+"/rest/v1/"+SUPABASE_TABLE+"?data->>id=eq."+p.id, {
       method:"DELETE",
       headers:Object.assign({}, SB_HEADERS, {"Prefer":"return=minimal"})
-    }).then(function(){
-      setConfirmDel(null);
+    })
+    .then(function(r){
+      if(!r.ok) console.error("Error en respuesta:", r.statusText);
+      cargar();
+    })
+    .catch(function(err){
+      console.error("Error al eliminar:", err);
       cargar();
     });
   };
@@ -3132,7 +3140,7 @@ function ProyectosTab(props) {
         h('div',{style:{fontSize:16,fontWeight:700,color:"#1e293b",marginBottom:8}},"Eliminar proyecto"),
         h('div',{style:{fontSize:14,color:"#64748b",marginBottom:20}},"Se eliminará \""+confirmDel.titulo+"\". Esta acción no se puede deshacer."),
         h('div',{style:{display:"flex",gap:10}},
-          h('button',{onClick:function(){eliminar(confirmDel);},style:{flex:1,padding:"10px",background:"#dc2626",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontWeight:700}},"Eliminar"),
+          h('button',{onClick:function(){ eliminar(confirmDel); },style:{flex:1,padding:"10px",background:"#dc2626",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontWeight:700}},"Eliminar"),
           h('button',{onClick:function(){setConfirmDel(null);},style:{flex:1,padding:"10px",background:"#f1f5f9",color:"#374151",border:"none",borderRadius:8,cursor:"pointer"}},"Cancelar")))),
     modal!==null && h(ModalProyecto,{proyecto:modal.id?modal:null,onClose:function(){setModal(null);},onSave:saveProyecto,ejecutores,recs}));
 }
