@@ -2992,7 +2992,7 @@ function ProyectosTab(props) {
 
   useEffect(function(){ cargar(); }, []);
 
-  const cargar = function(){
+  function cargar(){
     fetch(SUPABASE_URL+"/rest/v1/"+SUPABASE_TABLE+"?select=data&order=created_at.desc", {headers: SB_HEADERS})
       .then(function(r){ return r.json(); })
       .then(function(rows){
