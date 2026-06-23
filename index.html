@@ -3009,22 +3009,17 @@ function ProyectosTab(props) {
           .filter(function(r){ 
             if (!r || r._type !== "proyecto" || r._deleted) return false;
 
-            // MIGRACIÓN PARA PROYECTOS VIEJOS:
-            // Si el proyecto no tiene categoría ('cat'), le asignamos "intendencia" por defecto
-            var categoriaProyecto = r.cat || "intendencia";
-
-            // Si estamos en el panel de Intendencia y el proyecto no tiene categoría, lo mostramos
-            if (area === "intendencia" && !r.cat) {
-              return true;
+            // Si el proyecto NO tiene categoría, pertenece SÓLO a Intendencia
+            if (!r.cat) {
+              return area === "intendencia";
             }
 
-            // Para todo lo demás (proyectos nuevos con categoría), filtramos normalmente
-            return catsPermitidas.includes(categoriaProyecto);
+            // Si TIENE categoría, se muestra sólo si pertenece al área actual
+            return catsPermitidas.includes(r.cat);
           });
         setProyectos(lista);
       });
   };
-
   const eliminar = async function(p){
     if (!p || !p.id) return;
     setConfirmDel(null);
