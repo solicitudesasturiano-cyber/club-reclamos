@@ -2982,6 +2982,7 @@ function RecurrenciaModal(props) {   var recInit = props.rec; var onSave = props
 }
 
 function ProyectosTab(props) {
+  var area = props.area;
   var recs = props.recs;
   var onUpdate = props.onUpdate;
   var ejecutores = props.ejecutores;
@@ -2996,8 +2997,30 @@ function ProyectosTab(props) {
     fetch(SUPABASE_URL+"/rest/v1/"+SUPABASE_TABLE+"?select=data&order=created_at.desc", {headers: SB_HEADERS})
       .then(function(r){ return r.json(); })
       .then(function(rows){
+        
+        var mapaCategoriasPorArea = {
+          "administracion": CATS_ADMINISTRACION,
+          "intendencia": CATS_INTENDENCIA
+        };
+
+        var catsPermitidas = mapaCategoriasPorArea[area] || [];
+
         var lista = (Array.isArray(rows) ? rows.map(function(r){ return r.data; }) : [])
-          .filter(function(r){ return r && r._type === "proyecto" && !r._deleted; });
+          .filter(function(r){ 
+            if (!r || r._type !== "proyecto" || r._deleted) return false;
+
+            // MIGRACIÓN PARA PROYECTOS VIEJOS:
+            // Si el proyecto no tiene categoría ('cat'), le asignamos "intendencia" por defecto
+            var categoriaProyecto = r.cat || "intendencia";
+
+            // Si estamos en el panel de Intendencia y el proyecto no tiene categoría, lo mostramos
+            if (area === "intendencia" && !r.cat) {
+              return true;
+            }
+
+            // Para todo lo demás (proyectos nuevos con categoría), filtramos normalmente
+            return catsPermitidas.includes(categoriaProyecto);
+          });
         setProyectos(lista);
       });
   };
@@ -3029,6 +3052,10 @@ function ProyectosTab(props) {
   };
 
   const saveProyecto = async function(p){
+    var mapaCategoriasPorArea = {
+      "administracion": CATS_ADMINISTRACION,
+      "intendencia": CATS_INTENDENCIA
+    };
     const proyectoAnterior = proyectos.find(function(x){ return x.id===p.id; });
     const lista = proyectos.find(function(x){ return x.id===p.id; })
       ? proyectos.map(function(x){ return x.id===p.id?p:x; })
