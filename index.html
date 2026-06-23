@@ -2992,15 +2992,6 @@ function ProyectosTab(props) {   var recs = props.recs;   var onUpdate = props.o
     .then(function(rows){
       var deSupabase = (Array.isArray(rows) ? rows.map(function(r){ return r.data; }) : [])
         .filter(function(r){ return r && r._type === "proyecto" && !r._deleted; });
-      var deLocal = ls.get("proyectos") || [];
-      deLocal.forEach(function(p){
-        var yaEsta = deSupabase.find(function(s){ return s.id === p.id; });
-        if(!yaEsta){
-          sbUpsert(Object.assign({}, p, {_type:"proyecto"}));
-          deSupabase = deSupabase.concat([Object.assign({}, p, {_type:"proyecto"})]);
-        }
-      });
-      ls.set("proyectos", []);
       setProyectos(deSupabase);
     });
 },[]);
