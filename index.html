@@ -3005,16 +3005,27 @@ function ProyectosTab(props) {
   const eliminar = async function(p){
     if (!p || !p.id) return;
     setConfirmDel(null);
-    
-    // Si tenés una función helper como sbDelete, la usás igual que en recurrencias
-    if (typeof sbDelete === "function") {
-      await sbDelete(p.id);
-    } else {
-      // Si no existe sbDelete pero sí sbUpsert, le mandamos una bandera de borrado
-      await sbUpsert(Object.assign({}, p, {_type:"proyecto", _deleted: true}));
+
+    try {
+      // Creamos una copia del proyecto y le agregamos la bandera de borrado lógico
+      const proyectoBorrado = Object.assign({}, p, {
+        _type: "proyecto",
+        _deleted: true
+      });
+
+      // Usamos la función nativa de tu app que ya sabemos que responde con 200
+      await sbUpsert(proyectoBorrado);
+      
+      // Actualizamos la lista local y la sincronizamos
+      const listaActualizada = proyectos.filter(function(x){ return x.id !== p.id; });
+      setProyectos(listaActualizada);
+      ls.set("proyectos", listaActualizada);
+
+    } catch (err) {
+      console.error("Error al eliminar proyecto:", err);
+    } finally {
+      cargar();
     }
-    
-    cargar();
   };
 
   const saveProyecto = async function(p){
