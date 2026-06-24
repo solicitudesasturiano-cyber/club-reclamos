@@ -3025,22 +3025,20 @@ function ProyectosTab(props) {
     setConfirmDel(null);
 
     try {
-      // Creamos una copia del proyecto y le agregamos la bandera de borrado lógico
       const proyectoBorrado = Object.assign({}, p, {
         _type: "proyecto",
         _deleted: true
       });
-
-      // Usamos la función nativa de tu app que ya sabemos que responde con 200
       await sbUpsert(proyectoBorrado);
       
-      // Actualizamos la lista local y la sincronizamos
       const listaActualizada = proyectos.filter(function(x){ return x.id !== p.id; });
       setProyectos(listaActualizada);
       ls.set("proyectos", listaActualizada);
 
     } catch (err) {
       console.error("Error al eliminar proyecto:", err);
+    } finally {
+      cargar();
     }
   };
 
