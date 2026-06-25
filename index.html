@@ -2983,6 +2983,7 @@ function RecurrenciaModal(props) {   var recInit = props.rec; var onSave = props
 
 function ProyectosTab(props) {
   var recs = props.recs;
+  var area = props.area;
   var onUpdate = props.onUpdate;
   var ejecutores = props.ejecutores;
   const [proyectos, setProyectos] = useState([]);
@@ -2997,7 +2998,7 @@ function ProyectosTab(props) {
       .then(function(r){ return r.json(); })
       .then(function(rows){
         var lista = (Array.isArray(rows) ? rows.map(function(r){ return r.data; }) : [])
-          .filter(function(r){ return r && r._type === "proyecto" && !r._deleted; });
+          .filter(function(r){ return r && r._type === "proyecto" && !r._deleted && r.area === area; });
         setProyectos(lista);
       });
   };
@@ -3035,7 +3036,7 @@ function ProyectosTab(props) {
       : [p].concat(proyectos);
     setProyectos(lista);
     ls.set("proyectos", lista);
-    await sbUpsert(Object.assign({}, p, {_type:"proyecto"}));
+    await sbUpsert(Object.assign({}, p, {_type:"proyecto", area:area}));
     const appUrl = window.location.href.split("?")[0];
     const fechaFinAnterior = proyectoAnterior ? proyectoAnterior.fechaFin : null;
     const fechaFinNueva = p.fechaFin;
@@ -3576,7 +3577,7 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
           style:{padding:"6px 14px",borderRadius:8,border:"1.5px solid #e2e8f0",background:pagina>=Math.ceil(filtrados.length/POR_PAGINA)?"#f8fafc":"white",color:pagina>=Math.ceil(filtrados.length/POR_PAGINA)?"#cbd5e1":"#374151",cursor:pagina>=Math.ceil(filtrados.length/POR_PAGINA)?"default":"pointer",fontSize:13,fontWeight:600}},
           "Siguiente →"))),
     mainTab==="reclamos" && view==="kanban" && h(Kanban,{recs:filtrados,onEdit:setModal}),
-    mainTab==="proyectos" && h(ProyectosTab,{recs,onUpdate,ejecutores}),
+    mainTab==="proyectos" && h(ProyectosTab,{recs,onUpdate,ejecutores,area:area}),
     mainTab==="recurrencias" && h(RecurrenciasTab,{area,ejecutores,recs}),
     modal && h(EditModal,{key:modal.id,rec:modal,onClose:()=>setModal(null),onSave:async u=>{await onUpdate(u,modal);setModal(null);},ejecutores,onUpdateHijo:async u=>{await onUpdate(u,u);},recs}),
     showCfg && h(PanelConfig,{onClose:()=>setShowCfg(false),onSaveEjecutores:ejs=>{setEjecutores(ejs);setShowCfg(false);},area}),
