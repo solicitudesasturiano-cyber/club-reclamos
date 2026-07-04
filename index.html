@@ -1178,6 +1178,9 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs}) {
   });
   const [saveErr,setSaveErr] = useState("");
   const [sending,setSending] = useState(false);
+  const [showRechazoResp,setShowRechazoResp] = useState(false);
+  const [motivoRechazoResp,setMotivoRechazoResp] = useState("");
+  const [sendingValidacionResp,setSendingValidacionResp] = useState(false);
   const fileRef = useRef();
   const set = (k,v) => setF(p=>({...p,[k]:v}));
   const cat = CATS[rec.cat]; const pri = PRIS.find(p=>p.id===rec.pri); const t = getTiming(rec);
@@ -1487,7 +1490,6 @@ let savedRec = {...rec,...f,adjuntosResolucion,comentarios,nuevoComentario:undef
       } else {
       savedRec = {...savedRec, estadoAvance:"esperando_validacion_responsable", fechaEnvioValidacion: new Date().toISOString()};
       await sbUpsert(savedRec);
-      setRecs(prev=>prev.map(r=>r.id===savedRec.id?savedRec:r));
 
       const respMailsArr = getResponsables(savedRec.cat);
       const respMailsList = respMailsArr.map(d=>d.mail).filter(Boolean);
@@ -1509,7 +1511,6 @@ let savedRec = {...rec,...f,adjuntosResolucion,comentarios,nuevoComentario:undef
           savedRec = {...savedRec, estadoAvance:"esperando_validacion_directivo", fechaEnvioValidacionDirectivo: new Date().toISOString(),
             comentarios:[...(savedRec.comentarios||[]),{texto:"No hay responsable configurado para esta categoría. Se escaló directo al directivo.",fecha:new Date().toISOString(),autor:"Sistema"}]};
           await sbUpsert(savedRec);
-          setRecs(prev=>prev.map(r=>r.id===savedRec.id?savedRec:r));
           await sendEmail({to:dirMailsFallback,
             subject:`[Asturiano] Tarea completada — ${savedRec.numero}: ${savedRec.sector}`,
             htmlBody: buildValidacionHtml(savedRec, saludoDirFallback, verUrl, 'Tarea completada — requiere tu validación'),
@@ -1518,12 +1519,54 @@ let savedRec = {...rec,...f,adjuntosResolucion,comentarios,nuevoComentario:undef
           savedRec = {...savedRec, estadoAvance:"completada",
             comentarios:[...(savedRec.comentarios||[]),{texto:"No hay responsable ni directivo configurado para esta categoría. Tarea completada sin validación.",fecha:new Date().toISOString(),autor:"Sistema"}]};
           await sbUpsert(savedRec);
-          setRecs(prev=>prev.map(r=>r.id===savedRec.id?savedRec:r));
         }
       }
       } // cierre else (no recurrente)
     }
     setSending(false);
+  };
+
+  const validarResponsable = async () => {
+    if(sendingValidacionResp) return;
+    setSendingValidacionResp(true);
+    const appUrlV = window.location.href.split("?")[0];
+    const updatedV = {...rec,
+      estadoAvance:"esperando_validacion_directivo",
+      fechaEnvioValidacionDirectivo: new Date().toISOString(),
+      comentarios:[...(rec.comentarios||[]),{
+        texto:"Resolución aprobada por responsable desde el panel. Enviada al directivo para validación final.",
+        fecha:new Date().toISOString(), autor:"Responsable"
+      }]};
+    await sbUpsert(updatedV);
+    const dirMailsV = getDirectivos(rec.cat).map(d=>d.mail).filter(Boolean);
+    if(dirMailsV.length) {
+      const dirNombresV = getDirectivos(rec.cat).filter(d=>d.mail).map(d=>d.nombre).filter(Boolean);
+      const saludoDirV = dirNombresV.length ? `Hola <strong>${dirNombresV[0]}</strong>,` : 'Hola,';
+      const verUrlV = `${appUrlV}?validar=${rec.id}`;
+      await sendEmail({to:dirMailsV,
+        subject:`[Asturiano] Tarea completada — ${updatedV.numero}: ${updatedV.sector}`,
+        htmlBody: buildValidacionHtml(updatedV, saludoDirV, verUrlV, 'Tarea completada — requiere tu validación final'),
+        body:`Hola,\n\nEl responsable aprobó la resolución de la tarea ${updatedV.numero} desde el panel. Ahora requiere tu validación final.\n\nVer y validar: ${verUrlV}\n\nSi no respondés en 2 días, se asume aprobado y se notifica al solicitante.\n\n— Sistema de Reclamos — Asturiano`});
+    }
+    await onSave(updatedV);
+    setSendingValidacionResp(false);
+    onClose();
+  };
+
+  const rechazarResponsable = async () => {
+    if(!motivoRechazoResp.trim() || sendingValidacionResp) return;
+    setSendingValidacionResp(true);
+    const updatedR = {...rec,
+      estadoAvance:"bajo_analisis", reabierta:true, descripcionResolucion:"", ejecutorConfirmado:false,
+      comentarios:[...(rec.comentarios||[]),{
+        texto:"Responsable rechazó la resolución desde el panel. Motivo: "+motivoRechazoResp,
+        fecha:new Date().toISOString(), autor:"Responsable"
+      }]};
+    await sbUpsert(updatedR);
+    await onSave(updatedR);
+    setSendingValidacionResp(false);
+    setShowRechazoResp(false);
+    onClose();
   };
 
   const notifResolucionAuto = async (savedRec) => {
@@ -1808,8 +1851,27 @@ Resolución: ${descripcion||"—"}`});
               set("estadoAvance","completada");
               setTimeout(()=>save(),50);
             },style:{width:"100%",padding:"13px",background:"linear-gradient(135deg,#22c55e,#15803d)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700}},"✅ Marcar como completado — enviar a validación")),
-          ["esperando_validacion"].includes(f.estadoAvance) && h('div',{style:{background:"#f5f3ff",border:"1.5px solid #ddd6fe",borderRadius:8,padding:"10px 14px",fontSize:12,color:"#6d28d9",marginBottom:8}},"🔵 Esperando validación del directivo. Una vez aprobado, el usuario recibirá el mail de calificación.")),
+            f.estadoAvance==="esperando_validacion_responsable" && h('div',{style:{background:"#fdf4ff",border:"1.5px solid #e9d5ff",borderRadius:10,padding:14,marginBottom:8}},
+            h('div',{style:{fontSize:12,color:"#86198f",fontWeight:700,marginBottom:8}},"🔍 Esperando tu validación como responsable"),
+            h('div',{style:{fontSize:12,color:"#701a75",marginBottom:12,lineHeight:1.5}},"El ejecutor marcó esta tarea como completada. Revisá la resolución de arriba y validá o rechazá. Si no actuás en 2 días, se escala automáticamente al directivo."),
+            !showRechazoResp && h('div',{style:{display:"flex",gap:10}},
+              h('button',{onClick:validarResponsable,disabled:sendingValidacionResp,
+                style:{flex:2,padding:"12px",background:sendingValidacionResp?"#94a3b8":"linear-gradient(135deg,#9333ea,#7c3aed)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:13,fontWeight:700}},
+                sendingValidacionResp?"Procesando...":"✓ Validar lo completado — enviar al directivo"),
+              h('button',{onClick:()=>setShowRechazoResp(true),disabled:sendingValidacionResp,
+                style:{flex:1,padding:"12px",background:"#fef2f2",color:"#dc2626",border:"1.5px solid #fecaca",borderRadius:10,cursor:"pointer",fontSize:13,fontWeight:700}},
+                "✗ Rechazar")),
+            showRechazoResp && h('div',null,
+              h('label',{style:{display:"block",fontSize:11,fontWeight:700,color:"#dc2626",marginBottom:6,textTransform:"uppercase"}},"Motivo del rechazo *"),
+              h('textarea',{value:motivoRechazoResp,onChange:e=>setMotivoRechazoResp(e.target.value),rows:3,placeholder:"Explicá qué no quedó bien y qué hay que corregir...",style:{width:"100%",padding:"9px 12px",borderRadius:8,border:"1.5px solid #fecaca",fontSize:13,outline:"none",boxSizing:"border-box",resize:"vertical",marginBottom:10}}),
+              h('div',{style:{display:"flex",gap:8}},
+                h('button',{onClick:rechazarResponsable,disabled:!motivoRechazoResp.trim()||sendingValidacionResp,
+                  style:{flex:2,padding:"11px",background:(!motivoRechazoResp.trim()||sendingValidacionResp)?"#94a3b8":"#dc2626",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:700}},
+                  sendingValidacionResp?"Procesando...":"Confirmar rechazo — reabrir solicitud"),
+                h('button',{onClick:()=>{setShowRechazoResp(false);setMotivoRechazoResp("");},
+                  style:{flex:1,padding:"11px",background:"white",color:"#64748b",border:"1.5px solid #e2e8f0",borderRadius:8,cursor:"pointer",fontSize:13}},"Cancelar"))),
 
+          ["esperando_validacion_directivo","esperando_validacion"].includes(f.estadoAvance) && h('div',{style:{background:"#f5f3ff",border:"1.5px solid #ddd6fe",borderRadius:8,padding:"10px 14px",fontSize:12,color:"#6d28d9",marginBottom:8}},"🔵 El responsable ya validó. La validación final del directivo se hace solo por mail, no desde este panel. Si no responde en 2 días, se asume aprobado y se notifica al solicitante.")),
         // TAB HISTORIAL
         tab==="historial" && h('div',null,
           (!rec.comentarios||!rec.comentarios.length)
