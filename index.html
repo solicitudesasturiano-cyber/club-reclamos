@@ -1869,7 +1869,7 @@ Resolución: ${descripcion||"—"}`});
                   style:{flex:2,padding:"11px",background:(!motivoRechazoResp.trim()||sendingValidacionResp)?"#94a3b8":"#dc2626",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:700}},
                   sendingValidacionResp?"Procesando...":"Confirmar rechazo — reabrir solicitud"),
                 h('button',{onClick:()=>{setShowRechazoResp(false);setMotivoRechazoResp("");},
-                  style:{flex:1,padding:"11px",background:"white",color:"#64748b",border:"1.5px solid #e2e8f0",borderRadius:8,cursor:"pointer",fontSize:13}},"Cancelar"))),
+                  style:{flex:1,padding:"11px",background:"white",color:"#64748b",border:"1.5px solid #e2e8f0",borderRadius:8,cursor:"pointer",fontSize:13}},"Cancelar")))),
 
           ["esperando_validacion_directivo","esperando_validacion"].includes(f.estadoAvance) && h('div',{style:{background:"#f5f3ff",border:"1.5px solid #ddd6fe",borderRadius:8,padding:"10px 14px",fontSize:12,color:"#6d28d9",marginBottom:8}},"🔵 El responsable ya validó. La validación final del directivo se hace solo por mail, no desde este panel. Si no responde en 2 días, se asume aprobado y se notifica al solicitante.")),
         // TAB HISTORIAL
