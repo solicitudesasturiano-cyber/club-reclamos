@@ -1486,7 +1486,6 @@ let savedRec = {...rec,...f,adjuntosResolucion,comentarios,nuevoComentario:undef
       if (rec.esRecurrente) {
         savedRec = {...savedRec, estadoAvance:"completada"};
         await sbUpsert(savedRec);
-        setRecs(prev=>prev.map(r=>r.id===savedRec.id?savedRec:r));
       } else {
       savedRec = {...savedRec, estadoAvance:"esperando_validacion_responsable", fechaEnvioValidacion: new Date().toISOString()};
       await sbUpsert(savedRec);
