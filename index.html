@@ -242,6 +242,9 @@ function getDirectivos(cat) {
   return getCatCfg(cat).directivos || [];
 }
 function getDirectivosByCat(cat) { return getDirectivos(cat); }
+function getResponsables(cat) {
+  return getCatCfg(cat).responsables || [];
+}
 
 function isAdminCat(cat) {
   return ["servicios","cuotas"].includes(cat);
@@ -703,6 +706,50 @@ function buildAdjuntosHTML(adjuntos, titulo) {
   }
   html += '</div>';
   return html;
+}
+
+function buildValidacionHtml(rec, saludo, verUrl, tituloEtapa) {
+  const adjSolicitante = (rec.adjuntos||[]).filter(a=>a.url);
+  const adjEjecutor = (rec.adjuntosResolucion||[]).filter(a=>a.url);
+  const htmlAdjSol = buildAdjuntosHTML(adjSolicitante, 'Fotos del solicitante');
+  const htmlAdjEj = buildAdjuntosHTML(adjEjecutor, 'Fotos / evidencia del ejecutor');
+  const appUrlLocal = window.location.href.split("?")[0];
+  return `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+      <div style="background:#0f172a;padding:20px 24px;border-radius:12px 12px 0 0">
+        <div style="color:#93c5fd;font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-bottom:4px">Sistema de Reclamos</div>
+        <div style="color:white;font-size:18px;font-weight:700">${tituloEtapa}</div>
+      </div>
+      <div style="background:white;padding:24px;border-radius:0 0 12px 12px;border:1px solid #e2e8f0">
+        <p style="color:#475569;font-size:15px;margin-top:0">${saludo} la tarea <strong>${rec.numero}</strong> fue completada y esta esperando tu conformidad antes de notificar al solicitante.</p>
+        <div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;padding-bottom:6px;border-bottom:2px solid #f1f5f9">1. Solicitud original</div>
+        <table style="width:100%;font-size:14px;margin-bottom:12px">
+          <tr><td style="padding:4px 0;color:#64748b;width:130px">Numero:</td><td style="font-weight:700;font-family:monospace;color:#3b82f6">${rec.numero}</td></tr>
+          <tr><td style="padding:4px 0;color:#64748b">Sector:</td><td style="font-weight:600">${rec.sector}</td></tr>
+          <tr><td style="padding:4px 0;color:#64748b">Problema:</td><td>${rec.sub}</td></tr>
+          <tr><td style="padding:4px 0;color:#64748b">Solicitante:</td><td>${rec.nombre||'—'}</td></tr>
+          <tr><td style="padding:4px 0;color:#64748b">Descripcion:</td><td>${rec.desc||'—'}</td></tr>
+        </table>
+        ${htmlAdjSol}
+        <div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin:16px 0 10px;padding-bottom:6px;border-bottom:2px solid #f1f5f9">2. Asignacion</div>
+        <table style="width:100%;font-size:14px;margin-bottom:12px">
+          <tr><td style="padding:4px 0;color:#64748b;width:130px">Ejecutor:</td><td style="font-weight:600">${rec.ejecutorNombre||'—'}</td></tr>
+          <tr><td style="padding:4px 0;color:#64748b">Periodo:</td><td>${rec.fechaInicioEsperado||rec.fechaInicioOriginal||'—'} al ${rec.fechaCierreConfirmada||rec.fechaCierre||'—'}</td></tr>
+        </table>
+        <div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin:16px 0 10px;padding-bottom:6px;border-bottom:2px solid #f1f5f9">3. Resolucion del ejecutor</div>
+        <div style="background:#f0fdf4;border-left:4px solid #16a34a;border-radius:0 8px 8px 0;padding:12px 14px;margin-bottom:12px">
+          <div style="font-size:11px;color:#16a34a;font-weight:700;text-transform:uppercase;margin-bottom:4px">Lo que se hizo</div>
+          <div style="color:#14532d;font-size:14px">${rec.descripcionResolucion||'—'}</div>
+        </div>
+        ${htmlAdjEj}
+        <div style="text-align:center;margin-top:20px">
+          <a href="${verUrl}" style="display:inline-block;padding:14px 32px;background:#2563eb;color:white;text-decoration:none;border-radius:10px;font-weight:700;font-size:15px">Revisa si estas conforme con la resolucion</a>
+        </div>
+        <div style="text-align:center;margin-top:10px">
+          <a href="${panelUrl(appUrlLocal, isAdminCat(rec.cat)?'administracion':'intendencia')}" style="display:inline-block;padding:8px 18px;background:#1a3a6b;color:white;text-decoration:none;border-radius:8px;font-size:12px;font-weight:600">Ir al Panel de Gestión</a>
+        </div>
+        <p style="color:#94a3b8;font-size:12px;text-align:center;margin-top:16px">Si no respondés en 2 dias, se escala automaticamente.</p>
+      </div>
+    </div>`;
 }
 
 async function sendEmail({to, cc, subject, body, htmlBody, icsData}) {
@@ -1441,56 +1488,38 @@ let savedRec = {...rec,...f,adjuntosResolucion,comentarios,nuevoComentario:undef
       savedRec = {...savedRec, estadoAvance:"esperando_validacion_responsable", fechaEnvioValidacion: new Date().toISOString()};
       await sbUpsert(savedRec);
       setRecs(prev=>prev.map(r=>r.id===savedRec.id?savedRec:r));
-      const dirMails = getDirectivos(savedRec.cat).map(d=>d.mail).filter(Boolean);
-      const respMail = getResponsableMail(savedRec.cat);
-      if(dirMails.length) {
-        const adjSolicitante = (savedRec.adjuntos||[]).filter(a=>a.url);
-        const adjEjecutor = (savedRec.adjuntosResolucion||[]).filter(a=>a.url);
-        const htmlAdjSol = buildAdjuntosHTML(adjSolicitante, 'Fotos del solicitante');
-        const htmlAdjEj = buildAdjuntosHTML(adjEjecutor, 'Fotos / evidencia del ejecutor');
-        const verUrl = `${appUrl2}?validar=${savedRec.id}`;
-        const dirNombres = getDirectivos(savedRec.cat).filter(d=>d.mail).map(d=>d.nombre).filter(Boolean);
-        const saludoDir = dirNombres.length ? `Hola <strong>${dirNombres[0]}</strong>,` : 'Hola,';
-        const htmlBody = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
-          <div style="background:#0f172a;padding:20px 24px;border-radius:12px 12px 0 0">
-            <div style="color:#93c5fd;font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-bottom:4px">Sistema de Reclamos</div>
-            <div style="color:white;font-size:18px;font-weight:700">Tarea completada — requiere tu revision</div>
-          </div>
-          <div style="background:white;padding:24px;border-radius:0 0 12px 12px;border:1px solid #e2e8f0">
-            <p style="color:#475569;font-size:15px;margin-top:0">${saludoDir} la tarea <strong>${savedRec.numero}</strong> fue completada y esta esperando tu conformidad antes de notificar al solicitante.</p>
-            <div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;padding-bottom:6px;border-bottom:2px solid #f1f5f9">1. Solicitud original</div>
-            <table style="width:100%;font-size:14px;margin-bottom:12px">
-              <tr><td style="padding:4px 0;color:#64748b;width:130px">Numero:</td><td style="font-weight:700;font-family:monospace;color:#3b82f6">${savedRec.numero}</td></tr>
-              <tr><td style="padding:4px 0;color:#64748b">Sector:</td><td style="font-weight:600">${savedRec.sector}</td></tr>
-              <tr><td style="padding:4px 0;color:#64748b">Problema:</td><td>${savedRec.sub}</td></tr>
-              <tr><td style="padding:4px 0;color:#64748b">Solicitante:</td><td>${savedRec.nombre||'—'}</td></tr>
-              <tr><td style="padding:4px 0;color:#64748b">Descripcion:</td><td>${savedRec.desc||'—'}</td></tr>
-            </table>
-            ${htmlAdjSol}
-            <div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin:16px 0 10px;padding-bottom:6px;border-bottom:2px solid #f1f5f9">2. Asignacion</div>
-            <table style="width:100%;font-size:14px;margin-bottom:12px">
-              <tr><td style="padding:4px 0;color:#64748b;width:130px">Ejecutor:</td><td style="font-weight:600">${savedRec.ejecutorNombre||'—'}</td></tr>
-              <tr><td style="padding:4px 0;color:#64748b">Periodo:</td><td>${savedRec.fechaInicioEsperado||savedRec.fechaInicioOriginal||'—'} al ${savedRec.fechaCierreConfirmada||savedRec.fechaCierre||'—'}</td></tr>
-            </table>
-            <div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin:16px 0 10px;padding-bottom:6px;border-bottom:2px solid #f1f5f9">3. Resolucion del ejecutor</div>
-            <div style="background:#f0fdf4;border-left:4px solid #16a34a;border-radius:0 8px 8px 0;padding:12px 14px;margin-bottom:12px">
-              <div style="font-size:11px;color:#16a34a;font-weight:700;text-transform:uppercase;margin-bottom:4px">Lo que se hizo</div>
-              <div style="color:#14532d;font-size:14px">${savedRec.descripcionResolucion||'—'}</div>
-            </div>
-            ${htmlAdjEj}
-            <div style="text-align:center;margin-top:20px">
-              <a href="${verUrl}" style="display:inline-block;padding:14px 32px;background:#2563eb;color:white;text-decoration:none;border-radius:10px;font-weight:700;font-size:15px">Revisa si estas conforme con la resolucion</a>
-            </div>
-            <div style="text-align:center;margin-top:10px">
-              <a href="${panelUrl(appUrl2, isAdminCat(savedRec.cat)?'administracion':'intendencia')}" style="display:inline-block;padding:8px 18px;background:#1a3a6b;color:white;text-decoration:none;border-radius:8px;font-size:12px;font-weight:600">Ir al Panel de Gestión</a>
-            </div>
-            <p style="color:#94a3b8;font-size:12px;text-align:center;margin-top:16px">Si no respondés en 2 dias, el cliente sera notificado automaticamente.</p>
-          </div>
-        </div>`;
-        await sendEmail({to:dirMails, cc:[respMail].filter(Boolean),
+
+      const respMailsArr = getResponsables(savedRec.cat);
+      const respMailsList = respMailsArr.map(d=>d.mail).filter(Boolean);
+      const verUrl = `${appUrl2}?validar=${savedRec.id}`;
+
+      if(respMailsList.length) {
+        const respNombres = respMailsArr.filter(d=>d.mail).map(d=>d.nombre).filter(Boolean);
+        const saludoResp = respNombres.length ? `Hola <strong>${respNombres[0]}</strong>,` : 'Hola,';
+        await sendEmail({to:respMailsList,
           subject:`[Asturiano] Tarea completada — ${savedRec.numero}: ${savedRec.sector}`,
-          htmlBody,
-          body:`Hola,\n\nLa tarea ${savedRec.numero} fue marcada como completada.\n\nSector: ${savedRec.sector}\nProblema: ${savedRec.sub}\nEjecutor: ${savedRec.ejecutorNombre||"—"}\nLo que se hizo: ${savedRec.descripcionResolucion||"—"}\n\nVer y validar: ${verUrl}\n\nSi no respondés en 2 días, el cliente será notificado automáticamente.\n\n— Sistema de Reclamos — Asturiano`});
+          htmlBody: buildValidacionHtml(savedRec, saludoResp, verUrl, 'Tarea completada — requiere tu validación'),
+          body:`Hola,\n\nLa tarea ${savedRec.numero} fue marcada como completada.\n\nSector: ${savedRec.sector}\nProblema: ${savedRec.sub}\nEjecutor: ${savedRec.ejecutorNombre||"—"}\nLo que se hizo: ${savedRec.descripcionResolucion||"—"}\n\nVer y validar: ${verUrl}\n\nSi no respondés en 2 días, se escala automáticamente al directivo.\n\n— Sistema de Reclamos — Asturiano`});
+      } else {
+        // No hay responsable configurado para esta categoría → escalar directo al directivo
+        const dirMailsFallback = getDirectivos(savedRec.cat).map(d=>d.mail).filter(Boolean);
+        if(dirMailsFallback.length) {
+          const dirNombresFallback = getDirectivos(savedRec.cat).filter(d=>d.mail).map(d=>d.nombre).filter(Boolean);
+          const saludoDirFallback = dirNombresFallback.length ? `Hola <strong>${dirNombresFallback[0]}</strong>,` : 'Hola,';
+          savedRec = {...savedRec, estadoAvance:"esperando_validacion_directivo", fechaEnvioValidacionDirectivo: new Date().toISOString(),
+            comentarios:[...(savedRec.comentarios||[]),{texto:"No hay responsable configurado para esta categoría. Se escaló directo al directivo.",fecha:new Date().toISOString(),autor:"Sistema"}]};
+          await sbUpsert(savedRec);
+          setRecs(prev=>prev.map(r=>r.id===savedRec.id?savedRec:r));
+          await sendEmail({to:dirMailsFallback,
+            subject:`[Asturiano] Tarea completada — ${savedRec.numero}: ${savedRec.sector}`,
+            htmlBody: buildValidacionHtml(savedRec, saludoDirFallback, verUrl, 'Tarea completada — requiere tu validación'),
+            body:`Hola,\n\nLa tarea ${savedRec.numero} fue marcada como completada. No hay responsable configurado para esta categoría, por eso se te notifica directamente.\n\nVer y validar: ${verUrl}\n\n— Sistema de Reclamos — Asturiano`});
+        } else {
+          savedRec = {...savedRec, estadoAvance:"completada",
+            comentarios:[...(savedRec.comentarios||[]),{texto:"No hay responsable ni directivo configurado para esta categoría. Tarea completada sin validación.",fecha:new Date().toISOString(),autor:"Sistema"}]};
+          await sbUpsert(savedRec);
+          setRecs(prev=>prev.map(r=>r.id===savedRec.id?savedRec:r));
+        }
       }
       } // cierre else (no recurrente)
     }
@@ -3691,61 +3720,36 @@ function CompletarView({recId, recs, setRecs, loaded}) {
     // Si es recurrente → no hay validación del directivo ni mail al solicitante
     if (rec.esRecurrente) { setSending(false); setDone(true); return; }
 
-    // Notificar al directivo para que revise antes de notificar al cliente
-    const dirMails=getDirectivos(rec.cat).map(d=>d.mail).filter(Boolean);
-    const respMail=getResponsableMail(rec.cat);
-    if(dirMails.length) {
-      const verUrl2 = `${appUrl}?validar=${rec.id}`;
-      const adjSol2 = (updated.adjuntos||[]).filter(a=>a.url);
-      const adjEj2 = (updated.adjuntosResolucion||[]).filter(a=>a.url);
-      const htmlAdjSol2 = buildAdjuntosHTML(adjSol2, 'Fotos del solicitante');
-      const htmlAdjEj2 = buildAdjuntosHTML(adjEj2, 'Fotos / evidencia del ejecutor');
-      const dirNombres2 = getDirectivos(rec.cat).filter(d=>d.mail).map(d=>d.nombre).filter(Boolean);
-      const saludoDir2 = dirNombres2.length ? `Hola <strong>${dirNombres2[0]}</strong>,` : 'Hola,';
-      const htmlBody2 = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
-        <div style="background:#0f172a;padding:20px 24px;border-radius:12px 12px 0 0">
-          <div style="color:#93c5fd;font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-bottom:4px">Sistema de Reclamos</div>
-          <div style="color:white;font-size:18px;font-weight:700">Tarea completada — requiere tu revision</div>
-        </div>
-        <div style="background:white;padding:24px;border-radius:0 0 12px 12px;border:1px solid #e2e8f0">
-          <p style="color:#475569;font-size:15px;margin-top:0">${saludoDir2} la tarea <strong>${rec.numero}</strong> fue completada y esta esperando tu conformidad antes de notificar al solicitante.</p>
-          <div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;padding-bottom:6px;border-bottom:2px solid #f1f5f9">1. Solicitud original</div>
-          <table style="width:100%;font-size:14px;margin-bottom:12px">
-            <tr><td style="padding:4px 0;color:#64748b;width:130px">Sector:</td><td style="font-weight:600">${rec.sector}</td></tr>
-            <tr><td style="padding:4px 0;color:#64748b">Problema:</td><td>${rec.sub}</td></tr>
-            <tr><td style="padding:4px 0;color:#64748b">Solicitante:</td><td>${rec.nombre||'—'}</td></tr>
-            <tr><td style="padding:4px 0;color:#64748b">Descripcion:</td><td>${rec.desc||'—'}</td></tr>
-          </table>
-          ${htmlAdjSol2}
-          <div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin:16px 0 10px;padding-bottom:6px;border-bottom:2px solid #f1f5f9">2. Asignacion</div>
-          <table style="width:100%;font-size:14px;margin-bottom:12px">
-            <tr><td style="padding:4px 0;color:#64748b;width:130px">Ejecutor:</td><td style="font-weight:600">${rec.ejecutorNombre||'—'}</td></tr>
-            <tr><td style="padding:4px 0;color:#64748b">Periodo:</td><td>${rec.fechaInicioEsperado||rec.fechaInicioOriginal||'—'} al ${rec.fechaCierreConfirmada||rec.fechaCierre||'—'}</td></tr>
-          </table>
-          <div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin:16px 0 10px;padding-bottom:6px;border-bottom:2px solid #f1f5f9">3. Resolucion del ejecutor</div>
-          <div style="background:#f0fdf4;border-left:4px solid #16a34a;border-radius:0 8px 8px 0;padding:12px 14px;margin-bottom:4px">
-            <div style="font-size:11px;color:#16a34a;font-weight:700;text-transform:uppercase;margin-bottom:4px">Lo que se hizo</div>
-            <div style="color:#14532d;font-size:14px">${desc}</div>
-          </div>
-          ${htmlAdjEj2}
-          <div style="text-align:center;margin-top:24px">
-            <a href="${verUrl2}" style="display:inline-block;padding:14px 32px;background:#2563eb;color:white;text-decoration:none;border-radius:10px;font-weight:700;font-size:15px">Revisa si estas conforme con la resolucion</a>
-          </div>
-          <div style="text-align:center;margin-top:10px">
-            <a href="${panelUrl(appUrl, isAdminCat(rec.cat)?'administracion':'intendencia')}" style="display:inline-block;padding:8px 18px;background:#1a3a6b;color:white;text-decoration:none;border-radius:8px;font-size:12px;font-weight:600">Ir al Panel de Gestión</a>
-          </div>
-          <p style="color:#94a3b8;font-size:12px;text-align:center;margin-top:16px">Si no respondés en 2 dias, el cliente sera notificado automaticamente.</p>
-        </div>
-      </div>`;
-      await sendEmail({to:dirMails, cc:[respMail].filter(Boolean),
+    // Notificar al responsable para que valide antes de escalar al directivo
+    const verUrl2 = `${appUrl}?validar=${rec.id}`;
+    const respMailsArr2 = getResponsables(rec.cat);
+    const respMailsList2 = respMailsArr2.map(d=>d.mail).filter(Boolean);
+
+    if(respMailsList2.length) {
+      const respNombres2 = respMailsArr2.filter(d=>d.mail).map(d=>d.nombre).filter(Boolean);
+      const saludoResp2 = respNombres2.length ? `Hola <strong>${respNombres2[0]}</strong>,` : 'Hola,';
+      await sendEmail({to:respMailsList2,
         subject:`[Asturiano] Tarea completada — ${rec.numero}: ${rec.sector}`,
-        htmlBody:htmlBody2,
-        body:`Hola,\n\nLa tarea ${rec.numero} fue completada.\n\nSector: ${rec.sector}\nEjecutor: ${rec.ejecutorNombre||"—"}\nLo que se hizo: ${desc}\n\nRevisa si estas conforme: ${verUrl2}\n\nSi no respondés en 2 días, el cliente será notificado automáticamente.\n\n— Sistema de Reclamos — Asturiano`});
+        htmlBody: buildValidacionHtml(updated, saludoResp2, verUrl2, 'Tarea completada — requiere tu validación'),
+        body:`Hola,\n\nLa tarea ${rec.numero} fue completada.\n\nSector: ${rec.sector}\nProblema: ${rec.sub}\nSolicitante: ${rec.nombre||'—'}\nEjecutor: ${rec.ejecutorNombre||"—"}\nLo que se hizo: ${desc}\n\nVer y validar: ${verUrl2}\n\nSi no respondés en 2 días, se escala automáticamente al directivo.\n\n— Sistema de Reclamos — Asturiano`});
     } else {
-      // Si no hay directivo configurado → notificar al cliente directamente
-      if(rec.email) await sendEmail({to:rec.email,subject:`[Asturiano]  Tu solicitud fue resuelta — ${rec.numero}`,
-        body:`Hola ${rec.nombre},\n\nNos alegra informarte que el inconveniente que reportaste en ${rec.sector} fue resuelto. ${msgCat}.\n\nLo que se hizo:\n${desc}\n\nCuando tengas un momento, evaluá si el problema quedó resuelto y calificá la atención:\n${calificarUrl}\n\nGracias por ayudarnos a mejorar el club.\n\n— Equipo de Intendencia Asturiano`});
-      await sbUpsert({...updated, estadoAvance:"completada"});
+      // No hay responsable configurado → escalar directo al directivo
+      const dirMailsFallback2 = getDirectivos(rec.cat).map(d=>d.mail).filter(Boolean);
+      if(dirMailsFallback2.length) {
+        const dirNombresFallback2 = getDirectivos(rec.cat).filter(d=>d.mail).map(d=>d.nombre).filter(Boolean);
+        const saludoDirFallback2 = dirNombresFallback2.length ? `Hola <strong>${dirNombresFallback2[0]}</strong>,` : 'Hola,';
+        const updatedDir = {...updated, estadoAvance:"esperando_validacion_directivo", fechaEnvioValidacionDirectivo: new Date().toISOString(),
+          comentarios:[...(updated.comentarios||[]),{texto:"No hay responsable configurado para esta categoría. Se escaló directo al directivo.",fecha:new Date().toISOString(),autor:"Sistema"}]};
+        await sbUpsert(updatedDir);
+        setRecs(prev=>prev.map(r=>r.id===rec.id?updatedDir:r));
+        await sendEmail({to:dirMailsFallback2,
+          subject:`[Asturiano] Tarea completada — ${rec.numero}: ${rec.sector}`,
+          htmlBody: buildValidacionHtml(updatedDir, saludoDirFallback2, verUrl2, 'Tarea completada — requiere tu validación'),
+          body:`Hola,\n\nLa tarea ${rec.numero} fue completada. No hay responsable configurado, por eso se te notifica directamente.\n\nVer y validar: ${verUrl2}\n\n— Sistema de Reclamos — Asturiano`});
+      } else {
+        await sbUpsert({...updated, estadoAvance:"completada",
+          comentarios:[...(updated.comentarios||[]),{texto:"No hay responsable ni directivo configurado para esta categoría. Tarea completada sin validación.",fecha:new Date().toISOString(),autor:"Sistema"}]});
+      }
     }
     setSending(false);setDone(true);
   };
@@ -3933,6 +3937,20 @@ function ValidarDetalleView({recId, recs, setRecs, loaded, setView}) {
         }]};
       await sbUpsert(updated);
       setRecs(prev=>prev.map(r=>r.id===recId?updated:r));
+
+      // Notificar al directivo de inmediato
+      const dirMailsArr = getDirectivos(rec.cat);
+      const dirMailsList = dirMailsArr.map(d=>d.mail).filter(Boolean);
+      if(dirMailsList.length) {
+        const dirNombresArr = dirMailsArr.filter(d=>d.mail).map(d=>d.nombre).filter(Boolean);
+        const saludoDirArr = dirNombresArr.length ? `Hola <strong>${dirNombresArr[0]}</strong>,` : 'Hola,';
+        const verUrlDir = `${appUrl}?validar=${rec.id}`;
+        await sendEmail({to:dirMailsList,
+          subject:`[Asturiano] Tarea completada — ${updated.numero}: ${updated.sector}`,
+          htmlBody: buildValidacionHtml(updated, saludoDirArr, verUrlDir, 'Tarea completada — requiere tu validación final'),
+          body:`Hola,\n\nEl responsable aprobó la resolución de la tarea ${updated.numero}. Ahora requiere tu validación final.\n\nVer y validar: ${verUrlDir}\n\nSi no respondés en 2 días, se asume aprobado y se notifica al solicitante.\n\n— Sistema de Reclamos — Asturiano`});
+      }
+
       setSending(false); setDone("aprobado_responsable");
       return;
     }
