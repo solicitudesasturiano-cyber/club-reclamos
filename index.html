@@ -550,7 +550,8 @@ function getEstadoEjecucion(r) {
     : !!r.ejecutorConfirmado;
 
   const fechaActiva = ahora >= inicio;
-  const demorada = cierre && ahora > cierre;
+  const finDelDiaCierre = cierre ? new Date(cierre.getTime() + 86400000 - 1) : null;
+  const demorada = finDelDiaCierre && new Date() > finDelDiaCierre;
 
   const prefix = r.reabierta ? "↩️ Reabierta — " : "";
 
@@ -1522,6 +1523,7 @@ let savedRec = {...rec,...f,adjuntosResolucion,comentarios,nuevoComentario:undef
       }
       } // cierre else (no recurrente)
     }
+    setF(p=>({...p, estadoAvance: savedRec.estadoAvance}));
     setSending(false);
   };
 
@@ -3292,12 +3294,8 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
   const ESTADOS_COMPLETADOS = ["completada","consolidada","vinculado_proyecto","esperando_validacion_responsable","esperando_validacion_directivo"];
 
   const filtrados = recs.filter(r=>{
-    // Archivo: solo completados/consolidados
+    // Archivo: filtro opcional, no obligatorio para ver completadas/consolidadas
     if(filtros.archivo) return ESTADOS_COMPLETADOS.includes(r.estadoAvance);
-    // Ocultar consolidadas del panel principal
-    if(r.estadoAvance==="consolidada" && !filtros.estado && !filtros.archivo) return false;
-    // Ocultar completados del panel principal (van al archivo)
-    if(r.estadoAvance==="completada" && !filtros.estado && !filtros.archivo) return false;
     if(filtros.estado&&r.estadoAvance!==filtros.estado) return false;
     if(filtros.cat&&r.cat!==filtros.cat) return false;
     if(filtros.sector&&r.sector!==filtros.sector) return false;
@@ -4054,6 +4052,9 @@ function ValidarDetalleView({recId, recs, setRecs, loaded, setView}) {
     setSending(true);
     const autor = esParaResponsable ? "Responsable" : "Directivo";
     const updated={...rec,estadoAvance:"bajo_analisis",reabierta:true,descripcionResolucion:"",ejecutorConfirmado:false,
+      ejecutorRechazado:false, ejecutorMail:"", ejecutorNombre:"",
+      ejecutores_lista:(rec.ejecutores_lista||[]).map(ej=>({...ej,confirmado:false,rechazado:false,fechaConfirmacion:null})),
+      fechaAsignacion:null,
       comentarios:[...(rec.comentarios||[]),{
         texto:autor+" rechazó la resolución. Motivo: "+motivoRechazo,
         fecha:new Date().toISOString(), autor
@@ -5784,7 +5785,7 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
             h('button',{onClick:function(){setShowRechazo(true);},
               style:{flex:1,padding:"13px",background:"#fef2f2",color:"#dc2626",border:"2px solid #fecaca",
                 borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700}},"Rechazar")),
-          estadoEj==="confirmado" && !showNoPude && h('div',{style:{display:"flex",flexDirection:"column",gap:8}},
+          estadoEj==="confirmado" && !["esperando_validacion_responsable","esperando_validacion_directivo","esperando_validacion","completada"].includes(r.estadoAvance) && !showNoPude && h('div',{style:{display:"flex",flexDirection:"column",gap:8}},
             h('a',{href:window.location.href.split("?")[0]+"?completar="+r.id,
               style:{display:"block",padding:"13px",background:"linear-gradient(135deg,#3b82f6,#1d4ed8)",
                 color:"white",textDecoration:"none",borderRadius:10,fontSize:14,fontWeight:700,textAlign:"center"}},
@@ -5793,6 +5794,7 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
               style:{padding:"11px",background:"#fff7ed",color:"#c2410c",border:"2px solid #fed7aa",
                 borderRadius:10,cursor:"pointer",fontSize:13,fontWeight:600}},
               "❌ No pude completarla")),
+          ["esperando_validacion_responsable","esperando_validacion_directivo","esperando_validacion","completada"].includes(r.estadoAvance) && h('div',{style:{background:"#f0fdf4",border:"1.5px solid #bbf7d0",borderRadius:10,padding:"13px",textAlign:"center",fontSize:14,fontWeight:700,color:"#15803d"}},"✅ Tarea completada"),
           showNoPude && h('div',{style:{background:"#fff7ed",border:"1.5px solid #fed7aa",borderRadius:10,padding:14}},
             h('div',{style:{fontWeight:700,color:"#c2410c",marginBottom:8,fontSize:13}},"¿Por qué no pudiste completarla?"),
             h('textarea',{value:motivoNoPude,onChange:function(e){setMotivoNoPude(e.target.value);},rows:3,
