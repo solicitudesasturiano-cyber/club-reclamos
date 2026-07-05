@@ -824,36 +824,45 @@ function similitudSemantica(a, b) {
 }
 
 async function detectarDuplicados(nuevoRec, todosRecs) {
+  const esOtro = (v) => !!(v && v.toLowerCase() === "otro");
+
   const candidatos = todosRecs.filter(r =>
     r.id !== nuevoRec.id &&
-    !r.esRecurrente &&  // excluir tickets recurrentes
-    !["completada","consolidada","vinculado_proyecto","esperando_validacion_responsable","esperando_validacion_directivo"].includes(r.estadoAvance) &&
-    r.desc && r.desc.trim().length > 3 &&
-    !(r.sub && r.sub.toLowerCase() === "otro") &&       // excluir sub "Otro"
-    !(nuevoRec.sub && nuevoRec.sub.toLowerCase() === "otro")  // excluir si el nuevo es "Otro"
+    !r.esRecurrente &&
+    !["completada","consolidada","vinculado_proyecto","esperando_validacion_responsable","esperando_validacion_directivo"].includes(r.estadoAvance)
   );
   if(!candidatos.length) return [];
 
-  const UMBRAL = 0.20;
   const similares = [];
 
   for(const r of candidatos) {
-    const scoreDesc = similitudSemantica(nuevoRec.desc, r.desc);
-    const sectorCoincide = nuevoRec.sector === r.sector;
-    const scoreFinal = scoreDesc * 0.8 + (sectorCoincide ? 0.2 : 0);
-    console.log(`Dup check ${nuevoRec.numero} vs ${r.numero}: desc=${scoreDesc.toFixed(2)} sector=${sectorCoincide} final=${scoreFinal.toFixed(2)}`);
-    if(scoreFinal >= UMBRAL) {
+    const mismoTipo = nuevoRec.cat === r.cat;
+    const mismoSector = nuevoRec.sectorGrande === r.sectorGrande;
+    const mismoEspacio = nuevoRec.sector === r.sector;
+    if(!mismoTipo || !mismoSector || !mismoEspacio) continue;
+
+    const mismoSubEspacio = !!nuevoRec.subEspacio && !!r.subEspacio && nuevoRec.subEspacio === r.subEspacio;
+    const mismoDetalle = !!nuevoRec.sub && !!r.sub && nuevoRec.sub === r.sub;
+
+    const viaSubEspacio = mismoSubEspacio && !esOtro(nuevoRec.subEspacio) && !esOtro(r.subEspacio);
+    const viaDetalle = mismoDetalle && !esOtro(nuevoRec.sub) && !esOtro(r.sub);
+
+    if(viaSubEspacio || viaDetalle) {
       similares.push({
         numero: r.numero,
         similitud: "alta",
-        razon: `Descripción similar (${(scoreDesc*100).toFixed(0)}% coincidencia)${sectorCoincide?" · mismo sector":""}`,
+        razon: viaSubEspacio && viaDetalle
+          ? "Mismo tipo, sector, espacio, sub-espacio y detalle del problema"
+          : viaSubEspacio
+            ? "Mismo tipo, sector, espacio y sub-espacio"
+            : "Mismo tipo, sector, espacio y detalle del problema",
         descExistente: r.desc,
-        sectorCoincide,
-        _score: scoreFinal
+        sectorCoincide: true,
+        _score: 1
       });
     }
   }
-  return similares.sort((a,b) => b._score - a._score);
+  return similares;
 }
 
 // ── REACT HELPERS ──────────────────────────────────────────────────────────
