@@ -1481,6 +1481,7 @@ let savedRec = {...rec,...f,adjuntosResolucion,comentarios,nuevoComentario:undef
       }
     }
     // When marked as completada → set to esperando_validacion (directivo must approve first)
+    console.log("DEBUG completar:", {f_estado: f.estadoAvance, rec_estado_original: rec.estadoAvance, descripcion: f.descripcionResolucion});
     if((f.estadoAvance==="completada"||f.estadoAvance==="esperando_validacion"||f.estadoAvance==="esperando_validacion_responsable") && !["completada","esperando_validacion","esperando_validacion_responsable","esperando_validacion_directivo"].includes(rec.estadoAvance) && f.descripcionResolucion.trim()) {
       const appUrl2 = window.location.href.split("?")[0];
       // Tickets recurrentes: no requieren validación del directivo ni mail al solicitante
