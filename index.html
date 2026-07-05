@@ -6254,7 +6254,7 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
         h('p',{style:{color:"#64748b",fontSize:14}},"No encontramos la solicitud "+numSeg+". Verificá el número e intentá de nuevo."),
         h('button',{onClick:()=>setView("admin"),style:{marginTop:20,padding:"10px 24px",background:"#1a3a6b",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:600}},"Consultar otra solicitud")));
     const cat=CATS[rec.cat]; const pri=PRIS.find(p=>p.id===rec.pri);
-    const est=ESTADOS.find(e=>e.id===rec.estadoAvance);
+    const est=getEstadoEjecucion(rec) || ESTADOS.find(e=>e.id===rec.estadoAvance);
     const appUrl=window.location.href.split("?")[0];
     return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#1a3a6b,#0f2347)",padding:"20px 16px 40px"}},
       h('div',{style:{textAlign:"center",marginBottom:24,paddingTop:20}},
