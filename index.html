@@ -3525,7 +3525,7 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
           !filtrados.length && h('tr',null,h('td',{colSpan:11,style:{textAlign:"center",padding:40,color:"#94a3b8"}},"No hay solicitudes")),
           ...filtrados.slice((pagina-1)*POR_PAGINA, pagina*POR_PAGINA).map(r=>{
             const cat=CATS[r.cat]; const crit=PRIS.find(p=>p.id===(r.criticidad||r.pri));
-            const est=getEstadoEjecucion(rec) || ESTADOS.find(e=>e.id===rec.estadoAvance); const t=getTiming(r);
+            const est=getEstadoEjecucion(r) || ESTADOS.find(e=>e.id===r.estadoAvance); const t=getTiming(r);
             const esVinculado = r.estadoAvance==="vinculado_proyecto";
             const esRecurrente = !!r.esRecurrente;
             const rowBg = esVinculado?"#f8f7ff":esRecurrente?"#faf5ff":"white";
