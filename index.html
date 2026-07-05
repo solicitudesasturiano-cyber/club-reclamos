@@ -1153,7 +1153,7 @@ function PlanillaPresupuesto(props) {
       totGen>0&&h('span',{style:{marginLeft:"auto",fontWeight:700,color:"#15803d",fontSize:13}},"Total: "+fmt(totGen))));
 }
 
-function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs}) {
+function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs, area}) {
   const [tab,setTab] = useState("gestion");
   const yaFueAsignado = !!(rec.ejecutorMailOriginal || rec.fechaInicioOriginal);
   const [f,setF] = useState({
@@ -1182,6 +1182,15 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs}) {
   const [showRechazoResp,setShowRechazoResp] = useState(false);
   const [motivoRechazoResp,setMotivoRechazoResp] = useState("");
   const [sendingValidacionResp,setSendingValidacionResp] = useState(false);
+  const [proyectosReales,setProyectosReales] = useState([]);
+  useEffect(()=>{
+    fetch(SUPABASE_URL+"/rest/v1/"+SUPABASE_TABLE+"?select=data&order=created_at.desc", {headers: SB_HEADERS})
+      .then(r=>r.json())
+      .then(rows=>{
+        const lista = (Array.isArray(rows)?rows:[]).map(r=>r.data).filter(p=>p && p._type==="proyecto" && !p._deleted && p.area===area);
+        setProyectosReales(lista);
+      });
+  },[area]);
   const fileRef = useRef();
   const set = (k,v) => setF(p=>({...p,[k]:v}));
   const cat = CATS[rec.cat]; const pri = PRIS.find(p=>p.id===rec.pri); const t = getTiming(rec);
@@ -1735,11 +1744,7 @@ Resolución: ${descripcion||"—"}`});
           rec.ejecutorRechazado && h('div',{style:{background:"#fef2f2",border:"1.5px solid #fecaca",borderRadius:10,padding:12,fontSize:13,color:"#dc2626",fontWeight:600,marginBottom:16}},
             "❌ Tarea rechazada",h('br'),h('span',{style:{fontWeight:400,fontSize:12}},"Motivo: "+rec.motivoRechazo),h('br'),h('span',{style:{fontWeight:400,fontSize:12}},"Seleccioná un nuevo ejecutor para reasignar.")),
           h('div',{style:{background:"#eff6ff",border:"1.5px solid #bfdbfe",borderRadius:10,padding:12,marginBottom:16,fontSize:13,color:"#1d4ed8",lineHeight:1.5}},"📧 Al asignar un ejecutor interno se enviará email con links de confirmar/rechazar."),
-          // Toggle interno vs tercero
-          h('div',{style:{display:"flex",gap:8,marginBottom:14}},
-            ...[["interno","👷 Empleado del club"],["tercero","🏢 Proveedor externo"]].map(([tipo,lbl])=>
-              h('button',{key:tipo,onClick:()=>{set("tipoEjecutor",tipo);if(tipo==="tercero"){set("ejecutorMail","tercero@externo");set("ejecutorNombre",f.empresaNombre||"");}else{set("ejecutorMail","");set("ejecutorNombre","");set("empresaNombre","");set("empresaTelefono","");}},
-                style:{flex:1,padding:"8px",borderRadius:8,border:f.tipoEjecutor===tipo?"2px solid #3b82f6":"2px solid #e2e8f0",background:f.tipoEjecutor===tipo?"#eff6ff":"white",color:f.tipoEjecutor===tipo?"#1d4ed8":"#64748b",cursor:"pointer",fontSize:13,fontWeight:600}},lbl))),
+          
           // Lista de ejecutores asignados
           h('div',{style:{marginBottom:12}},
             h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},"Ejecutores asignados"),
@@ -1754,11 +1759,11 @@ Resolución: ${descripcion||"—"}`});
                       ? h('span',{style:{display:"inline-block",marginTop:3,padding:"2px 8px",background:"#f0fdf4",color:"#15803d",borderRadius:6,fontSize:10,fontWeight:700}},"Confirmó "+fdt(ej.fechaConfirmacion))
                       : h('span',{style:{display:"inline-block",marginTop:3,padding:"2px 8px",background:"#fff7ed",color:"#f97316",borderRadius:6,fontSize:10,fontWeight:700}},"Sin respuesta")),
                 h('button',{onClick:()=>{const l=[...(f.ejecutores_lista||[])];l.splice(i,1);set("ejecutores_lista",l);if(l.length===0){set("ejecutorMail","");set("ejecutorNombre","");}else{set("ejecutorMail",l[0].mail&&l[0].mail!=="tercero@externo"?l[0].mail:"");set("ejecutorNombre",l.map(e=>e.nombre).join(", "));}},style:{background:"none",border:"none",cursor:"pointer",color:"#ef4444",fontSize:14}},"✕")))),
-            // Add executor
-            h('div',{style:{display:"flex",gap:6,marginBottom:8}},
-              ...[["interno","👷 Empleado"],["tercero","🏢 Proveedor"]].map(([tipo,lbl])=>
-                h('button',{key:tipo,onClick:()=>set("tipoEjecutor",tipo),
-                  style:{flex:1,padding:"6px",borderRadius:8,border:f.tipoEjecutor===tipo?"2px solid #3b82f6":"2px solid #e2e8f0",background:f.tipoEjecutor===tipo?"#eff6ff":"white",color:f.tipoEjecutor===tipo?"#1d4ed8":"#64748b",cursor:"pointer",fontSize:12,fontWeight:600}},lbl))),
+            // Toggle interno vs tercero
+            h('div',{style:{display:"flex",gap:8,marginBottom:14}},
+              ...[["interno","👷 Empleado del club"],["tercero","🏢 Proveedor externo"]].map(([tipo,lbl])=>
+                h('button',{key:tipo,onClick:()=>{set("tipoEjecutor",tipo);if(tipo==="tercero"){set("ejecutorMail","tercero@externo");set("ejecutorNombre",f.empresaNombre||"");}else{set("ejecutorMail","");set("ejecutorNombre","");set("empresaNombre","");set("empresaTelefono","");}},
+                  style:{flex:1,padding:"8px",borderRadius:8,border:f.tipoEjecutor===tipo?"2px solid #3b82f6":"2px solid #e2e8f0",background:f.tipoEjecutor===tipo?"#eff6ff":"white",color:f.tipoEjecutor===tipo?"#1d4ed8":"#64748b",cursor:"pointer",fontSize:13,fontWeight:600}},lbl))),
             f.tipoEjecutor==="interno"
               ? h('div',{style:{display:"flex",gap:6}},
                   h('select',{value:"",onChange:e=>{if(!e.target.value)return;const ej=ejecutores.find(x=>x.mail===e.target.value);if(ej&&!(f.ejecutores_lista||[]).find(x=>x.mail===ej.mail)){const ejConEstado={...ej,confirmado:false,rechazado:false,fechaConfirmacion:null};const l=[...(f.ejecutores_lista||[]),ejConEstado];set("ejecutores_lista",l);set("ejecutorMail",l[0].mail);set("ejecutorNombre",l.map(x=>x.nombre).join(", "));}e.target.value="";},style:{...aS(),flex:1}},
@@ -1770,7 +1775,7 @@ Resolución: ${descripcion||"—"}`});
                   h('button',{onClick:()=>{if(!f.empresaNombre.trim())return;const ej={nombre:f.empresaNombre,mail:"",telefono:f.empresaTelefono};const l=[...(f.ejecutores_lista||[]),ej];set("ejecutores_lista",l);set("ejecutorMail","tercero");set("ejecutorNombre",l.map(x=>x.nombre).join(", "));set("empresaNombre","");set("empresaTelefono","");},style:{padding:"7px 14px",background:"#1a3a6b",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600}},"+ Agregar"))),
           !rec.ejecutorRechazado && rec.ejecutorConfirmado && h('div',{style:{background:"#f0fdf4",border:"1.5px solid #bbf7d0",borderRadius:10,padding:12,fontSize:13,color:"#15803d",fontWeight:600,marginBottom:12}},"✅ Confirmó el "+fdt(rec.fechaConfirmacion)),
           // Consolidación
-          h('div',{style:{marginTop:12,background:"#f8fafc",borderRadius:10,padding:12}},
+          tab==="asignacion" && h('div',{style:{marginTop:12,background:"#f8fafc",borderRadius:10,padding:12}},
             h('div',{style:{fontSize:12,fontWeight:700,color:"#374151",marginBottom:4}},"🔗 Consolidar con otros reclamos"),
             h('div',{style:{fontSize:12,color:"#64748b",marginBottom:10}},"Agregá los números de reclamos que resuelve esta misma tarea:"),
             h('div',{style:{display:"flex",flexDirection:"column",gap:6}},
@@ -1785,26 +1790,23 @@ Resolución: ${descripcion||"—"}`});
             (f.reclamosHijos||[]).length > 0 && h('div',{style:{marginTop:8,fontSize:11,color:"#8b5cf6"}},
               "Al guardar, este reclamo consolida "+(f.reclamosHijos.length+1)+" reclamos en total."))),
           // Vincular a proyecto
-          h('div',{style:{marginTop:12,background:"#f5f3ff",borderRadius:10,padding:12,border:"1.5px solid #ddd6fe"}},
+          tab==="asignacion" && h('div',{style:{marginTop:12,background:"#f5f3ff",borderRadius:10,padding:12,border:"1.5px solid #ddd6fe"}},
             h('div',{style:{fontSize:12,fontWeight:700,color:"#5b21b6",marginBottom:4}},"🏗️ Vincular a proyecto"),
             h('div',{style:{fontSize:12,color:"#6d28d9",marginBottom:8}},"Si esta solicitud forma parte de una obra o proyecto, vinculalo acá:"),
             h('div',null,
-              h('select',{value:f.proyectoVinculadoId||"",onChange:e=>{
+              h('select',{value:f.proyectoVinculadoId||"",onChange:async e=>{
                 const pId=Number(e.target.value);
-                const proyectos = ls.get("proyectos") || [];
-                const p=proyectos.find(x=>x.id===pId);
+                const p=proyectosReales.find(x=>x.id===pId);
                 set("proyectoVinculadoId",pId||null);
                 set("proyectoTitulo",p?.titulo||"");
                 if(pId) set("estadoAvance","vinculado_proyecto");
-                // Sync: add this solicitud to proyecto's reclamosVinculados in localStorage
-                if(pId && p && !( p.reclamosVinculados||[]).includes(rec.numero)) {
+                if(pId && p && !(p.reclamosVinculados||[]).includes(rec.numero)) {
                   const updated = {...p, reclamosVinculados:[...(p.reclamosVinculados||[]),rec.numero]};
-                  const lista = proyectos.map(x=>x.id===pId?updated:x);
-                  ls.set("proyectos",lista);
+                  await sbUpsert(updated);
                 }
               },style:{width:"100%",padding:"9px 12px",borderRadius:8,border:"1.5px solid #ddd6fe",fontSize:13,outline:"none",background:"white"}},
                 h('option',{value:""},"— Sin vincular —"),
-                ...(ls.get("proyectos")||[]).map(p=>h('option',{key:p.id,value:p.id},p.titulo))),
+                ...proyectosReales.map(p=>h('option',{key:p.id,value:p.id},p.titulo))),
               f.proyectoTitulo && h('div',{style:{marginTop:6,fontSize:12,color:"#5b21b6",fontWeight:600}},"✅ Vinculado a: "+f.proyectoTitulo))),
           tab==="asignacion" && f.tipoEjecutor !== "tercero" && h('div',{style:{marginTop:16,paddingTop:16,borderTop:"1.5px solid #f1f5f9",marginBottom:8}},
             h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:!f.ejecutorMail||f.nuevoComentario.trim()?"#374151":"#dc2626",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Comentario para el ejecutor *"),
@@ -3667,7 +3669,7 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
     mainTab==="reclamos" && view==="kanban" && h(Kanban,{recs:filtrados,onEdit:setModal}),
     mainTab==="proyectos" && h(ProyectosTab,{recs,onUpdate,ejecutores,area:area}),
     mainTab==="recurrencias" && h(RecurrenciasTab,{area,ejecutores,recs}),
-    modal && h(EditModal,{key:modal.id,rec:modal,onClose:()=>setModal(null),onSave:async u=>{await onUpdate(u,modal);},ejecutores,onUpdateHijo:async u=>{await onUpdate(u,u);},recs}),
+    modal && h(EditModal,{key:modal.id,rec:modal,onClose:()=>setModal(null),onSave:async u=>{await onUpdate(u,modal);},ejecutores,onUpdateHijo:async u=>{await onUpdate(u,u);},recs,area}),
     showCfg && h(PanelConfig,{onClose:()=>setShowCfg(false),onSaveEjecutores:ejs=>{setEjecutores(ejs);setShowCfg(false);},area}),
     modalDup && h(ModalConsolidacion,{
       hijo: modalDup.hijo,
