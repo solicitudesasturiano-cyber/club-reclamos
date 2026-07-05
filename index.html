@@ -242,6 +242,9 @@ function getDirectivos(cat) {
   return getCatCfg(cat).directivos || [];
 }
 function getDirectivosByCat(cat) { return getDirectivos(cat); }
+function getResponsables(cat) {
+  return getCatCfg(cat).responsables || [];
+}
 
 function isAdminCat(cat) {
   return ["servicios","cuotas"].includes(cat);
@@ -262,7 +265,7 @@ const PASS_DASHBOARD = "metricas2026";
 const SUPABASE_URL   = "https://pltfqosqinzufvjpiddr.supabase.co";
 const SUPABASE_KEY   = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBsdGZxb3NxaW56dWZ2anBpZGRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1MjA4NDksImV4cCI6MjA5MTA5Njg0OX0.d-EMCtfVqi6LvtbEdTBvH_ZaXiFJD6oXukPvMpbobXQ";
 const SUPABASE_TABLE = "reclamos";
-const SCRIPT_URL     = "https://script.google.com/macros/s/AKfycbzZh2AxTboR13rjJeUdXSdO7jjUPkZcIPoeWFYUZynkyWkP6LjNbqQxVxpPIvT26Kh6/exec";
+const SCRIPT_URL     = "https://script.google.com/macros/s/AKfycbxm0SGfcMlAxkSIFm3HfSpZ_bDQnOOOQfa7VPf9xu0duk0mxLvhxQCwdaLzYkbc3e_h/exec";
 
 // Genera link al panel con deep-link al área correcta
 function panelUrl(appUrl, area) {
@@ -547,7 +550,8 @@ function getEstadoEjecucion(r) {
     : !!r.ejecutorConfirmado;
 
   const fechaActiva = ahora >= inicio;
-  const demorada = cierre && ahora > cierre;
+  const finDelDiaCierre = cierre ? new Date(cierre.getTime() + 86400000 - 1) : null;
+  const demorada = finDelDiaCierre && new Date() > finDelDiaCierre;
 
   const prefix = r.reabierta ? "↩️ Reabierta — " : "";
 
@@ -705,6 +709,50 @@ function buildAdjuntosHTML(adjuntos, titulo) {
   return html;
 }
 
+function buildValidacionHtml(rec, saludo, verUrl, tituloEtapa) {
+  const adjSolicitante = (rec.adjuntos||[]).filter(a=>a.url);
+  const adjEjecutor = (rec.adjuntosResolucion||[]).filter(a=>a.url);
+  const htmlAdjSol = buildAdjuntosHTML(adjSolicitante, 'Fotos del solicitante');
+  const htmlAdjEj = buildAdjuntosHTML(adjEjecutor, 'Fotos / evidencia del ejecutor');
+  const appUrlLocal = window.location.href.split("?")[0];
+  return `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+      <div style="background:#0f172a;padding:20px 24px;border-radius:12px 12px 0 0">
+        <div style="color:#93c5fd;font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-bottom:4px">Sistema de Reclamos</div>
+        <div style="color:white;font-size:18px;font-weight:700">${tituloEtapa}</div>
+      </div>
+      <div style="background:white;padding:24px;border-radius:0 0 12px 12px;border:1px solid #e2e8f0">
+        <p style="color:#475569;font-size:15px;margin-top:0">${saludo} la tarea <strong>${rec.numero}</strong> fue completada y esta esperando tu conformidad antes de notificar al solicitante.</p>
+        <div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;padding-bottom:6px;border-bottom:2px solid #f1f5f9">1. Solicitud original</div>
+        <table style="width:100%;font-size:14px;margin-bottom:12px">
+          <tr><td style="padding:4px 0;color:#64748b;width:130px">Numero:</td><td style="font-weight:700;font-family:monospace;color:#3b82f6">${rec.numero}</td></tr>
+          <tr><td style="padding:4px 0;color:#64748b">Sector:</td><td style="font-weight:600">${rec.sector}</td></tr>
+          <tr><td style="padding:4px 0;color:#64748b">Problema:</td><td>${rec.sub}</td></tr>
+          <tr><td style="padding:4px 0;color:#64748b">Solicitante:</td><td>${rec.nombre||'—'}</td></tr>
+          <tr><td style="padding:4px 0;color:#64748b">Descripcion:</td><td>${rec.desc||'—'}</td></tr>
+        </table>
+        ${htmlAdjSol}
+        <div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin:16px 0 10px;padding-bottom:6px;border-bottom:2px solid #f1f5f9">2. Asignacion</div>
+        <table style="width:100%;font-size:14px;margin-bottom:12px">
+          <tr><td style="padding:4px 0;color:#64748b;width:130px">Ejecutor:</td><td style="font-weight:600">${rec.ejecutorNombre||'—'}</td></tr>
+          <tr><td style="padding:4px 0;color:#64748b">Periodo:</td><td>${rec.fechaInicioEsperado||rec.fechaInicioOriginal||'—'} al ${rec.fechaCierreConfirmada||rec.fechaCierre||'—'}</td></tr>
+        </table>
+        <div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin:16px 0 10px;padding-bottom:6px;border-bottom:2px solid #f1f5f9">3. Resolucion del ejecutor</div>
+        <div style="background:#f0fdf4;border-left:4px solid #16a34a;border-radius:0 8px 8px 0;padding:12px 14px;margin-bottom:12px">
+          <div style="font-size:11px;color:#16a34a;font-weight:700;text-transform:uppercase;margin-bottom:4px">Lo que se hizo</div>
+          <div style="color:#14532d;font-size:14px">${rec.descripcionResolucion||'—'}</div>
+        </div>
+        ${htmlAdjEj}
+        <div style="text-align:center;margin-top:20px">
+          <a href="${verUrl}" style="display:inline-block;padding:14px 32px;background:#2563eb;color:white;text-decoration:none;border-radius:10px;font-weight:700;font-size:15px">Revisa si estas conforme con la resolucion</a>
+        </div>
+        <div style="text-align:center;margin-top:10px">
+          <a href="${panelUrl(appUrlLocal, isAdminCat(rec.cat)?'administracion':'intendencia')}" style="display:inline-block;padding:8px 18px;background:#1a3a6b;color:white;text-decoration:none;border-radius:8px;font-size:12px;font-weight:600">Ir al Panel de Gestión</a>
+        </div>
+        <p style="color:#94a3b8;font-size:12px;text-align:center;margin-top:16px">Si no respondés en 2 dias, se escala automaticamente.</p>
+      </div>
+    </div>`;
+}
+
 async function sendEmail({to, cc, subject, body, htmlBody, icsData}) {
   const cfg = ls.get("config") || {};
   const url = cfg.scriptUrl || SCRIPT_URL;
@@ -776,36 +824,45 @@ function similitudSemantica(a, b) {
 }
 
 async function detectarDuplicados(nuevoRec, todosRecs) {
+  const esOtro = (v) => !!(v && v.toLowerCase() === "otro");
+
   const candidatos = todosRecs.filter(r =>
     r.id !== nuevoRec.id &&
-    !r.esRecurrente &&  // excluir tickets recurrentes
-    !["completada","consolidada","vinculado_proyecto","esperando_validacion_responsable","esperando_validacion_directivo"].includes(r.estadoAvance) &&
-    r.desc && r.desc.trim().length > 3 &&
-    !(r.sub && r.sub.toLowerCase() === "otro") &&       // excluir sub "Otro"
-    !(nuevoRec.sub && nuevoRec.sub.toLowerCase() === "otro")  // excluir si el nuevo es "Otro"
+    !r.esRecurrente &&
+    !["completada","consolidada","vinculado_proyecto","esperando_validacion_responsable","esperando_validacion_directivo"].includes(r.estadoAvance)
   );
   if(!candidatos.length) return [];
 
-  const UMBRAL = 0.20;
   const similares = [];
 
   for(const r of candidatos) {
-    const scoreDesc = similitudSemantica(nuevoRec.desc, r.desc);
-    const sectorCoincide = nuevoRec.sector === r.sector;
-    const scoreFinal = scoreDesc * 0.8 + (sectorCoincide ? 0.2 : 0);
-    console.log(`Dup check ${nuevoRec.numero} vs ${r.numero}: desc=${scoreDesc.toFixed(2)} sector=${sectorCoincide} final=${scoreFinal.toFixed(2)}`);
-    if(scoreFinal >= UMBRAL) {
+    const mismoTipo = nuevoRec.cat === r.cat;
+    const mismoSector = nuevoRec.sectorGrande === r.sectorGrande;
+    const mismoEspacio = nuevoRec.sector === r.sector;
+    if(!mismoTipo || !mismoSector || !mismoEspacio) continue;
+
+    const mismoSubEspacio = !!nuevoRec.subEspacio && !!r.subEspacio && nuevoRec.subEspacio === r.subEspacio;
+    const mismoDetalle = !!nuevoRec.sub && !!r.sub && nuevoRec.sub === r.sub;
+
+    const viaSubEspacio = mismoSubEspacio && !esOtro(nuevoRec.subEspacio) && !esOtro(r.subEspacio);
+    const viaDetalle = mismoDetalle && !esOtro(nuevoRec.sub) && !esOtro(r.sub);
+
+    if(viaSubEspacio || viaDetalle) {
       similares.push({
         numero: r.numero,
         similitud: "alta",
-        razon: `Descripción similar (${(scoreDesc*100).toFixed(0)}% coincidencia)${sectorCoincide?" · mismo sector":""}`,
+        razon: viaSubEspacio && viaDetalle
+          ? "Mismo tipo, sector, espacio, sub-espacio y detalle del problema"
+          : viaSubEspacio
+            ? "Mismo tipo, sector, espacio y sub-espacio"
+            : "Mismo tipo, sector, espacio y detalle del problema",
         descExistente: r.desc,
-        sectorCoincide,
-        _score: scoreFinal
+        sectorCoincide: true,
+        _score: 1
       });
     }
   }
-  return similares.sort((a,b) => b._score - a._score);
+  return similares;
 }
 
 // ── REACT HELPERS ──────────────────────────────────────────────────────────
@@ -1105,7 +1162,7 @@ function PlanillaPresupuesto(props) {
       totGen>0&&h('span',{style:{marginLeft:"auto",fontWeight:700,color:"#15803d",fontSize:13}},"Total: "+fmt(totGen))));
 }
 
-function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs}) {
+function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs, area}) {
   const [tab,setTab] = useState("gestion");
   const yaFueAsignado = !!(rec.ejecutorMailOriginal || rec.fechaInicioOriginal);
   const [f,setF] = useState({
@@ -1131,6 +1188,18 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs}) {
   });
   const [saveErr,setSaveErr] = useState("");
   const [sending,setSending] = useState(false);
+  const [showRechazoResp,setShowRechazoResp] = useState(false);
+  const [motivoRechazoResp,setMotivoRechazoResp] = useState("");
+  const [sendingValidacionResp,setSendingValidacionResp] = useState(false);
+  const [proyectosReales,setProyectosReales] = useState([]);
+  useEffect(()=>{
+    fetch(SUPABASE_URL+"/rest/v1/"+SUPABASE_TABLE+"?select=data&order=created_at.desc", {headers: SB_HEADERS})
+      .then(r=>r.json())
+      .then(rows=>{
+        const lista = (Array.isArray(rows)?rows:[]).map(r=>r.data).filter(p=>p && p._type==="proyecto" && !p._deleted && p.area===area);
+        setProyectosReales(lista);
+      });
+  },[area]);
   const fileRef = useRef();
   const set = (k,v) => setF(p=>({...p,[k]:v}));
   const cat = CATS[rec.cat]; const pri = PRIS.find(p=>p.id===rec.pri); const t = getTiming(rec);
@@ -1138,8 +1207,9 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs}) {
 
   const selectEj = mail => { const ej=ejecutores.find(e=>e.mail===mail); set("ejecutorMail",mail); if(ej) set("ejecutorNombre",ej.nombre); };
 
-  const save = async () => {
+  const save = async (opts) => {
     if(sending) return; // guard doble-click
+    const estadoAvanceEfectivo = (opts && opts.estadoAvanceOverride) || f.estadoAvance;
     setSaveErr("");
     // Block completada without resolution description
     if(f.estadoAvance==="completada" && !f.descripcionResolucion.trim()) {
@@ -1287,7 +1357,7 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs}) {
     // Auto-calculate estado based on dates and assignment
     const calcEstado = () => {
       // Don't auto-change if already in terminal/special states
-      if(["completada","consolidada","esperando_validacion","esperando_validacion_responsable","esperando_validacion_directivo","vinculado_proyecto","sin_resolucion"].includes(f.estadoAvance)) return f.estadoAvance;
+      if(["completada","consolidada","esperando_validacion","esperando_validacion_responsable","esperando_validacion_directivo","vinculado_proyecto","sin_resolucion"].includes(estadoAvanceEfectivo)) return estadoAvanceEfectivo;
       const ahora = new Date();
       const fechaInicio = pld(f.fechaInicioEsperado||f.fechaInicioActualizada||"");
       const fechaCierreEfectiva = pld(f.fechaCierreActualizada||f.fechaCierre||"");
@@ -1301,7 +1371,7 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs}) {
       if(f.fechaInicioEsperado && fechaInicio <= ahora) return "iniciada";
       // Planned (start date in future)
       if(f.fechaInicioEsperado && fechaInicio > ahora) return "no_iniciada";
-      return f.estadoAvance || "bajo_analisis";
+      return estadoAvanceEfectivo || "bajo_analisis";
     };
     const autoEstado = calcEstado();
 const ejListaFinal = (f.ejecutores_lista||[]).length===0 && f.tipoEjecutor==="tercero" && f.empresaNombre
@@ -1430,71 +1500,94 @@ let savedRec = {...rec,...f,adjuntosResolucion,comentarios,nuevoComentario:undef
       }
     }
     // When marked as completada → set to esperando_validacion (directivo must approve first)
-    if((f.estadoAvance==="completada"||f.estadoAvance==="esperando_validacion"||f.estadoAvance==="esperando_validacion_responsable") && !["completada","esperando_validacion","esperando_validacion_responsable","esperando_validacion_directivo"].includes(rec.estadoAvance) && f.descripcionResolucion.trim()) {
+    if((estadoAvanceEfectivo==="completada"||estadoAvanceEfectivo==="esperando_validacion"||estadoAvanceEfectivo==="esperando_validacion_responsable") && !["completada","esperando_validacion","esperando_validacion_responsable","esperando_validacion_directivo"].includes(rec.estadoAvance) && f.descripcionResolucion.trim()) {
       const appUrl2 = window.location.href.split("?")[0];
       // Tickets recurrentes: no requieren validación del directivo ni mail al solicitante
       if (rec.esRecurrente) {
         savedRec = {...savedRec, estadoAvance:"completada"};
         await sbUpsert(savedRec);
-        setRecs(prev=>prev.map(r=>r.id===savedRec.id?savedRec:r));
       } else {
       savedRec = {...savedRec, estadoAvance:"esperando_validacion_responsable", fechaEnvioValidacion: new Date().toISOString()};
       await sbUpsert(savedRec);
-      setRecs(prev=>prev.map(r=>r.id===savedRec.id?savedRec:r));
-      const dirMails = getDirectivos(savedRec.cat).map(d=>d.mail).filter(Boolean);
-      const respMail = getResponsableMail(savedRec.cat);
-      if(dirMails.length) {
-        const adjSolicitante = (savedRec.adjuntos||[]).filter(a=>a.url);
-        const adjEjecutor = (savedRec.adjuntosResolucion||[]).filter(a=>a.url);
-        const htmlAdjSol = buildAdjuntosHTML(adjSolicitante, 'Fotos del solicitante');
-        const htmlAdjEj = buildAdjuntosHTML(adjEjecutor, 'Fotos / evidencia del ejecutor');
-        const verUrl = `${appUrl2}?validar=${savedRec.id}`;
-        const dirNombres = getDirectivos(savedRec.cat).filter(d=>d.mail).map(d=>d.nombre).filter(Boolean);
-        const saludoDir = dirNombres.length ? `Hola <strong>${dirNombres[0]}</strong>,` : 'Hola,';
-        const htmlBody = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
-          <div style="background:#0f172a;padding:20px 24px;border-radius:12px 12px 0 0">
-            <div style="color:#93c5fd;font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-bottom:4px">Sistema de Reclamos</div>
-            <div style="color:white;font-size:18px;font-weight:700">Tarea completada — requiere tu revision</div>
-          </div>
-          <div style="background:white;padding:24px;border-radius:0 0 12px 12px;border:1px solid #e2e8f0">
-            <p style="color:#475569;font-size:15px;margin-top:0">${saludoDir} la tarea <strong>${savedRec.numero}</strong> fue completada y esta esperando tu conformidad antes de notificar al solicitante.</p>
-            <div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;padding-bottom:6px;border-bottom:2px solid #f1f5f9">1. Solicitud original</div>
-            <table style="width:100%;font-size:14px;margin-bottom:12px">
-              <tr><td style="padding:4px 0;color:#64748b;width:130px">Numero:</td><td style="font-weight:700;font-family:monospace;color:#3b82f6">${savedRec.numero}</td></tr>
-              <tr><td style="padding:4px 0;color:#64748b">Sector:</td><td style="font-weight:600">${savedRec.sector}</td></tr>
-              <tr><td style="padding:4px 0;color:#64748b">Problema:</td><td>${savedRec.sub}</td></tr>
-              <tr><td style="padding:4px 0;color:#64748b">Solicitante:</td><td>${savedRec.nombre||'—'}</td></tr>
-              <tr><td style="padding:4px 0;color:#64748b">Descripcion:</td><td>${savedRec.desc||'—'}</td></tr>
-            </table>
-            ${htmlAdjSol}
-            <div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin:16px 0 10px;padding-bottom:6px;border-bottom:2px solid #f1f5f9">2. Asignacion</div>
-            <table style="width:100%;font-size:14px;margin-bottom:12px">
-              <tr><td style="padding:4px 0;color:#64748b;width:130px">Ejecutor:</td><td style="font-weight:600">${savedRec.ejecutorNombre||'—'}</td></tr>
-              <tr><td style="padding:4px 0;color:#64748b">Periodo:</td><td>${savedRec.fechaInicioEsperado||savedRec.fechaInicioOriginal||'—'} al ${savedRec.fechaCierreConfirmada||savedRec.fechaCierre||'—'}</td></tr>
-            </table>
-            <div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin:16px 0 10px;padding-bottom:6px;border-bottom:2px solid #f1f5f9">3. Resolucion del ejecutor</div>
-            <div style="background:#f0fdf4;border-left:4px solid #16a34a;border-radius:0 8px 8px 0;padding:12px 14px;margin-bottom:12px">
-              <div style="font-size:11px;color:#16a34a;font-weight:700;text-transform:uppercase;margin-bottom:4px">Lo que se hizo</div>
-              <div style="color:#14532d;font-size:14px">${savedRec.descripcionResolucion||'—'}</div>
-            </div>
-            ${htmlAdjEj}
-            <div style="text-align:center;margin-top:20px">
-              <a href="${verUrl}" style="display:inline-block;padding:14px 32px;background:#2563eb;color:white;text-decoration:none;border-radius:10px;font-weight:700;font-size:15px">Revisa si estas conforme con la resolucion</a>
-            </div>
-            <div style="text-align:center;margin-top:10px">
-              <a href="${panelUrl(appUrl2, isAdminCat(savedRec.cat)?'administracion':'intendencia')}" style="display:inline-block;padding:8px 18px;background:#1a3a6b;color:white;text-decoration:none;border-radius:8px;font-size:12px;font-weight:600">Ir al Panel de Gestión</a>
-            </div>
-            <p style="color:#94a3b8;font-size:12px;text-align:center;margin-top:16px">Si no respondés en 2 dias, el cliente sera notificado automaticamente.</p>
-          </div>
-        </div>`;
-        await sendEmail({to:dirMails, cc:[respMail].filter(Boolean),
+
+      const respMailsArr = getResponsables(savedRec.cat);
+      const respMailsList = respMailsArr.map(d=>d.mail).filter(Boolean);
+      const verUrl = `${appUrl2}?validar=${savedRec.id}`;
+
+      if(respMailsList.length) {
+        const respNombres = respMailsArr.filter(d=>d.mail).map(d=>d.nombre).filter(Boolean);
+        const saludoResp = respNombres.length ? `Hola <strong>${respNombres[0]}</strong>,` : 'Hola,';
+        await sendEmail({to:respMailsList,
           subject:`[Asturiano] Tarea completada — ${savedRec.numero}: ${savedRec.sector}`,
-          htmlBody,
-          body:`Hola,\n\nLa tarea ${savedRec.numero} fue marcada como completada.\n\nSector: ${savedRec.sector}\nProblema: ${savedRec.sub}\nEjecutor: ${savedRec.ejecutorNombre||"—"}\nLo que se hizo: ${savedRec.descripcionResolucion||"—"}\n\nVer y validar: ${verUrl}\n\nSi no respondés en 2 días, el cliente será notificado automáticamente.\n\n— Sistema de Reclamos — Asturiano`});
+          htmlBody: buildValidacionHtml(savedRec, saludoResp, verUrl, 'Tarea completada — requiere tu validación'),
+          body:`Hola,\n\nLa tarea ${savedRec.numero} fue marcada como completada.\n\nSector: ${savedRec.sector}\nProblema: ${savedRec.sub}\nEjecutor: ${savedRec.ejecutorNombre||"—"}\nLo que se hizo: ${savedRec.descripcionResolucion||"—"}\n\nVer y validar: ${verUrl}\n\nSi no respondés en 2 días, se escala automáticamente al directivo.\n\n— Sistema de Reclamos — Asturiano`});
+      } else {
+        // No hay responsable configurado para esta categoría → escalar directo al directivo
+        const dirMailsFallback = getDirectivos(savedRec.cat).map(d=>d.mail).filter(Boolean);
+        if(dirMailsFallback.length) {
+          const dirNombresFallback = getDirectivos(savedRec.cat).filter(d=>d.mail).map(d=>d.nombre).filter(Boolean);
+          const saludoDirFallback = dirNombresFallback.length ? `Hola <strong>${dirNombresFallback[0]}</strong>,` : 'Hola,';
+          savedRec = {...savedRec, estadoAvance:"esperando_validacion_directivo", fechaEnvioValidacionDirectivo: new Date().toISOString(),
+            comentarios:[...(savedRec.comentarios||[]),{texto:"No hay responsable configurado para esta categoría. Se escaló directo al directivo.",fecha:new Date().toISOString(),autor:"Sistema"}]};
+          await sbUpsert(savedRec);
+          await sendEmail({to:dirMailsFallback,
+            subject:`[Asturiano] Tarea completada — ${savedRec.numero}: ${savedRec.sector}`,
+            htmlBody: buildValidacionHtml(savedRec, saludoDirFallback, verUrl, 'Tarea completada — requiere tu validación'),
+            body:`Hola,\n\nLa tarea ${savedRec.numero} fue marcada como completada. No hay responsable configurado para esta categoría, por eso se te notifica directamente.\n\nVer y validar: ${verUrl}\n\n— Sistema de Reclamos — Asturiano`});
+        } else {
+          savedRec = {...savedRec, estadoAvance:"completada",
+            comentarios:[...(savedRec.comentarios||[]),{texto:"No hay responsable ni directivo configurado para esta categoría. Tarea completada sin validación.",fecha:new Date().toISOString(),autor:"Sistema"}]};
+          await sbUpsert(savedRec);
+        }
       }
       } // cierre else (no recurrente)
     }
+    setF(p=>({...p, estadoAvance: savedRec.estadoAvance}));
     setSending(false);
+    if(!["esperando_validacion_responsable","esperando_validacion_directivo"].includes(savedRec.estadoAvance)) onClose();
+  };
+
+  const validarResponsable = async () => {
+    if(sendingValidacionResp) return;
+    setSendingValidacionResp(true);
+    const appUrlV = window.location.href.split("?")[0];
+    const updatedV = {...rec,
+      estadoAvance:"esperando_validacion_directivo",
+      fechaEnvioValidacionDirectivo: new Date().toISOString(),
+      comentarios:[...(rec.comentarios||[]),{
+        texto:"Resolución aprobada por responsable desde el panel. Enviada al directivo para validación final.",
+        fecha:new Date().toISOString(), autor:"Responsable"
+      }]};
+    await sbUpsert(updatedV);
+    const dirMailsV = getDirectivos(rec.cat).map(d=>d.mail).filter(Boolean);
+    if(dirMailsV.length) {
+      const dirNombresV = getDirectivos(rec.cat).filter(d=>d.mail).map(d=>d.nombre).filter(Boolean);
+      const saludoDirV = dirNombresV.length ? `Hola <strong>${dirNombresV[0]}</strong>,` : 'Hola,';
+      const verUrlV = `${appUrlV}?validar=${rec.id}`;
+      await sendEmail({to:dirMailsV,
+        subject:`[Asturiano] Tarea completada — ${updatedV.numero}: ${updatedV.sector}`,
+        htmlBody: buildValidacionHtml(updatedV, saludoDirV, verUrlV, 'Tarea completada — requiere tu validación final'),
+        body:`Hola,\n\nEl responsable aprobó la resolución de la tarea ${updatedV.numero} desde el panel. Ahora requiere tu validación final.\n\nVer y validar: ${verUrlV}\n\nSi no respondés en 2 días, se asume aprobado y se notifica al solicitante.\n\n— Sistema de Reclamos — Asturiano`});
+    }
+    await onSave(updatedV);
+    setSendingValidacionResp(false);
+    onClose();
+  };
+
+  const rechazarResponsable = async () => {
+    if(!motivoRechazoResp.trim() || sendingValidacionResp) return;
+    setSendingValidacionResp(true);
+    const updatedR = {...rec,
+      estadoAvance:"bajo_analisis", reabierta:true, descripcionResolucion:"", ejecutorConfirmado:false,
+      comentarios:[...(rec.comentarios||[]),{
+        texto:"Responsable rechazó la resolución desde el panel. Motivo: "+motivoRechazoResp,
+        fecha:new Date().toISOString(), autor:"Responsable"
+      }]};
+    await sbUpsert(updatedR);
+    await onSave(updatedR);
+    setSendingValidacionResp(false);
+    setShowRechazoResp(false);
+    onClose();
   };
 
   const notifResolucionAuto = async (savedRec) => {
@@ -1597,10 +1690,9 @@ Resolución: ${descripcion||"—"}`});
 
         // TAB GESTIÓN
         tab==="gestion" && h('div',null,
-          // Estado actual (read-only display)
           h('div',{style:{marginBottom:14,display:"flex",alignItems:"center",gap:10}},
             h('div',{style:{fontSize:11,fontWeight:600,color:"#94a3b8",textTransform:"uppercase",letterSpacing:0.5}},"Estado actual:"),
-            h(Badge,{color:ESTADOS.find(e=>e.id===f.estadoAvance)?.color,label:ESTADOS.find(e=>e.id===f.estadoAvance)?.label||f.estadoAvance,sm:true})),
+            h(Badge,{color:(getEstadoEjecucion(rec)||ESTADOS.find(e=>e.id===f.estadoAvance)||{}).color, label:(getEstadoEjecucion(rec)?.label)||ESTADOS.find(e=>e.id===f.estadoAvance)?.label||f.estadoAvance, sm:true})),
           // Only allow manual change to "Sin resolución temporaria"
           h('div',{style:{marginBottom:14}},
             h('button',{onClick:()=>set("estadoAvance", f.estadoAvance==="sin_resolucion"?"bajo_analisis":"sin_resolucion"),
@@ -1661,11 +1753,7 @@ Resolución: ${descripcion||"—"}`});
           rec.ejecutorRechazado && h('div',{style:{background:"#fef2f2",border:"1.5px solid #fecaca",borderRadius:10,padding:12,fontSize:13,color:"#dc2626",fontWeight:600,marginBottom:16}},
             "❌ Tarea rechazada",h('br'),h('span',{style:{fontWeight:400,fontSize:12}},"Motivo: "+rec.motivoRechazo),h('br'),h('span',{style:{fontWeight:400,fontSize:12}},"Seleccioná un nuevo ejecutor para reasignar.")),
           h('div',{style:{background:"#eff6ff",border:"1.5px solid #bfdbfe",borderRadius:10,padding:12,marginBottom:16,fontSize:13,color:"#1d4ed8",lineHeight:1.5}},"📧 Al asignar un ejecutor interno se enviará email con links de confirmar/rechazar."),
-          // Toggle interno vs tercero
-          h('div',{style:{display:"flex",gap:8,marginBottom:14}},
-            ...[["interno","👷 Empleado del club"],["tercero","🏢 Proveedor externo"]].map(([tipo,lbl])=>
-              h('button',{key:tipo,onClick:()=>{set("tipoEjecutor",tipo);if(tipo==="tercero"){set("ejecutorMail","tercero@externo");set("ejecutorNombre",f.empresaNombre||"");}else{set("ejecutorMail","");set("ejecutorNombre","");set("empresaNombre","");set("empresaTelefono","");}},
-                style:{flex:1,padding:"8px",borderRadius:8,border:f.tipoEjecutor===tipo?"2px solid #3b82f6":"2px solid #e2e8f0",background:f.tipoEjecutor===tipo?"#eff6ff":"white",color:f.tipoEjecutor===tipo?"#1d4ed8":"#64748b",cursor:"pointer",fontSize:13,fontWeight:600}},lbl))),
+          
           // Lista de ejecutores asignados
           h('div',{style:{marginBottom:12}},
             h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},"Ejecutores asignados"),
@@ -1680,11 +1768,11 @@ Resolución: ${descripcion||"—"}`});
                       ? h('span',{style:{display:"inline-block",marginTop:3,padding:"2px 8px",background:"#f0fdf4",color:"#15803d",borderRadius:6,fontSize:10,fontWeight:700}},"Confirmó "+fdt(ej.fechaConfirmacion))
                       : h('span',{style:{display:"inline-block",marginTop:3,padding:"2px 8px",background:"#fff7ed",color:"#f97316",borderRadius:6,fontSize:10,fontWeight:700}},"Sin respuesta")),
                 h('button',{onClick:()=>{const l=[...(f.ejecutores_lista||[])];l.splice(i,1);set("ejecutores_lista",l);if(l.length===0){set("ejecutorMail","");set("ejecutorNombre","");}else{set("ejecutorMail",l[0].mail&&l[0].mail!=="tercero@externo"?l[0].mail:"");set("ejecutorNombre",l.map(e=>e.nombre).join(", "));}},style:{background:"none",border:"none",cursor:"pointer",color:"#ef4444",fontSize:14}},"✕")))),
-            // Add executor
-            h('div',{style:{display:"flex",gap:6,marginBottom:8}},
-              ...[["interno","👷 Empleado"],["tercero","🏢 Proveedor"]].map(([tipo,lbl])=>
-                h('button',{key:tipo,onClick:()=>set("tipoEjecutor",tipo),
-                  style:{flex:1,padding:"6px",borderRadius:8,border:f.tipoEjecutor===tipo?"2px solid #3b82f6":"2px solid #e2e8f0",background:f.tipoEjecutor===tipo?"#eff6ff":"white",color:f.tipoEjecutor===tipo?"#1d4ed8":"#64748b",cursor:"pointer",fontSize:12,fontWeight:600}},lbl))),
+            // Toggle interno vs tercero
+            h('div',{style:{display:"flex",gap:8,marginBottom:14}},
+              ...[["interno","👷 Empleado del club"],["tercero","🏢 Proveedor externo"]].map(([tipo,lbl])=>
+                h('button',{key:tipo,onClick:()=>{set("tipoEjecutor",tipo);if(tipo==="tercero"){set("ejecutorMail","tercero@externo");set("ejecutorNombre",f.empresaNombre||"");}else{set("ejecutorMail","");set("ejecutorNombre","");set("empresaNombre","");set("empresaTelefono","");}},
+                  style:{flex:1,padding:"8px",borderRadius:8,border:f.tipoEjecutor===tipo?"2px solid #3b82f6":"2px solid #e2e8f0",background:f.tipoEjecutor===tipo?"#eff6ff":"white",color:f.tipoEjecutor===tipo?"#1d4ed8":"#64748b",cursor:"pointer",fontSize:13,fontWeight:600}},lbl))),
             f.tipoEjecutor==="interno"
               ? h('div',{style:{display:"flex",gap:6}},
                   h('select',{value:"",onChange:e=>{if(!e.target.value)return;const ej=ejecutores.find(x=>x.mail===e.target.value);if(ej&&!(f.ejecutores_lista||[]).find(x=>x.mail===ej.mail)){const ejConEstado={...ej,confirmado:false,rechazado:false,fechaConfirmacion:null};const l=[...(f.ejecutores_lista||[]),ejConEstado];set("ejecutores_lista",l);set("ejecutorMail",l[0].mail);set("ejecutorNombre",l.map(x=>x.nombre).join(", "));}e.target.value="";},style:{...aS(),flex:1}},
@@ -1696,7 +1784,7 @@ Resolución: ${descripcion||"—"}`});
                   h('button',{onClick:()=>{if(!f.empresaNombre.trim())return;const ej={nombre:f.empresaNombre,mail:"",telefono:f.empresaTelefono};const l=[...(f.ejecutores_lista||[]),ej];set("ejecutores_lista",l);set("ejecutorMail","tercero");set("ejecutorNombre",l.map(x=>x.nombre).join(", "));set("empresaNombre","");set("empresaTelefono","");},style:{padding:"7px 14px",background:"#1a3a6b",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600}},"+ Agregar"))),
           !rec.ejecutorRechazado && rec.ejecutorConfirmado && h('div',{style:{background:"#f0fdf4",border:"1.5px solid #bbf7d0",borderRadius:10,padding:12,fontSize:13,color:"#15803d",fontWeight:600,marginBottom:12}},"✅ Confirmó el "+fdt(rec.fechaConfirmacion)),
           // Consolidación
-          h('div',{style:{marginTop:12,background:"#f8fafc",borderRadius:10,padding:12}},
+          tab==="asignacion" && h('div',{style:{marginTop:12,background:"#f8fafc",borderRadius:10,padding:12}},
             h('div',{style:{fontSize:12,fontWeight:700,color:"#374151",marginBottom:4}},"🔗 Consolidar con otros reclamos"),
             h('div',{style:{fontSize:12,color:"#64748b",marginBottom:10}},"Agregá los números de reclamos que resuelve esta misma tarea:"),
             h('div',{style:{display:"flex",flexDirection:"column",gap:6}},
@@ -1711,26 +1799,23 @@ Resolución: ${descripcion||"—"}`});
             (f.reclamosHijos||[]).length > 0 && h('div',{style:{marginTop:8,fontSize:11,color:"#8b5cf6"}},
               "Al guardar, este reclamo consolida "+(f.reclamosHijos.length+1)+" reclamos en total."))),
           // Vincular a proyecto
-          h('div',{style:{marginTop:12,background:"#f5f3ff",borderRadius:10,padding:12,border:"1.5px solid #ddd6fe"}},
+          tab==="asignacion" && h('div',{style:{marginTop:12,background:"#f5f3ff",borderRadius:10,padding:12,border:"1.5px solid #ddd6fe"}},
             h('div',{style:{fontSize:12,fontWeight:700,color:"#5b21b6",marginBottom:4}},"🏗️ Vincular a proyecto"),
             h('div',{style:{fontSize:12,color:"#6d28d9",marginBottom:8}},"Si esta solicitud forma parte de una obra o proyecto, vinculalo acá:"),
             h('div',null,
-              h('select',{value:f.proyectoVinculadoId||"",onChange:e=>{
+              h('select',{value:f.proyectoVinculadoId||"",onChange:async e=>{
                 const pId=Number(e.target.value);
-                const proyectos = ls.get("proyectos") || [];
-                const p=proyectos.find(x=>x.id===pId);
+                const p=proyectosReales.find(x=>x.id===pId);
                 set("proyectoVinculadoId",pId||null);
                 set("proyectoTitulo",p?.titulo||"");
                 if(pId) set("estadoAvance","vinculado_proyecto");
-                // Sync: add this solicitud to proyecto's reclamosVinculados in localStorage
-                if(pId && p && !( p.reclamosVinculados||[]).includes(rec.numero)) {
+                if(pId && p && !(p.reclamosVinculados||[]).includes(rec.numero)) {
                   const updated = {...p, reclamosVinculados:[...(p.reclamosVinculados||[]),rec.numero]};
-                  const lista = proyectos.map(x=>x.id===pId?updated:x);
-                  ls.set("proyectos",lista);
+                  await sbUpsert(updated);
                 }
               },style:{width:"100%",padding:"9px 12px",borderRadius:8,border:"1.5px solid #ddd6fe",fontSize:13,outline:"none",background:"white"}},
                 h('option',{value:""},"— Sin vincular —"),
-                ...(ls.get("proyectos")||[]).map(p=>h('option',{key:p.id,value:p.id},p.titulo))),
+                ...proyectosReales.map(p=>h('option',{key:p.id,value:p.id},p.titulo))),
               f.proyectoTitulo && h('div',{style:{marginTop:6,fontSize:12,color:"#5b21b6",fontWeight:600}},"✅ Vinculado a: "+f.proyectoTitulo))),
           tab==="asignacion" && f.tipoEjecutor !== "tercero" && h('div',{style:{marginTop:16,paddingTop:16,borderTop:"1.5px solid #f1f5f9",marginBottom:8}},
             h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:!f.ejecutorMail||f.nuevoComentario.trim()?"#374151":"#dc2626",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Comentario para el ejecutor *"),
@@ -1776,11 +1861,29 @@ Resolución: ${descripcion||"—"}`});
             h('button',{onClick:async()=>{
               if(!f.descripcionResolucion?.trim()){setSaveErr("La descripción de lo realizado es obligatoria para completar.");return;}
               if(!confirm("¿Marcar como completado y enviar al directivo para validación?")) return;
-              set("estadoAvance","completada");
-              setTimeout(()=>save(),50);
+              await save({estadoAvanceOverride:"completada"});
             },style:{width:"100%",padding:"13px",background:"linear-gradient(135deg,#22c55e,#15803d)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700}},"✅ Marcar como completado — enviar a validación")),
-          ["esperando_validacion"].includes(f.estadoAvance) && h('div',{style:{background:"#f5f3ff",border:"1.5px solid #ddd6fe",borderRadius:8,padding:"10px 14px",fontSize:12,color:"#6d28d9",marginBottom:8}},"🔵 Esperando validación del directivo. Una vez aprobado, el usuario recibirá el mail de calificación.")),
+            f.estadoAvance==="esperando_validacion_responsable" && h('div',{style:{background:"#fdf4ff",border:"1.5px solid #e9d5ff",borderRadius:10,padding:14,marginBottom:8}},
+            h('div',{style:{fontSize:12,color:"#86198f",fontWeight:700,marginBottom:8}},"Esperando tu validación como responsable"),
+            h('div',{style:{fontSize:12,color:"#701a75",marginBottom:12,lineHeight:1.5}},"El ejecutor marcó esta tarea como completada. Revisá la resolución de arriba y validá o rechazá. Si no actuás en 2 días, se escala automáticamente al directivo."),
+            !showRechazoResp && h('div',{style:{display:"flex",gap:10}},
+              h('button',{onClick:validarResponsable,disabled:sendingValidacionResp,
+                style:{flex:2,padding:"12px",background:sendingValidacionResp?"#94a3b8":"linear-gradient(135deg,#9333ea,#7c3aed)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:13,fontWeight:700}},
+                sendingValidacionResp?"Procesando...":"✓ Validar lo completado — enviar al directivo"),
+              h('button',{onClick:()=>setShowRechazoResp(true),disabled:sendingValidacionResp,
+                style:{flex:1,padding:"12px",background:"#fef2f2",color:"#dc2626",border:"1.5px solid #fecaca",borderRadius:10,cursor:"pointer",fontSize:13,fontWeight:700}},
+                "✗ Rechazar")),
+            showRechazoResp && h('div',null,
+              h('label',{style:{display:"block",fontSize:11,fontWeight:700,color:"#dc2626",marginBottom:6,textTransform:"uppercase"}},"Motivo del rechazo *"),
+              h('textarea',{value:motivoRechazoResp,onChange:e=>setMotivoRechazoResp(e.target.value),rows:3,placeholder:"Explicá qué no quedó bien y qué hay que corregir...",style:{width:"100%",padding:"9px 12px",borderRadius:8,border:"1.5px solid #fecaca",fontSize:13,outline:"none",boxSizing:"border-box",resize:"vertical",marginBottom:10}}),
+              h('div',{style:{display:"flex",gap:8}},
+                h('button',{onClick:rechazarResponsable,disabled:!motivoRechazoResp.trim()||sendingValidacionResp,
+                  style:{flex:2,padding:"11px",background:(!motivoRechazoResp.trim()||sendingValidacionResp)?"#94a3b8":"#dc2626",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:700}},
+                  sendingValidacionResp?"Procesando...":"Confirmar rechazo — reabrir solicitud"),
+                h('button',{onClick:()=>{setShowRechazoResp(false);setMotivoRechazoResp("");},
+                  style:{flex:1,padding:"11px",background:"white",color:"#64748b",border:"1.5px solid #e2e8f0",borderRadius:8,cursor:"pointer",fontSize:13}},"Cancelar")))),
 
+          ["esperando_validacion_directivo","esperando_validacion"].includes(f.estadoAvance) && h('div',{style:{background:"#f5f3ff",border:"1.5px solid #ddd6fe",borderRadius:8,padding:"10px 14px",fontSize:12,color:"#6d28d9",marginBottom:8}},"🔵 El responsable ya validó. La validación final del directivo se hace solo por mail, no desde este panel. Si no responde en 2 días, se asume aprobado y se notifica al solicitante.")),
         // TAB HISTORIAL
         tab==="historial" && h('div',null,
           (!rec.comentarios||!rec.comentarios.length)
@@ -3202,12 +3305,8 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
   const ESTADOS_COMPLETADOS = ["completada","consolidada","vinculado_proyecto","esperando_validacion_responsable","esperando_validacion_directivo"];
 
   const filtrados = recs.filter(r=>{
-    // Archivo: solo completados/consolidados
+    // Archivo: filtro opcional, no obligatorio para ver completadas/consolidadas
     if(filtros.archivo) return ESTADOS_COMPLETADOS.includes(r.estadoAvance);
-    // Ocultar consolidadas del panel principal
-    if(r.estadoAvance==="consolidada" && !filtros.estado && !filtros.archivo) return false;
-    // Ocultar completados del panel principal (van al archivo)
-    if(r.estadoAvance==="completada" && !filtros.estado && !filtros.archivo) return false;
     if(filtros.estado&&r.estadoAvance!==filtros.estado) return false;
     if(filtros.cat&&r.cat!==filtros.cat) return false;
     if(filtros.sector&&r.sector!==filtros.sector) return false;
@@ -3437,7 +3536,7 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
           !filtrados.length && h('tr',null,h('td',{colSpan:11,style:{textAlign:"center",padding:40,color:"#94a3b8"}},"No hay solicitudes")),
           ...filtrados.slice((pagina-1)*POR_PAGINA, pagina*POR_PAGINA).map(r=>{
             const cat=CATS[r.cat]; const crit=PRIS.find(p=>p.id===(r.criticidad||r.pri));
-            const est=ESTADOS.find(e=>e.id===r.estadoAvance); const t=getTiming(r);
+            const est=getEstadoEjecucion(r) || ESTADOS.find(e=>e.id===r.estadoAvance); const t=getTiming(r);
             const esVinculado = r.estadoAvance==="vinculado_proyecto";
             const esRecurrente = !!r.esRecurrente;
             const rowBg = esVinculado?"#f8f7ff":esRecurrente?"#faf5ff":"white";
@@ -3579,7 +3678,7 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
     mainTab==="reclamos" && view==="kanban" && h(Kanban,{recs:filtrados,onEdit:setModal}),
     mainTab==="proyectos" && h(ProyectosTab,{recs,onUpdate,ejecutores,area:area}),
     mainTab==="recurrencias" && h(RecurrenciasTab,{area,ejecutores,recs}),
-    modal && h(EditModal,{key:modal.id,rec:modal,onClose:()=>setModal(null),onSave:async u=>{await onUpdate(u,modal);setModal(null);},ejecutores,onUpdateHijo:async u=>{await onUpdate(u,u);},recs}),
+    modal && h(EditModal,{key:modal.id,rec:modal,onClose:()=>setModal(null),onSave:async u=>{await onUpdate(u,modal);},ejecutores,onUpdateHijo:async u=>{await onUpdate(u,u);},recs,area}),
     showCfg && h(PanelConfig,{onClose:()=>setShowCfg(false),onSaveEjecutores:ejs=>{setEjecutores(ejs);setShowCfg(false);},area}),
     modalDup && h(ModalConsolidacion,{
       hijo: modalDup.hijo,
@@ -3691,61 +3790,36 @@ function CompletarView({recId, recs, setRecs, loaded}) {
     // Si es recurrente → no hay validación del directivo ni mail al solicitante
     if (rec.esRecurrente) { setSending(false); setDone(true); return; }
 
-    // Notificar al directivo para que revise antes de notificar al cliente
-    const dirMails=getDirectivos(rec.cat).map(d=>d.mail).filter(Boolean);
-    const respMail=getResponsableMail(rec.cat);
-    if(dirMails.length) {
-      const verUrl2 = `${appUrl}?validar=${rec.id}`;
-      const adjSol2 = (updated.adjuntos||[]).filter(a=>a.url);
-      const adjEj2 = (updated.adjuntosResolucion||[]).filter(a=>a.url);
-      const htmlAdjSol2 = buildAdjuntosHTML(adjSol2, 'Fotos del solicitante');
-      const htmlAdjEj2 = buildAdjuntosHTML(adjEj2, 'Fotos / evidencia del ejecutor');
-      const dirNombres2 = getDirectivos(rec.cat).filter(d=>d.mail).map(d=>d.nombre).filter(Boolean);
-      const saludoDir2 = dirNombres2.length ? `Hola <strong>${dirNombres2[0]}</strong>,` : 'Hola,';
-      const htmlBody2 = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
-        <div style="background:#0f172a;padding:20px 24px;border-radius:12px 12px 0 0">
-          <div style="color:#93c5fd;font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-bottom:4px">Sistema de Reclamos</div>
-          <div style="color:white;font-size:18px;font-weight:700">Tarea completada — requiere tu revision</div>
-        </div>
-        <div style="background:white;padding:24px;border-radius:0 0 12px 12px;border:1px solid #e2e8f0">
-          <p style="color:#475569;font-size:15px;margin-top:0">${saludoDir2} la tarea <strong>${rec.numero}</strong> fue completada y esta esperando tu conformidad antes de notificar al solicitante.</p>
-          <div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;padding-bottom:6px;border-bottom:2px solid #f1f5f9">1. Solicitud original</div>
-          <table style="width:100%;font-size:14px;margin-bottom:12px">
-            <tr><td style="padding:4px 0;color:#64748b;width:130px">Sector:</td><td style="font-weight:600">${rec.sector}</td></tr>
-            <tr><td style="padding:4px 0;color:#64748b">Problema:</td><td>${rec.sub}</td></tr>
-            <tr><td style="padding:4px 0;color:#64748b">Solicitante:</td><td>${rec.nombre||'—'}</td></tr>
-            <tr><td style="padding:4px 0;color:#64748b">Descripcion:</td><td>${rec.desc||'—'}</td></tr>
-          </table>
-          ${htmlAdjSol2}
-          <div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin:16px 0 10px;padding-bottom:6px;border-bottom:2px solid #f1f5f9">2. Asignacion</div>
-          <table style="width:100%;font-size:14px;margin-bottom:12px">
-            <tr><td style="padding:4px 0;color:#64748b;width:130px">Ejecutor:</td><td style="font-weight:600">${rec.ejecutorNombre||'—'}</td></tr>
-            <tr><td style="padding:4px 0;color:#64748b">Periodo:</td><td>${rec.fechaInicioEsperado||rec.fechaInicioOriginal||'—'} al ${rec.fechaCierreConfirmada||rec.fechaCierre||'—'}</td></tr>
-          </table>
-          <div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin:16px 0 10px;padding-bottom:6px;border-bottom:2px solid #f1f5f9">3. Resolucion del ejecutor</div>
-          <div style="background:#f0fdf4;border-left:4px solid #16a34a;border-radius:0 8px 8px 0;padding:12px 14px;margin-bottom:4px">
-            <div style="font-size:11px;color:#16a34a;font-weight:700;text-transform:uppercase;margin-bottom:4px">Lo que se hizo</div>
-            <div style="color:#14532d;font-size:14px">${desc}</div>
-          </div>
-          ${htmlAdjEj2}
-          <div style="text-align:center;margin-top:24px">
-            <a href="${verUrl2}" style="display:inline-block;padding:14px 32px;background:#2563eb;color:white;text-decoration:none;border-radius:10px;font-weight:700;font-size:15px">Revisa si estas conforme con la resolucion</a>
-          </div>
-          <div style="text-align:center;margin-top:10px">
-            <a href="${panelUrl(appUrl, isAdminCat(rec.cat)?'administracion':'intendencia')}" style="display:inline-block;padding:8px 18px;background:#1a3a6b;color:white;text-decoration:none;border-radius:8px;font-size:12px;font-weight:600">Ir al Panel de Gestión</a>
-          </div>
-          <p style="color:#94a3b8;font-size:12px;text-align:center;margin-top:16px">Si no respondés en 2 dias, el cliente sera notificado automaticamente.</p>
-        </div>
-      </div>`;
-      await sendEmail({to:dirMails, cc:[respMail].filter(Boolean),
+    // Notificar al responsable para que valide antes de escalar al directivo
+    const verUrl2 = `${appUrl}?validar=${rec.id}`;
+    const respMailsArr2 = getResponsables(rec.cat);
+    const respMailsList2 = respMailsArr2.map(d=>d.mail).filter(Boolean);
+
+    if(respMailsList2.length) {
+      const respNombres2 = respMailsArr2.filter(d=>d.mail).map(d=>d.nombre).filter(Boolean);
+      const saludoResp2 = respNombres2.length ? `Hola <strong>${respNombres2[0]}</strong>,` : 'Hola,';
+      await sendEmail({to:respMailsList2,
         subject:`[Asturiano] Tarea completada — ${rec.numero}: ${rec.sector}`,
-        htmlBody:htmlBody2,
-        body:`Hola,\n\nLa tarea ${rec.numero} fue completada.\n\nSector: ${rec.sector}\nEjecutor: ${rec.ejecutorNombre||"—"}\nLo que se hizo: ${desc}\n\nRevisa si estas conforme: ${verUrl2}\n\nSi no respondés en 2 días, el cliente será notificado automáticamente.\n\n— Sistema de Reclamos — Asturiano`});
+        htmlBody: buildValidacionHtml(updated, saludoResp2, verUrl2, 'Tarea completada — requiere tu validación'),
+        body:`Hola,\n\nLa tarea ${rec.numero} fue completada.\n\nSector: ${rec.sector}\nProblema: ${rec.sub}\nSolicitante: ${rec.nombre||'—'}\nEjecutor: ${rec.ejecutorNombre||"—"}\nLo que se hizo: ${desc}\n\nVer y validar: ${verUrl2}\n\nSi no respondés en 2 días, se escala automáticamente al directivo.\n\n— Sistema de Reclamos — Asturiano`});
     } else {
-      // Si no hay directivo configurado → notificar al cliente directamente
-      if(rec.email) await sendEmail({to:rec.email,subject:`[Asturiano]  Tu solicitud fue resuelta — ${rec.numero}`,
-        body:`Hola ${rec.nombre},\n\nNos alegra informarte que el inconveniente que reportaste en ${rec.sector} fue resuelto. ${msgCat}.\n\nLo que se hizo:\n${desc}\n\nCuando tengas un momento, evaluá si el problema quedó resuelto y calificá la atención:\n${calificarUrl}\n\nGracias por ayudarnos a mejorar el club.\n\n— Equipo de Intendencia Asturiano`});
-      await sbUpsert({...updated, estadoAvance:"completada"});
+      // No hay responsable configurado → escalar directo al directivo
+      const dirMailsFallback2 = getDirectivos(rec.cat).map(d=>d.mail).filter(Boolean);
+      if(dirMailsFallback2.length) {
+        const dirNombresFallback2 = getDirectivos(rec.cat).filter(d=>d.mail).map(d=>d.nombre).filter(Boolean);
+        const saludoDirFallback2 = dirNombresFallback2.length ? `Hola <strong>${dirNombresFallback2[0]}</strong>,` : 'Hola,';
+        const updatedDir = {...updated, estadoAvance:"esperando_validacion_directivo", fechaEnvioValidacionDirectivo: new Date().toISOString(),
+          comentarios:[...(updated.comentarios||[]),{texto:"No hay responsable configurado para esta categoría. Se escaló directo al directivo.",fecha:new Date().toISOString(),autor:"Sistema"}]};
+        await sbUpsert(updatedDir);
+        setRecs(prev=>prev.map(r=>r.id===rec.id?updatedDir:r));
+        await sendEmail({to:dirMailsFallback2,
+          subject:`[Asturiano] Tarea completada — ${rec.numero}: ${rec.sector}`,
+          htmlBody: buildValidacionHtml(updatedDir, saludoDirFallback2, verUrl2, 'Tarea completada — requiere tu validación'),
+          body:`Hola,\n\nLa tarea ${rec.numero} fue completada. No hay responsable configurado, por eso se te notifica directamente.\n\nVer y validar: ${verUrl2}\n\n— Sistema de Reclamos — Asturiano`});
+      } else {
+        await sbUpsert({...updated, estadoAvance:"completada",
+          comentarios:[...(updated.comentarios||[]),{texto:"No hay responsable ni directivo configurado para esta categoría. Tarea completada sin validación.",fecha:new Date().toISOString(),autor:"Sistema"}]});
+      }
     }
     setSending(false);setDone(true);
   };
@@ -3933,6 +4007,20 @@ function ValidarDetalleView({recId, recs, setRecs, loaded, setView}) {
         }]};
       await sbUpsert(updated);
       setRecs(prev=>prev.map(r=>r.id===recId?updated:r));
+
+      // Notificar al directivo de inmediato
+      const dirMailsArr = getDirectivos(rec.cat);
+      const dirMailsList = dirMailsArr.map(d=>d.mail).filter(Boolean);
+      if(dirMailsList.length) {
+        const dirNombresArr = dirMailsArr.filter(d=>d.mail).map(d=>d.nombre).filter(Boolean);
+        const saludoDirArr = dirNombresArr.length ? `Hola <strong>${dirNombresArr[0]}</strong>,` : 'Hola,';
+        const verUrlDir = `${appUrl}?validar=${rec.id}`;
+        await sendEmail({to:dirMailsList,
+          subject:`[Asturiano] Tarea completada — ${updated.numero}: ${updated.sector}`,
+          htmlBody: buildValidacionHtml(updated, saludoDirArr, verUrlDir, 'Tarea completada — requiere tu validación final'),
+          body:`Hola,\n\nEl responsable aprobó la resolución de la tarea ${updated.numero}. Ahora requiere tu validación final.\n\nVer y validar: ${verUrlDir}\n\nSi no respondés en 2 días, se asume aprobado y se notifica al solicitante.\n\n— Sistema de Reclamos — Asturiano`});
+      }
+
       setSending(false); setDone("aprobado_responsable");
       return;
     }
@@ -3975,6 +4063,9 @@ function ValidarDetalleView({recId, recs, setRecs, loaded, setView}) {
     setSending(true);
     const autor = esParaResponsable ? "Responsable" : "Directivo";
     const updated={...rec,estadoAvance:"bajo_analisis",reabierta:true,descripcionResolucion:"",ejecutorConfirmado:false,
+      ejecutorRechazado:false, ejecutorMail:"", ejecutorNombre:"",
+      ejecutores_lista:(rec.ejecutores_lista||[]).map(ej=>({...ej,confirmado:false,rechazado:false,fechaConfirmacion:null})),
+      fechaAsignacion:null,
       comentarios:[...(rec.comentarios||[]),{
         texto:autor+" rechazó la resolución. Motivo: "+motivoRechazo,
         fecha:new Date().toISOString(), autor
@@ -5705,7 +5796,7 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
             h('button',{onClick:function(){setShowRechazo(true);},
               style:{flex:1,padding:"13px",background:"#fef2f2",color:"#dc2626",border:"2px solid #fecaca",
                 borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700}},"Rechazar")),
-          estadoEj==="confirmado" && !showNoPude && h('div',{style:{display:"flex",flexDirection:"column",gap:8}},
+          estadoEj==="confirmado" && !["esperando_validacion_responsable","esperando_validacion_directivo","esperando_validacion","completada"].includes(r.estadoAvance) && !showNoPude && h('div',{style:{display:"flex",flexDirection:"column",gap:8}},
             h('a',{href:window.location.href.split("?")[0]+"?completar="+r.id,
               style:{display:"block",padding:"13px",background:"linear-gradient(135deg,#3b82f6,#1d4ed8)",
                 color:"white",textDecoration:"none",borderRadius:10,fontSize:14,fontWeight:700,textAlign:"center"}},
@@ -5714,6 +5805,7 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
               style:{padding:"11px",background:"#fff7ed",color:"#c2410c",border:"2px solid #fed7aa",
                 borderRadius:10,cursor:"pointer",fontSize:13,fontWeight:600}},
               "❌ No pude completarla")),
+          ["esperando_validacion_responsable","esperando_validacion_directivo","esperando_validacion","completada"].includes(r.estadoAvance) && h('div',{style:{background:"#f0fdf4",border:"1.5px solid #bbf7d0",borderRadius:10,padding:"13px",textAlign:"center",fontSize:14,fontWeight:700,color:"#15803d"}},"✅ Tarea completada"),
           showNoPude && h('div',{style:{background:"#fff7ed",border:"1.5px solid #fed7aa",borderRadius:10,padding:14}},
             h('div',{style:{fontWeight:700,color:"#c2410c",marginBottom:8,fontSize:13}},"¿Por qué no pudiste completarla?"),
             h('textarea',{value:motivoNoPude,onChange:function(e){setMotivoNoPude(e.target.value);},rows:3,
@@ -6173,7 +6265,7 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
         h('p',{style:{color:"#64748b",fontSize:14}},"No encontramos la solicitud "+numSeg+". Verificá el número e intentá de nuevo."),
         h('button',{onClick:()=>setView("admin"),style:{marginTop:20,padding:"10px 24px",background:"#1a3a6b",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:600}},"Consultar otra solicitud")));
     const cat=CATS[rec.cat]; const pri=PRIS.find(p=>p.id===rec.pri);
-    const est=ESTADOS.find(e=>e.id===rec.estadoAvance);
+    const est=getEstadoEjecucion(rec) || ESTADOS.find(e=>e.id===rec.estadoAvance);
     const appUrl=window.location.href.split("?")[0];
     return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#1a3a6b,#0f2347)",padding:"20px 16px 40px"}},
       h('div',{style:{textAlign:"center",marginBottom:24,paddingTop:20}},
