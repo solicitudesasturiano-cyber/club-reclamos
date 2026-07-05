@@ -1673,7 +1673,7 @@ Resolución: ${descripcion||"—"}`});
           // Estado actual (read-only display)
           h('div',{style:{marginBottom:14,display:"flex",alignItems:"center",gap:10}},
             h('div',{style:{fontSize:11,fontWeight:600,color:"#94a3b8",textTransform:"uppercase",letterSpacing:0.5}},"Estado actual:"),
-            h(Badge,{color:ESTADOS.find(e=>e.id===f.estadoAvance)?.color,label:ESTADOS.find(e=>e.id===f.estadoAvance)?.label||f.estadoAvance,sm:true})),
+            h(Badge,{color:(getEstadoEjecucion(rec)?.label) || ESTADOS.find(e=>e.id===f.estadoAvance)?.label || f.estadoAvance)?.label||f.estadoAvance,sm:true})),
           // Only allow manual change to "Sin resolución temporaria"
           h('div',{style:{marginBottom:14}},
             h('button',{onClick:()=>set("estadoAvance", f.estadoAvance==="sin_resolucion"?"bajo_analisis":"sin_resolucion"),
@@ -1851,9 +1851,9 @@ Resolución: ${descripcion||"—"}`});
               if(!confirm("¿Marcar como completado y enviar al directivo para validación?")) return;
               set("estadoAvance","completada");
               setTimeout(()=>save(),50);
-            },style:{width:"100%",padding:"13px",background:"linear-gradient(135deg,#22c55e,#15803d)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700}},"✅ Marcar como completado — enviar a validación")),
+            },style:{width:"100%",padding:"13px",background:"linear-gradient(135deg,#22c55e,#15803d)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700}}," Marcar como completado — enviar a validación")),
             f.estadoAvance==="esperando_validacion_responsable" && h('div',{style:{background:"#fdf4ff",border:"1.5px solid #e9d5ff",borderRadius:10,padding:14,marginBottom:8}},
-            h('div',{style:{fontSize:12,color:"#86198f",fontWeight:700,marginBottom:8}},"🔍 Esperando tu validación como responsable"),
+            h('div',{style:{fontSize:12,color:"#86198f",fontWeight:700,marginBottom:8}},"Esperando tu validación como responsable"),
             h('div',{style:{fontSize:12,color:"#701a75",marginBottom:12,lineHeight:1.5}},"El ejecutor marcó esta tarea como completada. Revisá la resolución de arriba y validá o rechazá. Si no actuás en 2 días, se escala automáticamente al directivo."),
             !showRechazoResp && h('div',{style:{display:"flex",gap:10}},
               h('button',{onClick:validarResponsable,disabled:sendingValidacionResp,
