@@ -1670,10 +1670,9 @@ Resolución: ${descripcion||"—"}`});
 
         // TAB GESTIÓN
         tab==="gestion" && h('div',null,
-          // Estado actual (read-only display)
           h('div',{style:{marginBottom:14,display:"flex",alignItems:"center",gap:10}},
             h('div',{style:{fontSize:11,fontWeight:600,color:"#94a3b8",textTransform:"uppercase",letterSpacing:0.5}},"Estado actual:"),
-            h(Badge,{color:(getEstadoEjecucion(rec)?.label) || ESTADOS.find(e=>e.id===f.estadoAvance)?.label || f.estadoAvance)?.label||f.estadoAvance,sm:true})),
+            h(Badge,{color:(getEstadoEjecucion(rec)||ESTADOS.find(e=>e.id===f.estadoAvance)||{}).color, label:(getEstadoEjecucion(rec)?.label)||ESTADOS.find(e=>e.id===f.estadoAvance)?.label||f.estadoAvance, sm:true})),
           // Only allow manual change to "Sin resolución temporaria"
           h('div',{style:{marginBottom:14}},
             h('button',{onClick:()=>set("estadoAvance", f.estadoAvance==="sin_resolucion"?"bajo_analisis":"sin_resolucion"),
