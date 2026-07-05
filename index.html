@@ -1525,6 +1525,7 @@ let savedRec = {...rec,...f,adjuntosResolucion,comentarios,nuevoComentario:undef
     }
     setF(p=>({...p, estadoAvance: savedRec.estadoAvance}));
     setSending(false);
+    if(!["esperando_validacion_responsable","esperando_validacion_directivo"].includes(savedRec.estadoAvance)) onClose();
   };
 
   const validarResponsable = async () => {
@@ -3666,7 +3667,7 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
     mainTab==="reclamos" && view==="kanban" && h(Kanban,{recs:filtrados,onEdit:setModal}),
     mainTab==="proyectos" && h(ProyectosTab,{recs,onUpdate,ejecutores,area:area}),
     mainTab==="recurrencias" && h(RecurrenciasTab,{area,ejecutores,recs}),
-    modal && h(EditModal,{key:modal.id,rec:modal,onClose:()=>setModal(null),onSave:async u=>{await onUpdate(u,modal);setModal(null);},ejecutores,onUpdateHijo:async u=>{await onUpdate(u,u);},recs}),
+    modal && h(EditModal,{key:modal.id,rec:modal,onClose:()=>setModal(null),onSave:async u=>{await onUpdate(u,modal);},ejecutores,onUpdateHijo:async u=>{await onUpdate(u,u);},recs}),
     showCfg && h(PanelConfig,{onClose:()=>setShowCfg(false),onSaveEjecutores:ejs=>{setEjecutores(ejs);setShowCfg(false);},area}),
     modalDup && h(ModalConsolidacion,{
       hijo: modalDup.hijo,
