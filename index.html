@@ -1189,8 +1189,9 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs}) {
 
   const selectEj = mail => { const ej=ejecutores.find(e=>e.mail===mail); set("ejecutorMail",mail); if(ej) set("ejecutorNombre",ej.nombre); };
 
-  const save = async () => {
+  const save = async (opts) => {
     if(sending) return; // guard doble-click
+    const estadoAvanceEfectivo = (opts && opts.estadoAvanceOverride) || f.estadoAvance;
     setSaveErr("");
     // Block completada without resolution description
     if(f.estadoAvance==="completada" && !f.descripcionResolucion.trim()) {
@@ -1338,7 +1339,7 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs}) {
     // Auto-calculate estado based on dates and assignment
     const calcEstado = () => {
       // Don't auto-change if already in terminal/special states
-      if(["completada","consolidada","esperando_validacion","esperando_validacion_responsable","esperando_validacion_directivo","vinculado_proyecto","sin_resolucion"].includes(f.estadoAvance)) return f.estadoAvance;
+      if(["completada","consolidada","esperando_validacion","esperando_validacion_responsable","esperando_validacion_directivo","vinculado_proyecto","sin_resolucion"].includes(estadoAvanceEfectivo)) return estadoAvanceEfectivo;
       const ahora = new Date();
       const fechaInicio = pld(f.fechaInicioEsperado||f.fechaInicioActualizada||"");
       const fechaCierreEfectiva = pld(f.fechaCierreActualizada||f.fechaCierre||"");
@@ -1352,7 +1353,7 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs}) {
       if(f.fechaInicioEsperado && fechaInicio <= ahora) return "iniciada";
       // Planned (start date in future)
       if(f.fechaInicioEsperado && fechaInicio > ahora) return "no_iniciada";
-      return f.estadoAvance || "bajo_analisis";
+      return estadoAvanceEfectivo || "bajo_analisis";
     };
     const autoEstado = calcEstado();
 const ejListaFinal = (f.ejecutores_lista||[]).length===0 && f.tipoEjecutor==="tercero" && f.empresaNombre
@@ -1481,8 +1482,7 @@ let savedRec = {...rec,...f,adjuntosResolucion,comentarios,nuevoComentario:undef
       }
     }
     // When marked as completada → set to esperando_validacion (directivo must approve first)
-    console.log("DEBUG completar:", {f_estado: f.estadoAvance, rec_estado_original: rec.estadoAvance, descripcion: f.descripcionResolucion});
-    if((f.estadoAvance==="completada"||f.estadoAvance==="esperando_validacion"||f.estadoAvance==="esperando_validacion_responsable") && !["completada","esperando_validacion","esperando_validacion_responsable","esperando_validacion_directivo"].includes(rec.estadoAvance) && f.descripcionResolucion.trim()) {
+    if((estadoAvanceEfectivo==="completada"||estadoAvanceEfectivo==="esperando_validacion"||estadoAvanceEfectivo==="esperando_validacion_responsable") && !["completada","esperando_validacion","esperando_validacion_responsable","esperando_validacion_directivo"].includes(rec.estadoAvance) && f.descripcionResolucion.trim()) {
       const appUrl2 = window.location.href.split("?")[0];
       // Tickets recurrentes: no requieren validación del directivo ni mail al solicitante
       if (rec.esRecurrente) {
@@ -1850,9 +1850,8 @@ Resolución: ${descripcion||"—"}`});
             h('button',{onClick:async()=>{
               if(!f.descripcionResolucion?.trim()){setSaveErr("La descripción de lo realizado es obligatoria para completar.");return;}
               if(!confirm("¿Marcar como completado y enviar al directivo para validación?")) return;
-              set("estadoAvance","completada");
-              setTimeout(()=>save(),50);
-            },style:{width:"100%",padding:"13px",background:"linear-gradient(135deg,#22c55e,#15803d)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700}}," Marcar como completado — enviar a validación")),
+              await save({estadoAvanceOverride:"completada"});
+            },style:{width:"100%",padding:"13px",background:"linear-gradient(135deg,#22c55e,#15803d)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700}},"✅ Marcar como completado — enviar a validación")),
             f.estadoAvance==="esperando_validacion_responsable" && h('div',{style:{background:"#fdf4ff",border:"1.5px solid #e9d5ff",borderRadius:10,padding:14,marginBottom:8}},
             h('div',{style:{fontSize:12,color:"#86198f",fontWeight:700,marginBottom:8}},"Esperando tu validación como responsable"),
             h('div',{style:{fontSize:12,color:"#701a75",marginBottom:12,lineHeight:1.5}},"El ejecutor marcó esta tarea como completada. Revisá la resolución de arriba y validá o rechazá. Si no actuás en 2 días, se escala automáticamente al directivo."),
