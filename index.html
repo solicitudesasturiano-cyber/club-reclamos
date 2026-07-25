@@ -3647,15 +3647,7 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
             const est=getEstadoEjecucion(r) || ESTADOS.find(e=>e.id===r.estadoAvance); const t=getTiming(r);
             const esVinculado = r.estadoAvance==="vinculado_proyecto";
             const esRecurrente = !!r.esRecurrente;
-            h('td',{style:{padding:"6px 4px",fontSize:11,color:"#64748b",whiteSpace:"nowrap"}},(() => {
-                if(!rep) return fd(r.fechaCierreActualizada||r.fechaCierreConfirmada||r.fechaCierre);
-                return h('div',null,
-                  h('div',{style:{fontWeight:600,color:"#1e293b"}},fd(rep.actual)),
-                  h('span',{title:"Fecha original: "+fd(rep.orig)+(rep.veces>1?" — reprogramada "+rep.veces+" veces":"")+(r.motivoActualizacion?"\nMotivo: "+r.motivoActualizacion:""),
-                    style:{display:"inline-block",marginTop:3,padding:"1px 6px",borderRadius:5,fontSize:10,
-                      fontWeight:700,color:"#b45309",background:"transparent",border:"1.5px solid #fcd34d",cursor:"help"}},
-                    "↻ Reprog. "+(rep.dias>0?"+":"")+rep.dias+"d"+(rep.veces>1?" ×"+rep.veces:"")));
-              })()),
+            const rep = getReprogramacion(r);
             const rowBg = esVinculado?"#f8f7ff":esRecurrente?"#faf5ff":"white";
             return h('tr',{key:r.id,style:{background:rowBg,boxShadow:"0 1px 3px rgba(0,0,0,0.06)",opacity:esVinculado?0.82:1}},
               h('td',{style:{padding:"6px 4px",borderRadius:"10px 0 0 10px",borderLeft:rep?"3px solid #f59e0b":"3px solid transparent"}},
@@ -3768,7 +3760,7 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
                 return h('span',{style:{display:"inline-block",padding:"3px 8px",borderRadius:6,fontSize:11,fontWeight:600,color:ee.color,background:ee.bg,whiteSpace:"nowrap"}},ee.label);
               })()),
               h('td',{style:{padding:"6px 4px",fontSize:11,color:"#64748b",whiteSpace:"nowrap"}},(() => {
-                const rep = getReprogramacion(r);
+                
                 if(!rep) return fd(r.fechaCierreActualizada||r.fechaCierreConfirmada||r.fechaCierre);
                 return h('div',null,
                   h('div',{style:{fontWeight:600,color:"#c2410c"}},fd(rep.actual)),
