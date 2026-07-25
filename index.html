@@ -524,14 +524,24 @@ const pld = iso => { if(!iso) return new Date(NaN); const p=iso.split("T")[0].sp
 
 function getTiming(r) {
   if (["completada","consolidada","sin_resolucion","vinculado_proyecto","esperando_validacion_responsable","esperando_validacion_directivo"].includes(r.estadoAvance)) return null;
-  if (!r.fechaCierre) return null;
-  const d = (pld(r.fechaCierre) - new Date()) / 86400000;
+  const cierre = r.fechaCierreActualizada || r.fechaCierreConfirmada || r.fechaCierre;
+  if (!cierre) return null;
+  const d = (pld(cierre) - new Date()) / 86400000;
   if (d < 0)  return {label:"Vencido",    color:"#ef4444", bg:"#fef2f2"};
   if (d < 1)  return {label:"Vence hoy",  color:"#f97316", bg:"#fff7ed"};
   if (d < 5)  return {label:"Por vencer", color:"#eab308", bg:"#fefce8"};
   return {label:"A tiempo", color:"#22c55e", bg:"#f0fdf4"};
 }
-
+function getReprogramacion(r) {
+  const orig = r.fechaOriginalCierre;
+  const actual = r.fechaCierreActualizada || r.fechaCierreConfirmada || r.fechaCierre;
+  if (!orig || !actual || orig === actual) return null;
+  const dias = Math.round((pld(actual) - pld(orig)) / 86400000);
+  const veces = (r.comentarios||[]).filter(function(c){
+    return c.texto && c.texto.indexOf("Fechas reprogramadas") === 0;
+  }).length;
+  return {orig:orig, actual:actual, dias:dias, veces:veces||1};
+}
 function getAccionRequerida(r) {
   if (["completada","consolidada","vinculado_proyecto","esperando_validacion_responsable","esperando_validacion_directivo"].includes(r.estadoAvance)) return null;
   const crit = r.criticidad || r.pri || "media";
@@ -552,12 +562,13 @@ function getAccionRequerida(r) {
 
 function getEstadoEjecucion(r) {
   // No hay fecha de inicio → no mostrar nada
-  if (!r.fechaInicioEsperado && !r.fechaInicioOriginal) return null;
+  const inicioStr = r.fechaInicioActualizada || r.fechaInicioEsperado || r.fechaInicioOriginal;
+  if (!inicioStr) return null;
 
   const ahora = new Date(); ahora.setHours(0,0,0,0);
-  const inicio = pld(r.fechaInicioEsperado || r.fechaInicioOriginal);
+  const inicio = pld(inicioStr);
   inicio.setHours(0,0,0,0);
-  const cierreStr = r.fechaOriginalCierre || r.fechaCierre;
+  const cierreStr = r.fechaCierreActualizada || r.fechaCierreConfirmada || r.fechaCierre;
   const cierre = cierreStr ? pld(cierreStr) : null;
   if (cierre) cierre.setHours(0,0,0,0);
 
@@ -2282,7 +2293,8 @@ function Kanban({recs, onEdit}) {
           !items.length && h('div',{style:{textAlign:"center",padding:20,color:"#cbd5e1",fontSize:13,background:"#f8fafc",borderRadius:10,border:"1.5px dashed #e2e8f0"}},"Sin solicitudes"),
           ...items.map(r=>{
             const cat=CATS[r.cat]; const pri=PRIS.find(p=>p.id===(r.criticidad||r.pri)); const t=getTiming(r);
-            return h('div',{key:r.id,onClick:()=>onEdit(r),style:{background:"white",borderRadius:12,padding:12,boxShadow:"0 1px 4px rgba(0,0,0,0.08)",borderLeft:`4px solid ${pri?.color||"#94a3b8"}`,cursor:"pointer"}},
+            const rep=getReprogramacion(r);
+            return h('div',{key:r.id,onClick:()=>onEdit(r),style:{background:"white",borderRadius:12,padding:12,boxShadow:"0 1px 4px rgba(0,0,0,0.08)",borderLeft:`4px solid ${pri?.color||"#94a3b8"}`,cursor:"pointer",outline:rep?"1.5px solid #fcd34d":"none",outlineOffset:"-1.5px"}},
               h('div',{style:{display:"flex",justifyContent:"space-between",marginBottom:5}},
                 h('span',{style:{fontFamily:"monospace",fontSize:11,fontWeight:700,color:"#3b82f6"}},r.numero),
                 t && h(Badge,{color:t.color,bg:t.bg,label:t.label,sm:true})),
@@ -2292,7 +2304,11 @@ function Kanban({recs, onEdit}) {
               r.ejecutorRechazado ? h('div',{style:{marginTop:6,fontSize:11,color:"#dc2626",fontWeight:600}},"❌ Rechazada — acción requerida")
               : r.ejecutorNombre ? h('div',{style:{marginTop:6,fontSize:11,color:"#64748b"}},"👤 "+r.ejecutorNombre+(r.ejecutorConfirmado?" ✅":r.ejecutorMail?" ⏳":""))
               : null,
-              h('div',{style:{marginTop:5,fontSize:11,color:"#cbd5e1"}},"Cierre: "+fd(r.fechaCierre)));
+              h('div',{style:{marginTop:5,fontSize:11,color:"#cbd5e1",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}},
+                h('span',null,"Cierre: "+fd(r.fechaCierreActualizada||r.fechaCierreConfirmada||r.fechaCierre)),
+                rep && h('span',{title:"Original: "+fd(rep.orig)+(r.motivoActualizacion?" — "+r.motivoActualizacion:""),
+                  style:{padding:"1px 6px",borderRadius:5,fontSize:10,fontWeight:700,color:"#b45309",border:"1.5px solid #fcd34d"}},
+                  "↻ "+(rep.dias>0?"+":"")+rep.dias+"d"+(rep.veces>1?" ×"+rep.veces:""))));
           })));
     }));
 }
@@ -3431,7 +3447,12 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
     total:recs.length,
     noIniciadas:recs.filter(r=>r.estadoAvance==="bajo_analisis").length,
     enCurso:recs.filter(r=>r.estadoAvance==="iniciada").length,
-    demoradas:recs.filter(r=>r.estadoAvance==="demorada"||(!["completada","consolidada","sin_resolucion","vinculado_proyecto","esperando_validacion_responsable","esperando_validacion_directivo"].includes(r.estadoAvance)&&r.fechaCierre&&pld(r.fechaCierre)<new Date())).length,
+    demoradas:recs.filter(function(r){
+      if(["completada","consolidada","sin_resolucion","vinculado_proyecto","esperando_validacion_responsable","esperando_validacion_directivo"].includes(r.estadoAvance)) return false;
+      const c = r.fechaCierreActualizada||r.fechaCierreConfirmada||r.fechaCierre;
+      if(!c) return r.estadoAvance==="demorada";
+      return pld(c) < new Date();
+    }).length,
     completadas:recs.filter(r=>r.estadoAvance==="completada").length,
   };
 
@@ -3626,9 +3647,18 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
             const est=getEstadoEjecucion(r) || ESTADOS.find(e=>e.id===r.estadoAvance); const t=getTiming(r);
             const esVinculado = r.estadoAvance==="vinculado_proyecto";
             const esRecurrente = !!r.esRecurrente;
+            h('td',{style:{padding:"6px 4px",fontSize:11,color:"#64748b",whiteSpace:"nowrap"}},(() => {
+                if(!rep) return fd(r.fechaCierreActualizada||r.fechaCierreConfirmada||r.fechaCierre);
+                return h('div',null,
+                  h('div',{style:{fontWeight:600,color:"#1e293b"}},fd(rep.actual)),
+                  h('span',{title:"Fecha original: "+fd(rep.orig)+(rep.veces>1?" — reprogramada "+rep.veces+" veces":"")+(r.motivoActualizacion?"\nMotivo: "+r.motivoActualizacion:""),
+                    style:{display:"inline-block",marginTop:3,padding:"1px 6px",borderRadius:5,fontSize:10,
+                      fontWeight:700,color:"#b45309",background:"transparent",border:"1.5px solid #fcd34d",cursor:"help"}},
+                    "↻ Reprog. "+(rep.dias>0?"+":"")+rep.dias+"d"+(rep.veces>1?" ×"+rep.veces:"")));
+              })()),
             const rowBg = esVinculado?"#f8f7ff":esRecurrente?"#faf5ff":"white";
             return h('tr',{key:r.id,style:{background:rowBg,boxShadow:"0 1px 3px rgba(0,0,0,0.06)",opacity:esVinculado?0.82:1}},
-              h('td',{style:{padding:"6px 4px",borderRadius:"10px 0 0 10px"}},
+              h('td',{style:{padding:"6px 4px",borderRadius:"10px 0 0 10px",borderLeft:rep?"3px solid #f59e0b":"3px solid transparent"}},
                 h('span',{style:{fontFamily:"monospace",fontSize:11,fontWeight:700,color:esVinculado?"#7c3aed":esRecurrente?"#8b5cf6":"#3b82f6"}},r.numero),
                 h('div',{style:{fontSize:10,color:"#94a3b8",marginTop:1}},fd(r.createdAt)),
                 esVinculado && h('div',{style:{fontSize:10,color:"#7c3aed",fontWeight:600,marginTop:1,whiteSpace:"nowrap"}},
@@ -3737,7 +3767,16 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
                 if(!ee) return h('span',{style:{color:"#cbd5e1",fontSize:11}},"—");
                 return h('span',{style:{display:"inline-block",padding:"3px 8px",borderRadius:6,fontSize:11,fontWeight:600,color:ee.color,background:ee.bg,whiteSpace:"nowrap"}},ee.label);
               })()),
-              h('td',{style:{padding:"6px 4px",fontSize:11,color:"#64748b",whiteSpace:"nowrap"}},fd(r.fechaCierreConfirmada||r.fechaCierre)),
+              h('td',{style:{padding:"6px 4px",fontSize:11,color:"#64748b",whiteSpace:"nowrap"}},(() => {
+                const rep = getReprogramacion(r);
+                if(!rep) return fd(r.fechaCierreActualizada||r.fechaCierreConfirmada||r.fechaCierre);
+                return h('div',null,
+                  h('div',{style:{fontWeight:600,color:"#c2410c"}},fd(rep.actual)),
+                  h('span',{title:"Fecha original: "+fd(rep.orig)+(rep.veces>1?" — reprogramada "+rep.veces+" veces":"")+(r.motivoActualizacion?"\nMotivo: "+r.motivoActualizacion:""),
+                    style:{display:"inline-block",marginTop:2,padding:"1px 6px",borderRadius:5,fontSize:10,
+                      fontWeight:700,color:"#c2410c",background:"#ffedd5",cursor:"help"}},
+                    "🔄 "+(rep.dias>0?"+":"")+rep.dias+"d"+(rep.veces>1?" ×"+rep.veces:"")));
+              })()),
               h('td',{style:{padding:"6px 4px",minWidth:70}},(() => {
                 const cal = r.calificacion;
                 if(!cal) return h('span',{style:{color:"#cbd5e1"}},"—");
@@ -4596,8 +4635,9 @@ function DashboardPanel({recs}) {
 
   const demoradas = recsFilt.filter(r=>{
     if(["completada","consolidada","vinculado_proyecto"].includes(r.estadoAvance)) return false;
-    if(!r.fechaCierre) return false;
-    return new Date(r.fechaCierre)<ahora;
+    const c = r.fechaCierreActualizada||r.fechaCierreConfirmada||r.fechaCierre;
+    if(!c) return false;
+    return pld(c)<ahora;
   }).length;
 
   const sinAsignar = recsFilt.filter(r=>
