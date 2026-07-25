@@ -275,80 +275,111 @@ function panelUrl(appUrl, area) {
 
 const SECTORES_ADMIN = ["Administración"];
 
+// g = grupo (banos | piletas | interiores | exteriores | admin) → define las subcategorías
+// s = sub-espacios
 const UBICACION_DATA = {
-  "Covadonga": {
-    "Administración": [],
-    "Bajo Pileta": ["Lockers","Otro"],
-    "Biblioteca / Contaduría": ["Baños Biblioteca / Contaduría","Otro"],
-    "Cancha Fútbol 5 Covadonga": [],
-    "Consultorio Médico": [],
-    "Gimnasio de Aparatos": [],
-    "Gimnasio Principal": [],
-    "Hall de Entrada": ["Baños Hall de Entrada","Otro"],
-    "Leñero": [],
-    "Mesas Campo": ["Baños Campo","Otro"],
-    "Parque Verde Vial Costero": [],
-    "Pasillos / Conexiones": ["Pasillo Covadonga","Pasillo conexión Polideportivo","Otro"],
-    "Piletas": ["Pileta Mayores","Pileta Niños","Otro"],
-    "Plaza de Juegos": [],
-    "Quincho": [],
-    "Salón Canasta": ["Baños Canasta","Otro"],
-    "Salón de Socios": [],
-    "Salón Juvenil": [],
-    "Salón Presidente": [],
-    "Unidad Sanitaria": [],
-    "Vestuarios Covadonga": ["Baños Vestuarios Covadonga","Otro"],
-    "Otro": []
+  "Covadonga 1081": {
+    "Administración":                {g:"admin",      s:[]},
+    "Bajo Pileta":                   {g:"piletas",    s:["Lockers","Otro"]},
+    "Biblioteca / Contaduría":       {g:"interiores", s:["Baños Biblioteca / Contaduría","Otro"]},
+    "Bolera":                        {g:"interiores", s:[]},
+    "Bolos":                         {g:"exteriores", s:[]},
+    "Cabina Control":                {g:"interiores", s:[]},
+    "Cocina Salón Canasta":          {g:"interiores", s:[]},
+    "Cocina Salón Presidente":       {g:"interiores", s:[]},
+    "Confitería Socios":             {g:"interiores", s:[]},
+    "Consultorio Médico":            {g:"interiores", s:[]},
+    "Depósito Administración":       {g:"admin",      s:[]},
+    "Depósito Gimnasio Primer Piso": {g:"interiores", s:[]},
+    "Escalera Mármol Estadio":       {g:"interiores", s:[]},
+    "Fogonero":                      {g:"exteriores", s:[]},
+    "Gimnasio Aparatos Socios":      {g:"interiores", s:[]},
+    "Gimnasio de Aparatos":          {g:"interiores", s:[]},
+    "Gimnasio Principal":            {g:"interiores", s:[]},
+    "Hall de Entrada":               {g:"interiores", s:["Baños Hall de Entrada","Otro"]},
+    "Leñero":                        {g:"exteriores", s:[]},
+    "Mesas Campo":                   {g:"exteriores", s:["Baños Campo","Otro"]},
+    "Mesas Hórreo":                  {g:"exteriores", s:[]},
+    "Mirador Pileta":                {g:"piletas",    s:[]},
+    "Oficina Contable":              {g:"admin",      s:[]},
+    "Oficina Deportes":              {g:"admin",      s:[]},
+    "Oficina Intendencia":           {g:"admin",      s:[]},
+    "Parque Verde Vial Costero":     {g:"exteriores", s:[]},
+    "Parrillas":                     {g:"exteriores", s:[]},
+    "Pasillos / Conexiones":         {g:"interiores", s:["Pasillo Covadonga","Pasillo Conexión Polideportivo","Otro"]},
+    "Piletas":                       {g:"piletas",    s:["Pileta Mayores","Pileta Niños","Otro"]},
+    "Playón 1081":                   {g:"exteriores", s:[]},
+    "Playón Hórreo":                 {g:"exteriores", s:[]},
+    "Plaza de Juegos":               {g:"exteriores", s:[]},
+    "Quincho":                       {g:"interiores", s:[]},
+    "Sala de la Amistad":            {g:"interiores", s:[]},
+    "Salón Canasta":                 {g:"interiores", s:["Baños Canasta","Salón Canasta","Salón Paraíso","Otro"]},
+    "Salón de Socios":               {g:"interiores", s:[]},
+    "Salón Juvenil":                 {g:"interiores", s:[]},
+    "Salón Presidente":              {g:"interiores", s:[]},
+    "Salón Verde (Ex Vestuario 2)":  {g:"interiores", s:[]},
+    "Tejo":                          {g:"exteriores", s:[]},
+    "Termotanques":                  {g:"interiores", s:[]},
+    "Unidad Sanitaria":              {g:"banos",      s:[]},
+    "Vestuario Visitante FEM":       {g:"banos",      s:[]},
+    "Vestuario Visitante MASC":      {g:"banos",      s:[]},
+    "Vestuarios Covadonga":          {g:"banos",      s:["Baños Vestuarios Covadonga","Otro"]},
+    "Otro":                          {g:"interiores", s:[]}
   },
   "Polideportivo": {
-    "Básquet": [],
-    "Bolos": [],
-    "Canchas Sintético": ["Cancha 11","Canchas 5","Otro"],
-    "Chiringuito": ["Vestuarios Chiringuito","Baños Chiringuito","Otro"],
-    "Estacionamiento": ["Oficina Estacionamiento","Playón","Otro"],
-    "Golf": [],
-    "Jockey": [],
-    "Nuevo Bodegón Asturiano": [],
-    "Pádel": [],
-    "Palestra": [],
-    "Tejo": [],
-    "Tenis": ["Cabina Tenis","Cancha Rápida","Oficina Tenis","Polvo de Ladrillo","Otro"],
-    "Tinglado": [],
-    "Otro": []
+    "Básquet":                       {g:"exteriores", s:[]},
+    "Cancha Estacionamiento":        {g:"exteriores", s:[]},
+    "Cancha Sintético Vial":         {g:"exteriores", s:[]},
+    "Canchas Sintético":             {g:"exteriores", s:["Cancha 11","Canchas 5","Otro"]},
+    "Chiringuito":                   {g:"interiores", s:["Vestuarios Chiringuito","Baños Chiringuito","Otro"]},
+    "Estacionamiento":               {g:"exteriores", s:["Oficina Estacionamiento","Playón","Otro"]},
+    "Golf":                          {g:"exteriores", s:[]},
+    "Nuevo Bodegón Asturiano":       {g:"interiores", s:[]},
+    "Pádel":                         {g:"exteriores", s:[]},
+    "Palestra":                      {g:"exteriores", s:[]},
+    "Tenis":                         {g:"exteriores", s:["Cabina Tenis","Cancha Rápida","Oficina Tenis","Polvo de Ladrillo","Otro"]},
+    "Tinglado":                      {g:"exteriores", s:[]},
+    "Otro":                          {g:"interiores", s:[]}
+  },
+  "Sintético": {
+    "Bodegón Astur Sintético":       {g:"interiores", s:[]},
+    "Cancha 11 Sintético":           {g:"exteriores", s:[]},
+    "Cancha Fútbol 5 Sintético":     {g:"exteriores", s:[]},
+    "Vestuario Sintético":           {g:"banos",      s:[]},
+    "Otro":                          {g:"interiores", s:[]}
   }
 };
 
-const SECTORES_TODOS = Object.keys(UBICACION_DATA["Covadonga"]).concat(Object.keys(UBICACION_DATA["Polideportivo"]));
+const SECTOR_ICONS = {"Covadonga 1081":"🏛️","Polideportivo":"🏟️","Sintético":"🥅"};
 
-function getSectoresByCat(cat) {
-  if (["servicios","cuotas"].includes(cat)) return SECTORES_ADMIN;
-  return SECTORES_TODOS;
+// Todos los espacios, sin duplicados, alfabético y con "Otro" al final
+const SECTORES_TODOS = Array.from(new Set(
+  Object.values(UBICACION_DATA).reduce(function(acc,esp){ return acc.concat(Object.keys(esp)); }, [])
+)).sort(function(a,b){
+  if(a==="Otro") return 1;
+  if(b==="Otro") return -1;
+  return a.localeCompare(b,"es");
+});
+
+function subsDe(sectorGrande, espacio) {
+  var e = (UBICACION_DATA[sectorGrande]||{})[espacio];
+  return (e && e.s) || [];
 }
 
-function getGrupo(sector) { return ""; }
-// Sectores según categoría
-function getSectoresByCat(cat) {
-  if (["servicios","cuotas"].includes(cat)) return SECTORES_ADMIN;
-  return SECTORES_TODOS;
-}
-
-const TIPOS_SOL = [{id:"socio",label:"Socio",icon:"🏅"},{id:"empleado",label:"Empleado",icon:"👷"},{id:"directivo",label:"Directivo",icon:"🎖️"},{id:"no_socio",label:"No socio / Invitado",icon:"👤"}];
-
-// Grupos de sectores
-const GRUPOS_SECTOR = {
-  banos: ["Baños Hall Entrada","Baños Canasta","Baños Campo","Baños Vestuarios","Baños Chiringuito","Unidad Sanitaria","Vestuarios General"],
-  piletas: ["Piletas","Área Lockers bajo Pileta","Espacio bajo pileta"],
-  interiores: ["Salón de Socios Confitería","Salón Canasta","Biblioteca Oficina Contaduría 1er piso","Salón Juvenil","Salón Presidente","Gimnasio Aparatos","Gimnasio Principal","Salón Yoga","Quincho","Consultorio Médico","Oficina Tenis","Chiringuito","Oficina Estacionamiento","Covadonga Hall De Entrada","Cabina Control Entrada Campo"],
-  exteriores: ["Cancha Playón Entrada Covadonga","Área Mesas Campo","Playón Horreo","Plaza Juegos Infantiles","Parque cercano al Vial Costero","Pasillo conexión Covadonga y Deportes","Cancha de Tejo","Cancha de Jockey","Pasillo Angosto y Largo Lado Deportes","Cancha Fútbol 11","Canchas Sintético","Playones semicubiertos Lado Deportes","Estacionamiento","Puente Conexión Canchas de Fútbol","Cancha de Bolos","Zona Parrillas","Zona Palestra","Pasillo Covadonga"],
-  admin: ["Administración"],
-};
-
-function getGrupo(sector) {
-  for (const [g, list] of Object.entries(GRUPOS_SECTOR)) {
-    if (list.includes(sector)) return g;
+function getGrupo(espacio) {
+  for (var sg in UBICACION_DATA) {
+    var e = UBICACION_DATA[sg][espacio];
+    if (e) return e.g || "interiores";
   }
   return "interiores";
 }
+
+function getSectoresByCat(cat) {
+  return ["servicios","cuotas"].includes(cat) ? SECTORES_ADMIN : SECTORES_TODOS;
+}
+const TIPOS_SOL = [{id:"socio",label:"Socio",icon:"🏅"},{id:"empleado",label:"Empleado",icon:"👷"},{id:"directivo",label:"Directivo",icon:"🎖️"},{id:"no_socio",label:"No socio / Invitado",icon:"👤"}];
+
+
 
 // Subcategorías dinámicas según categoría + grupo de sector
 const SUBS = {
@@ -871,7 +902,63 @@ const {createElement:h, useState, useEffect, useRef, Fragment} = React;
 function Badge({color, bg, label, sm}) {
   return h('span', {style:{display:"inline-block",padding:sm?"2px 8px":"3px 10px",borderRadius:20,fontSize:sm?11:12,fontWeight:600,color,background:bg||color+"22",whiteSpace:"nowrap"}}, label);
 }
+function SelectBuscador(props) {
+  var value = props.value, onChange = props.onChange;
+  var opciones = props.opciones || [];
+  var placeholder = props.placeholder || "Seleccioná...";
+  var dark = props.dark, error = props.error;
+  var st = useState(false), abierto = st[0], setAbierto = st[1];
+  var sq = useState(""), q = sq[0], setQ = sq[1];
+  var wrapRef = useRef(null), inputRef = useRef(null);
 
+  useEffect(function(){
+    function fuera(e){ if(wrapRef.current && !wrapRef.current.contains(e.target)){ setAbierto(false); setQ(""); } }
+    document.addEventListener("mousedown", fuera);
+    return function(){ document.removeEventListener("mousedown", fuera); };
+  },[]);
+  useEffect(function(){ if(abierto && inputRef.current) inputRef.current.focus(); },[abierto]);
+
+  var norm = function(s){ return (s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,""); };
+  var lista = q.trim() ? opciones.filter(function(o){ return norm(o).indexOf(norm(q)) !== -1; }) : opciones;
+
+  var c = dark
+    ? {bg:"rgba(255,255,255,0.1)",bd:"2px solid rgba(255,255,255,0.15)",tx:"white",ph:"#94a3b8",
+       pBg:"#1a3a6b",pBd:"rgba(255,255,255,0.2)",sep:"rgba(255,255,255,0.07)",hov:"rgba(255,255,255,0.14)"}
+    : {bg:"white",bd:"1.5px solid #e2e8f0",tx:"#1e293b",ph:"#94a3b8",
+       pBg:"white",pBd:"#e2e8f0",sep:"#f1f5f9",hov:"#eff6ff"};
+  if(error) c.bd = "2px solid #ef4444";
+
+  var elegir = function(o){ onChange(o); setAbierto(false); setQ(""); };
+
+  return h('div',{ref:wrapRef,style:{position:"relative"}},
+    abierto
+      ? h('input',{ref:inputRef,value:q,
+          onChange:function(e){ setQ(e.target.value); },
+          onKeyDown:function(e){
+            if(e.key==="Escape"){ setAbierto(false); setQ(""); }
+            if(e.key==="Enter" && lista.length){ e.preventDefault(); elegir(lista[0]); }
+          },
+          placeholder:"Escribí para buscar...",
+          style:{width:"100%",padding:"11px 14px",borderRadius:10,border:c.bd,background:c.bg,
+            color:c.tx,fontSize:14,outline:"none",boxSizing:"border-box"}})
+      : h('button',{onClick:function(){ setAbierto(true); },
+          style:{width:"100%",padding:"11px 14px",borderRadius:10,border:c.bd,background:c.bg,
+            color:value?c.tx:c.ph,fontSize:14,textAlign:"left",cursor:"pointer",boxSizing:"border-box",
+            display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}},
+          h('span',{style:{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}, value || placeholder),
+          h('span',{style:{opacity:0.55,flexShrink:0,fontSize:11}},"▼")),
+    abierto && h('div',{style:{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,zIndex:60,
+        background:c.pBg,border:"1.5px solid "+c.pBd,borderRadius:10,maxHeight:260,overflowY:"auto",
+        WebkitOverflowScrolling:"touch",boxShadow:"0 10px 30px rgba(0,0,0,0.3)"}},
+      lista.length===0
+        ? h('div',{style:{padding:"12px 14px",fontSize:13,color:c.ph}},"Sin resultados")
+        : lista.map(function(o,i){
+            return h('div',{key:o,onClick:function(){ elegir(o); },
+              style:{padding:"11px 14px",fontSize:14,color:c.tx,cursor:"pointer",
+                background: o===value ? c.hov : "transparent",
+                borderTop: i===0 ? "none" : "1px solid "+c.sep}}, o);
+          })));
+}
 // ── FORMULARIO SOCIO ───────────────────────────────────────────────────────
 function FormularioSocio({onSubmit, reclamos}) {
   const _ds = ls.get("datos_solicitante") || {};
@@ -6341,7 +6428,7 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
         borderRadius:"50%",width:32,height:32,cursor:"pointer",fontSize:14,color:"rgba(0,0,0,0.3)",
         display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}},
       "⚙"),
-    view==="socio" && h(FormularioSocio,{onSubmit:add,reclamos:recs}),
+    view==="socio" && h(FormularioSocio,{onSubmit:add,reclamos:recs}),  
     view==="mis_solicitudes" && h(MisSolicitudes,{recs,setRecs,loaded}),
     view==="mis_tareas" && h(MisTareasEjecutor,{recs,setRecs,loaded}),
     view==="intendencia" && !authInt && h(Login,{area:"intendencia",onLogin:()=>{setAuthInt(true);setShowPanelTabs(true);sessionStorage.setItem('authInt','1');}}),
