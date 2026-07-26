@@ -542,6 +542,25 @@ function getReprogramacion(r) {
   }).length;
   return {orig:orig, actual:actual, dias:dias, veces:veces||1};
 }
+
+const DIAS_GRACIA_RECURRENTE = 7;   // ← cambiá acá el "changüí"
+
+// ¿Puede completarse tarde sin tener que reprogramar?
+function puedeCompletarRetroactivo(r) {
+  if (!r.esRecurrente) return false;
+  const cierre = r.fechaCierreActualizada || r.fechaCierreConfirmada || r.fechaCierre;
+  if (!cierre) return true;
+  return ((new Date() - pld(cierre)) / 86400000) <= DIAS_GRACIA_RECURRENTE;
+}
+
+// Días entre "se hizo" y "lo cargaron"
+function getBrechaCarga(r) {
+  if (!r.fechaEjecucion || !r.fechaCompletada) return null;
+  const carga = r.fechaCompletada.split("T")[0];
+  const dias = Math.round((pld(carga) - pld(r.fechaEjecucion)) / 86400000);
+  if (dias <= 0) return null;
+  return {ejecucion:r.fechaEjecucion, carga:carga, dias:dias};
+}
 function fechasVigentes(r) {
 return {
   inicio: r.fechaInicioActualizada || r.fechaInicioEsperado || r.fechaInicioOriginal || "",
@@ -1299,6 +1318,7 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs, area})
     fechaCierreActualizada:rec.fechaCierreActualizada||"",
     motivoActualizacion:rec.motivoActualizacion||"",
     adjuntosResolucion:rec.adjuntosResolucion||[],
+    fechaEjecucion:rec.fechaEjecucion||"",
     reclamoPadre:rec.reclamoPadre||"",
     reclamosHijos:rec.reclamosHijos||[],
     proyectoVinculadoId:rec.proyectoVinculadoId||null,
@@ -1331,7 +1351,7 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs, area})
     const estadoAvanceEfectivo = (opts && opts.estadoAvanceOverride) || f.estadoAvance;
     setSaveErr("");
     // Block completada without resolution description
-    if(f.estadoAvance==="completada" && !f.descripcionResolucion.trim()) {
+    if(f.estadoAvanceEfectivo==="completada" && !f.descripcionResolucion.trim()) {
       setSaveErr("Para marcar como completada debés describir qué se hizo en la tab Resolución.");
       setTab("resolucion");
       return;
@@ -1347,7 +1367,7 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs, area})
         if(!f.fechaCierre && !rec.fechaOriginalCierre) { setSaveErr("La fecha de cierre es obligatoria."); return; }
       }
       // Block save if fechaCierre is in the past without updated date (unless completada)
-      if(f.estadoAvance !== "completada") {
+      if(estadoAvanceEfectivo !== "completada" || !puedeCompletarRetroactivo(rec)) {
         const fechaEfectiva = f.fechaCierreActualizada || f.fechaCierre || rec.fechaOriginalCierre;
         const hoyNormalizado = new Date(); hoyNormalizado.setHours(0,0,0,0);
         if(fechaEfectiva && pld(fechaEfectiva) < hoyNormalizado && !f.fechaCierreActualizada && !f.motivoActualizacion?.trim()) {
@@ -1367,7 +1387,7 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs, area})
     const diasDesdeCreacion = rec.createdAt ? (pld(f.fechaCierre||"") - new Date(rec.createdAt)) / 86400000 : 0;
     const esSinResolucion = f.estadoAvance === "sin_resolucion";
     const esDemoraLarga = !!(f.fechaCierre && diasDesdeCreacion > 21);
-    const requiereJustificacion = (esSinResolucion || esDemoraLarga) && !isVinculado && !isConsolidando;
+    const requiereJustificacion = (esSinResolucion || esDemoraLarga) && !isVinculado && !isConsolidando && !(estadoAvanceEfectivo==="completada" && puedeCompletarRetroactivo(rec));
     if(requiereJustificacion && !f.justificacionDemora?.trim()) {
       setSaveErr(esSinResolucion
         ? "Debés explicar el motivo por el cual no se puede resolver en este momento."
@@ -1511,6 +1531,12 @@ let savedRec = {...rec,...f,adjuntosResolucion,comentarios,nuevoComentario:undef
       reabierta: rec.reabierta || false,
       fechaCierreConfirmada,fechaInicioOriginal,fechaOriginalCierre,ejecutorMailOriginal,fechaAsignacion,
       updatedAt:new Date().toISOString()};
+      if(estadoAvanceEfectivo==="completada" && !rec.fechaCompletada) {
+        const progr = rec.fechaCierreActualizada||rec.fechaCierreConfirmada||rec.fechaCierre||"";
+        savedRec = {...savedRec,
+          fechaCompletada: new Date().toISOString(),
+          fechaEjecucion: f.fechaEjecucion || progr || hoy()};
+}
     await onSave(savedRec);
     // Consolidación manual: autopopular datos del padre en cada hijo nuevo
     const hijosAnteriores = new Set(rec.reclamosHijos||[]);
@@ -1993,6 +2019,11 @@ Resolución: ${descripcion||"—"}`});
                   h('input',{type:"date",value:f.fechaCierreActualizada||"",onChange:e=>set("fechaCierreActualizada",e.target.value),min:f.fechaInicioActualizada||hoy(),style:{width:"100%",padding:"9px 12px",borderRadius:8,border:"1.5px solid #fed7aa",fontSize:13,outline:"none",boxSizing:"border-box"}}))),
               h('label',{style:{display:"block",fontSize:10,fontWeight:600,color:"#374151",marginBottom:4,textTransform:"uppercase"}},"Motivo del nuevo plazo *"),
               h('textarea',{value:f.motivoActualizacion||"",onChange:e=>set("motivoActualizacion",e.target.value),rows:2,placeholder:"Explicá qué se va a hacer diferente esta vez...",style:{width:"100%",padding:"9px 12px",borderRadius:8,border:"1.5px solid #fed7aa",fontSize:13,outline:"none",boxSizing:"border-box",resize:"vertical"}})),
+            rec.esRecurrente && h('div',{style:{marginBottom:14}},
+              h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"¿Qué día se hizo?"),
+              h('input',{type:"date",value:f.fechaEjecucion||"",onChange:e=>set("fechaEjecucion",e.target.value),
+                min:rec.fechaInicioEsperado||rec.fechaInicioOriginal||"",max:hoy(),style:aS()}),
+              h('div',{style:{marginTop:4,fontSize:11,color:"#94a3b8"}},"Vacío = fecha planificada. No modifica las fechas de la solicitud.")),
             h('button',{onClick:async()=>{
               if(!f.descripcionResolucion?.trim()){setSaveErr("La descripción de lo realizado es obligatoria para completar.");return;}
               if(!confirm("¿Marcar como completado y enviar al directivo para validación?")) return;
@@ -3797,14 +3828,20 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
                 return h('span',{style:{display:"inline-block",padding:"3px 8px",borderRadius:6,fontSize:11,fontWeight:600,color:ee.color,background:ee.bg,whiteSpace:"nowrap"}},ee.label);
               })()),
               h('td',{style:{padding:"6px 4px",fontSize:11,color:"#64748b",whiteSpace:"nowrap"}},(() => {
-                
-                if(!rep) return fd(r.fechaCierreActualizada||r.fechaCierreConfirmada||r.fechaCierre);
-                return h('div',null,
-                  h('div',{style:{fontWeight:600,color:"#c2410c"}},fd(rep.actual)),
-                  h('span',{title:"Fecha original: "+fd(rep.orig)+(rep.veces>1?" — reprogramada "+rep.veces+" veces":"")+(r.motivoActualizacion?"\nMotivo: "+r.motivoActualizacion:""),
-                    style:{display:"inline-block",marginTop:2,padding:"1px 6px",borderRadius:5,fontSize:10,
-                      fontWeight:700,color:"#c2410c",background:"#ffedd5",cursor:"help"}},
-                    "🔄 "+(rep.dias>0?"+":"")+rep.dias+"d"+(rep.veces>1?" ×"+rep.veces:"")));
+                const brecha = getBrechaCarga(r);
+                const linea = rep
+                  ? h('div',null,
+                      h('div',{style:{fontWeight:600,color:"#1e293b"}},fd(rep.actual)),
+                      h('span',{title:"Fecha original: "+fd(rep.orig)+(rep.veces>1?" — reprogramada "+rep.veces+" veces":"")+(r.motivoActualizacion?"\nMotivo: "+r.motivoActualizacion:""),
+                        style:{display:"inline-block",marginTop:3,padding:"1px 6px",borderRadius:5,fontSize:10,
+                          fontWeight:700,color:"#b45309",background:"transparent",border:"1.5px solid #fcd34d",cursor:"help"}},
+                        "↻ Reprog. "+(rep.dias>0?"+":"")+rep.dias+"d"+(rep.veces>1?" ×"+rep.veces:"")))
+                  : h('div',{style:{fontWeight:600,color:"#1e293b"}},fd(r.fechaCierreActualizada||r.fechaCierreConfirmada||r.fechaCierre));
+                if(!brecha) return linea;
+                return h('div',null, linea,
+                  h('div',{title:"Se hizo el "+fd(brecha.ejecucion)+" y se cargó el "+fd(brecha.carga),
+                    style:{marginTop:3,fontSize:10,color:"#64748b",cursor:"help"}},
+                    "Hecha "+fd(brecha.ejecucion)+" · cargada +"+brecha.dias+"d"));
               })()),
               h('td',{style:{padding:"6px 4px",minWidth:70}},(() => {
                 const cal = r.calificacion;
@@ -3912,6 +3949,12 @@ function CompletarView({recId, recs, setRecs, loaded}) {
   const [sending,setSending] = useState(false);
   const fileRef = useRef();
   const [fotos,setFotos] = useState([]);
+  const [fechaEj,setFechaEj] = useState("");
+  useEffect(function(){
+    if(!rec || fechaEj) return;
+    var prog = rec.fechaCierreActualizada || rec.fechaCierreConfirmada || rec.fechaCierre || rec.fechaInicioEsperado || "";
+    setFechaEj(prog && prog < hoy() ? prog : hoy());
+  },[rec]);
 
   if(!loaded) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#1a3a6b,#0f2347)",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:18}},"Cargando...");
   if(!rec) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#1a3a6b,#0f2347)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
@@ -3935,6 +3978,12 @@ function CompletarView({recId, recs, setRecs, loaded}) {
     const mailCfg=getMailConfig();
     const msgCat={infraestructura:"nuestro equipo de obras e infraestructura revisó y resolvió el inconveniente",mantenimiento:"nuestro equipo de mantenimiento atendió y solucionó el problema",limpieza:"nuestro equipo de limpieza atendió la situación",equipamiento:"el equipamiento fue revisado y el problema fue solucionado",preparacion:"el espacio fue preparado correctamente",servicios:"nuestro equipo de atención al socio gestionó tu consulta",cuotas:"nuestro equipo administrativo revisó y resolvió tu consulta"}[rec.cat]||"nuestro equipo atendió y resolvió el inconveniente";
     const updated={...rec,estadoAvance: rec.esRecurrente ? "completada" : "esperando_validacion_responsable",
+      descripcionResolucion:desc,adjuntosResolucion,
+      fechaEjecucion: (rec.esRecurrente && fechaEj) ? fechaEj : hoy(),
+      fechaCompletada: new Date().toISOString(),
+      fechaEnvioValidacion: rec.esRecurrente ? null : new Date().toISOString(),
+      updatedAt:new Date().toISOString(),
+      comentarios:[...(rec.comentarios||[]),{texto:`Ejecutor marcó como completada.${rec.esRecurrente&&fechaEj&&fechaEj!==hoy()?" Realizada el "+fd(fechaEj)+".":""} Resolución: ${desc}`,fecha:new Date().toISOString(),autor:rec.ejecutorNombre||"Ejecutor"}]};
       descripcionResolucion:desc,adjuntosResolucion,
       fechaEnvioValidacion: rec.esRecurrente ? null : new Date().toISOString(),
       updatedAt:new Date().toISOString(),
@@ -3992,6 +4041,13 @@ function CompletarView({recId, recs, setRecs, loaded}) {
         h('div',{style:{marginBottom:14}},
           h('label',{style:{display:"block",fontSize:12,fontWeight:600,color:err?"#dc2626":"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},err?"¿Qué se hizo? (obligatorio)":"¿Qué se hizo?"),
           h('textarea',{value:desc,onChange:e=>{setDesc(e.target.value);setErr(false);},rows:5,placeholder:"Describí brevemente qué hiciste para resolver el problema...",style:{width:"100%",padding:"11px 14px",borderRadius:8,border:err?"2px solid #ef4444":"1.5px solid #e2e8f0",fontSize:14,resize:"vertical",outline:"none",boxSizing:"border-box"}})),
+        rec.esRecurrente && h('div',{style:{marginBottom:14}},
+          h('label',{style:{display:"block",fontSize:12,fontWeight:600,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},"¿Qué día se hizo?"),
+          h('input',{type:"date",value:fechaEj,onChange:e=>setFechaEj(e.target.value),
+            min:rec.fechaInicioEsperado||rec.fechaInicioOriginal||"",max:hoy(),
+            style:{width:"100%",padding:"11px 14px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:14,outline:"none",boxSizing:"border-box"}}),
+          fechaEj && fechaEj !== hoy() && h('div',{style:{marginTop:6,fontSize:12,color:"#166534",background:"#f0fdf4",border:"1.5px solid #bbf7d0",borderRadius:8,padding:"8px 12px",lineHeight:1.5}},
+            "Queda registrada como realizada el "+fd(fechaEj)+". No se modifican las fechas de la solicitud.")),
         h('div',{style:{marginBottom:20}},
           h('label',{style:{display:"block",fontSize:12,fontWeight:600,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},"Foto / video (opcional)"),
           h('input',{ref:fileRef,type:"file",accept:"image/*,video/*",multiple:true,style:{display:"none"},onChange:e=>{Array.from(e.target.files).forEach(file=>{const r=new FileReader();r.onload=ev=>setFotos(p=>[...p,{nombre:file.name,tipo:file.type,data:ev.target.result}]);r.readAsDataURL(file);});e.target.value="";}}),
