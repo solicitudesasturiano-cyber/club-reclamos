@@ -919,6 +919,21 @@ const {createElement:h, useState, useEffect, useRef, Fragment} = React;
 function Badge({color, bg, label, sm}) {
   return h('span', {style:{display:"inline-block",padding:sm?"2px 8px":"3px 10px",borderRadius:20,fontSize:sm?11:12,fontWeight:600,color,background:bg||color+"22",whiteSpace:"nowrap"}}, label);
 }
+  function useEsMobile(bp) {
+  var b = bp || 640;
+  var s = useState(typeof window!=="undefined" && window.innerWidth < b);
+  var es = s[0], setEs = s[1];
+  useEffect(function(){
+    function onResize(){ setEs(window.innerWidth < b); }
+    window.addEventListener("resize", onResize);
+    window.addEventListener("orientationchange", onResize);
+    return function(){
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("orientationchange", onResize);
+    };
+  },[b]);
+  return es;
+}
 function SelectBuscador(props) {
   var value = props.value, onChange = props.onChange;
   var opciones = props.opciones || [];
@@ -5579,6 +5594,7 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
   var [fechaBase, setFechaBase] = useState(new Date());
   var [tareaSeleccionada, setTareaSeleccionada] = useState(null);
   var [procesando, setProcesando] = useState(null);
+  var esMobile = useEsMobile();
 
   var buscar = function() {
     var e = email.trim().toLowerCase();
@@ -5712,18 +5728,31 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
         var bg=est==="confirmado"?"#22c55e":"#ef4444";
         var bgLight=est==="confirmado"?"#f0fdf4":"#fef2f2";
         if(mode==="semana") {
-          items.push(h('div',{key:t.r.id,
-            onClick:function(){setTareaSeleccionada(t.r);},
-            style:{gridColumn:(t.colStart+1)+"/"+(t.colEnd+2),
-              gridRow:(filaIdx+1)+"/"+(filaIdx+2),
-              background:bgLight,border:"1.5px solid "+bg,borderLeft:"4px solid "+bg,
-              borderRadius:6,padding:"5px 8px",cursor:"pointer",margin:"3px 2px",
-              overflow:"hidden",zIndex:1,alignSelf:"start"}},
-            h('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:4,marginBottom:2}},
-              h('span',{style:{fontFamily:"monospace",fontSize:10,fontWeight:700,color:"#3b82f6",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},t.r.numero),
-              h('span',{style:{fontSize:10,fontWeight:700,color:CRIT_COLOR[crit],whiteSpace:"nowrap"}},CRIT_DOT[crit])),
-            h('div',{style:{fontSize:11,fontWeight:600,color:"#1e293b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},t.r.sector),
-            h('div',{style:{fontSize:10,color:"#64748b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}},t.r.desc||"")));
+          if(esMobile) {
+            items.push(h('div',{key:t.r.id,
+              onClick:function(){setTareaSeleccionada(t.r);},
+              style:{gridColumn:(t.colStart+1)+"/"+(t.colEnd+2),
+                gridRow:(filaIdx+1)+"/"+(filaIdx+2),
+                background:bgLight,border:"1px solid "+bg,borderLeft:"3px solid "+bg,
+                borderRadius:4,padding:"3px 3px",cursor:"pointer",margin:"2px 1px",
+                overflow:"hidden",zIndex:1,alignSelf:"start"}},
+              h('div',{style:{display:"flex",alignItems:"center",gap:2,overflow:"hidden"}},
+                h('span',{style:{fontSize:8,flexShrink:0}},CRIT_DOT[crit]),
+                h('span',{style:{fontSize:9,fontWeight:600,color:"#1e293b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},t.r.sector))));
+          } else {
+            items.push(h('div',{key:t.r.id,
+              onClick:function(){setTareaSeleccionada(t.r);},
+              style:{gridColumn:(t.colStart+1)+"/"+(t.colEnd+2),
+                gridRow:(filaIdx+1)+"/"+(filaIdx+2),
+                background:bgLight,border:"1.5px solid "+bg,borderLeft:"4px solid "+bg,
+                borderRadius:6,padding:"5px 8px",cursor:"pointer",margin:"3px 2px",
+                overflow:"hidden",zIndex:1,alignSelf:"start"}},
+              h('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:4,marginBottom:2}},
+                h('span',{style:{fontFamily:"monospace",fontSize:10,fontWeight:700,color:"#3b82f6",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},t.r.numero),
+                h('span',{style:{fontSize:10,fontWeight:700,color:CRIT_COLOR[crit],whiteSpace:"nowrap"}},CRIT_DOT[crit])),
+              h('div',{style:{fontSize:11,fontWeight:600,color:"#1e293b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},t.r.sector),
+              h('div',{style:{fontSize:10,color:"#64748b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}},t.r.desc||""));
+          }
         } else {
           items.push(h('div',{key:t.r.id,
             onClick:function(){setTareaSeleccionada(t.r);},
@@ -5824,10 +5853,10 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
 
     var headerDias = dias.map(function(d,i){
       var esHoy = d.getTime()===hoy.getTime();
-      return h('div',{key:i,style:{textAlign:"center",padding:"6px 4px",borderRadius:6,
+      return h('div',{key:i,style:{textAlign:"center",padding:esMobile?"4px 1px":"6px 4px",borderRadius:6,
         background:esHoy?"#eff6ff":"transparent"}},
-        h('div',{style:{fontSize:10,fontWeight:700,color:esHoy?"#3b82f6":"#94a3b8",textTransform:"uppercase"}},DIAS_LABEL[i]),
-        h('div',{style:{fontSize:20,fontWeight:esHoy?800:500,color:esHoy?"#3b82f6":"#374151"}},d.getDate()));
+        h('div',{style:{fontSize:esMobile?9:10,fontWeight:700,color:esHoy?"#3b82f6":"#94a3b8",textTransform:"uppercase"}},DIAS_LABEL[i]),
+        h('div',{style:{fontSize:esMobile?15:20,fontWeight:esHoy?800:500,color:esHoy?"#3b82f6":"#374151"}},d.getDate()));
     });
 
     var fondos = dias.map(function(d,i){
@@ -5845,10 +5874,10 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
         h('button',{onClick:anterior,style:{background:"none",border:"1.5px solid #e2e8f0",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:16,color:"#374151"}},"‹"),
         h('div',{style:{fontSize:16,fontWeight:700,color:"#1a3a6b"}},dStr(dias[0])+" — "+dStr(dias[6])),
         h('button',{onClick:siguiente,style:{background:"none",border:"1.5px solid #e2e8f0",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:16,color:"#374151"}},"›")),
-      h('div',{style:{overflowX:"auto"}},
-        h('div',{style:{minWidth:560}},
-          React.createElement.apply(React, ['div',{style:{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:4}}].concat(headerDias)),
-          React.createElement.apply(React, ['div',{style:{position:"relative",display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,minHeight:(numFilas*52+8)+"px"}}].concat(fondos.concat(tareas))))));
+      h('div',{style:{overflowX:esMobile?"visible":"auto"}},
+        h('div',{style:{minWidth:esMobile?0:560}},
+          React.createElement.apply(React, ['div',{style:{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:esMobile?1:2,marginBottom:4}}].concat(headerDias)),
+          React.createElement.apply(React, ['div',{style:{position:"relative",display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:esMobile?1:2,minHeight:((numFilas*(esMobile?26:52))+8)+"px"}}].concat(fondos.concat(tareas))))));
   };
 
   function ModalTarea({r, onClose}) {
@@ -6000,7 +6029,7 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
             style:{padding:"11px 22px",background:"#3b82f6",color:"white",border:"none",
               borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:600,whiteSpace:"nowrap"}},
             "Buscar"))),
-      emailBuscado && loaded && misTareas.length>0 && h('div',{style:{background:"white",borderRadius:16,padding:"18px 16px"}},
+      emailBuscado && loaded && misTareas.length>0 && h('div',{style:{background:"white",borderRadius:16,padding:esMobile?"14px 8px":"18px 16px"}},
         h('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:8}},
           h('div',{style:{display:"flex",gap:6,alignItems:"center"}},
             h('div',{style:{display:"flex",background:"#f1f5f9",borderRadius:8,padding:2}},
