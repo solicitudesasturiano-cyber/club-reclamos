@@ -3984,10 +3984,7 @@ function CompletarView({recId, recs, setRecs, loaded}) {
       fechaEnvioValidacion: rec.esRecurrente ? null : new Date().toISOString(),
       updatedAt:new Date().toISOString(),
       comentarios:[...(rec.comentarios||[]),{texto:`Ejecutor marcó como completada.${rec.esRecurrente&&fechaEj&&fechaEj!==hoy()?" Realizada el "+fd(fechaEj)+".":""} Resolución: ${desc}`,fecha:new Date().toISOString(),autor:rec.ejecutorNombre||"Ejecutor"}]};
-      descripcionResolucion:desc,adjuntosResolucion,
-      fechaEnvioValidacion: rec.esRecurrente ? null : new Date().toISOString(),
-      updatedAt:new Date().toISOString(),
-      comentarios:[...(rec.comentarios||[]),{texto:`Ejecutor marcó como completada. Resolución: ${desc}`,fecha:new Date().toISOString(),autor:rec.ejecutorNombre||"Ejecutor"}]};
+      
     await sbUpsert(updated);
     setRecs(prev=>prev.map(r=>r.id===rec.id?updated:r));
 
