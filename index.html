@@ -542,6 +542,12 @@ function getReprogramacion(r) {
   }).length;
   return {orig:orig, actual:actual, dias:dias, veces:veces||1};
 }
+function fechasVigentes(r) {
+return {
+  inicio: r.fechaInicioActualizada || r.fechaInicioEsperado || r.fechaInicioOriginal || "",
+  cierre: r.fechaCierreActualizada || r.fechaCierreConfirmada || r.fechaCierre || r.fechaOriginalCierre || ""
+};
+}
 function getAccionRequerida(r) {
   if (["completada","consolidada","vinculado_proyecto","esperando_validacion_responsable","esperando_validacion_directivo"].includes(r.estadoAvance)) return null;
   const crit = r.criticidad || r.pri || "media";
@@ -1443,6 +1449,17 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs, area})
         const ejBodyPlain = `Hola ${saludoNombres},\n\nSe les asignó la siguiente tarea:\n\nNumero: ${rec.numero}\nSector: ${rec.sector}\nProblema: ${cat?.label} > ${rec.sub}\nDescripcion: ${rec.desc}\nFecha inicio: ${fd(f.fechaInicioEsperado||'')}\nFecha cierre: ${fd(f.fechaCierre)}\n\n1. CONFIRMAR: ${confirmarUrl}\n   RECHAZAR: ${rechazarUrl}\n\n2. Cuando completes: ${appUrl}?completar=${rec.id}`;
         await sendEmail({to:ejCurrent.mail, cc, subject:`[Asturiano] Tarea asignada — ${rec.numero}: ${rec.sector}`, htmlBody:ejHtml, body:ejBodyPlain});
       }
+    }
+    const ejsQuitados = (rec.ejecutores_lista||[]).filter(ej =>
+      ej.mail && ej.mail!=="tercero" && !ej.mail.includes("externo") &&
+      !(f.ejecutores_lista||[]).find(x=>x.mail===ej.mail)
+    );
+    for (const ejOut of ejsQuitados) {
+      await sendEmail({
+        to: ejOut.mail,
+        subject: "[Asturiano] Tarea desasignada — "+rec.numero+": "+rec.sector,
+        body: "Hola "+(ejOut.nombre||ejOut.mail)+",\n\nYa no estás asignado a la tarea "+rec.numero+" ("+rec.sector+" — "+rec.sub+").\n\nSi la tenías agendada, podés eliminar el evento de tu calendario. Dejó de aparecer en tu vista de Mis Tareas.\n\n— Sistema de Reclamos — Asturiano"
+      });
     }
     const fechaCierreConfirmada = f.fechaCierre ? f.fechaCierre : rec.fechaCierreConfirmada||null;
     // Upload new adjuntosResolucion that still have base64 data
@@ -5574,16 +5591,18 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
   var CRIT_DOT = {urgente:"🔴", alta:"🟠", media:"🟡", baja:"🟢"};
 
   var misTareas = emailBuscado ? recs.filter(function(r) {
-    if(!r.fechaInicioEsperado && !r.fechaCierre) return false;
+    var fv = fechasVigentes(r);
+    if(!fv.inicio && !fv.cierre) return false;
     if(r.estadoAvance==="consolidada") return false;
-    var enLista = (r.ejecutores_lista||[]).some(function(e){ return e.mail===emailBuscado; });
-    var esDirecto = (r.ejecutorMail||"").toLowerCase() === emailBuscado;
+    var nm = function(m){ return (m||"").toLowerCase().trim(); };
+    var enLista = (r.ejecutores_lista||[]).some(function(e){ return nm(e.mail)===emailBuscado; });
+    var esDirecto = nm(r.ejecutorMail) === emailBuscado;
     return enLista || esDirecto;
   }) : [];
 
   var getEstadoEj = function(r) {
     var lista = r.ejecutores_lista||[];
-    var ej = lista.find(function(e){ return e.mail===emailBuscado; });
+    var ej = lista.find(function(e){ return (e.mail||"").toLowerCase().trim()===emailBuscado; });
     if(ej) {
       if(ej.rechazado) return "rechazado";
       if(ej.confirmado) return "confirmado";
@@ -5615,7 +5634,7 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
     setProcesando(r.id);
     var ahora = new Date().toISOString();
     var ejListaUpd = (r.ejecutores_lista||[]).map(function(e){
-      return e.mail===emailBuscado ? Object.assign({},e,{confirmado:true,rechazado:false,fechaConfirmacion:ahora}) : e;
+      return (e.mail||"").toLowerCase().trim()===emailBuscado ? Object.assign({},e,{confirmado:true,rechazado:false,fechaConfirmacion:ahora}) : e;
     });
     if(ejListaUpd.length===0) ejListaUpd = [{mail:emailBuscado,nombre:r.ejecutorNombre||emailBuscado,confirmado:true,fechaConfirmacion:ahora}];
     var updated = Object.assign({},r,{
@@ -5634,7 +5653,7 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
     setProcesando(r.id);
     var ahora = new Date().toISOString();
     var ejListaUpd = (r.ejecutores_lista||[]).map(function(e){
-      return e.mail===emailBuscado ? Object.assign({},e,{rechazado:true,confirmado:false,motivoRechazo:motivo}) : e;
+      return (e.mail||"").toLowerCase().trim()===emailBuscado ? Object.assign({},e,{rechazado:true,confirmado:false,motivoRechazo:motivo}) : e;
     });
     if(ejListaUpd.length===0) ejListaUpd = [{mail:emailBuscado,nombre:r.ejecutorNombre||emailBuscado,rechazado:true,motivoRechazo:motivo}];
     var allRej = ejListaUpd.every(function(e){return e.rechazado;});
@@ -5657,8 +5676,9 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
   };
 
   var calcularSpan = function(r, dias) {
-    var inicio = r.fechaInicioEsperado||r.fechaCierre;
-    var cierre = r.fechaCierre||r.fechaInicioEsperado;
+    var fv = fechasVigentes(r);
+    var inicio = fv.inicio||fv.cierre;
+    var cierre = fv.cierre||fv.inicio;
     var colStart=-1; var colEnd=-1;
     dias.forEach(function(d,i){
       if(!d) return;
@@ -5903,9 +5923,9 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
             h('div',null,h('div',{style:{fontSize:10,color:"#94a3b8",fontWeight:600,marginBottom:2}},"TIPO"),
               h('div',{style:{fontSize:13}},(cat&&cat.icon||"")+" "+(cat&&cat.label||r.cat))),
             h('div',null,h('div',{style:{fontSize:10,color:"#94a3b8",fontWeight:600,marginBottom:2}},"INICIO"),
-              h('div',{style:{fontSize:13,fontWeight:600}},fd(r.fechaInicioEsperado||r.fechaCierre))),
+              h('div',{style:{fontSize:13,fontWeight:600}},fd(fechasVigentes(r).inicio))),
             h('div',null,h('div',{style:{fontSize:10,color:"#94a3b8",fontWeight:600,marginBottom:2}},"CIERRE"),
-              h('div',{style:{fontSize:13,fontWeight:600}},fd(r.fechaCierre)))),
+              h('div',{style:{fontSize:13,fontWeight:600}},fd(fechasVigentes(r).cierre)))),
           h('div',{style:{marginBottom:16}},
             h('div',{style:{fontSize:10,color:"#94a3b8",fontWeight:600,marginBottom:4,textTransform:"uppercase"}},"Descripción"),
             h('div',{style:{fontSize:14,color:"#475569",lineHeight:1.6}},r.desc||"—")),
