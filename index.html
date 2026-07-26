@@ -524,14 +524,49 @@ const pld = iso => { if(!iso) return new Date(NaN); const p=iso.split("T")[0].sp
 
 function getTiming(r) {
   if (["completada","consolidada","sin_resolucion","vinculado_proyecto","esperando_validacion_responsable","esperando_validacion_directivo"].includes(r.estadoAvance)) return null;
-  if (!r.fechaCierre) return null;
-  const d = (pld(r.fechaCierre) - new Date()) / 86400000;
+  const cierre = r.fechaCierreActualizada || r.fechaCierreConfirmada || r.fechaCierre;
+  if (!cierre) return null;
+  const d = (pld(cierre) - new Date()) / 86400000;
   if (d < 0)  return {label:"Vencido",    color:"#ef4444", bg:"#fef2f2"};
   if (d < 1)  return {label:"Vence hoy",  color:"#f97316", bg:"#fff7ed"};
   if (d < 5)  return {label:"Por vencer", color:"#eab308", bg:"#fefce8"};
   return {label:"A tiempo", color:"#22c55e", bg:"#f0fdf4"};
 }
+function getReprogramacion(r) {
+  const orig = r.fechaOriginalCierre;
+  const actual = r.fechaCierreActualizada || r.fechaCierreConfirmada || r.fechaCierre;
+  if (!orig || !actual || orig === actual) return null;
+  const dias = Math.round((pld(actual) - pld(orig)) / 86400000);
+  const veces = (r.comentarios||[]).filter(function(c){
+    return c.texto && c.texto.indexOf("Fechas reprogramadas") === 0;
+  }).length;
+  return {orig:orig, actual:actual, dias:dias, veces:veces||1};
+}
 
+const DIAS_GRACIA_RECURRENTE = 7;   // ← cambiá acá el "changüí"
+
+// ¿Puede completarse tarde sin tener que reprogramar?
+function puedeCompletarRetroactivo(r) {
+  if (!r.esRecurrente) return false;
+  const cierre = r.fechaCierreActualizada || r.fechaCierreConfirmada || r.fechaCierre;
+  if (!cierre) return true;
+  return ((new Date() - pld(cierre)) / 86400000) <= DIAS_GRACIA_RECURRENTE;
+}
+
+// Días entre "se hizo" y "lo cargaron"
+function getBrechaCarga(r) {
+  if (!r.fechaEjecucion || !r.fechaCompletada) return null;
+  const carga = r.fechaCompletada.split("T")[0];
+  const dias = Math.round((pld(carga) - pld(r.fechaEjecucion)) / 86400000);
+  if (dias <= 0) return null;
+  return {ejecucion:r.fechaEjecucion, carga:carga, dias:dias};
+}
+function fechasVigentes(r) {
+return {
+  inicio: r.fechaInicioActualizada || r.fechaInicioEsperado || r.fechaInicioOriginal || "",
+  cierre: r.fechaCierreActualizada || r.fechaCierreConfirmada || r.fechaCierre || r.fechaOriginalCierre || ""
+};
+}
 function getAccionRequerida(r) {
   if (["completada","consolidada","vinculado_proyecto","esperando_validacion_responsable","esperando_validacion_directivo"].includes(r.estadoAvance)) return null;
   const crit = r.criticidad || r.pri || "media";
@@ -552,12 +587,13 @@ function getAccionRequerida(r) {
 
 function getEstadoEjecucion(r) {
   // No hay fecha de inicio → no mostrar nada
-  if (!r.fechaInicioEsperado && !r.fechaInicioOriginal) return null;
+  const inicioStr = r.fechaInicioActualizada || r.fechaInicioEsperado || r.fechaInicioOriginal;
+  if (!inicioStr) return null;
 
   const ahora = new Date(); ahora.setHours(0,0,0,0);
-  const inicio = pld(r.fechaInicioEsperado || r.fechaInicioOriginal);
+  const inicio = pld(inicioStr);
   inicio.setHours(0,0,0,0);
-  const cierreStr = r.fechaOriginalCierre || r.fechaCierre;
+  const cierreStr = r.fechaCierreActualizada || r.fechaCierreConfirmada || r.fechaCierre;
   const cierre = cierreStr ? pld(cierreStr) : null;
   if (cierre) cierre.setHours(0,0,0,0);
 
@@ -901,6 +937,21 @@ const {createElement:h, useState, useEffect, useRef, Fragment} = React;
 
 function Badge({color, bg, label, sm}) {
   return h('span', {style:{display:"inline-block",padding:sm?"2px 8px":"3px 10px",borderRadius:20,fontSize:sm?11:12,fontWeight:600,color,background:bg||color+"22",whiteSpace:"nowrap"}}, label);
+}
+  function useEsMobile(bp) {
+  var b = bp || 640;
+  var s = useState(typeof window!=="undefined" && window.innerWidth < b);
+  var es = s[0], setEs = s[1];
+  useEffect(function(){
+    function onResize(){ setEs(window.innerWidth < b); }
+    window.addEventListener("resize", onResize);
+    window.addEventListener("orientationchange", onResize);
+    return function(){
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("orientationchange", onResize);
+    };
+  },[b]);
+  return es;
 }
 function SelectBuscador(props) {
   var value = props.value, onChange = props.onChange;
@@ -1267,6 +1318,7 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs, area})
     fechaCierreActualizada:rec.fechaCierreActualizada||"",
     motivoActualizacion:rec.motivoActualizacion||"",
     adjuntosResolucion:rec.adjuntosResolucion||[],
+    fechaEjecucion:rec.fechaEjecucion||"",
     reclamoPadre:rec.reclamoPadre||"",
     reclamosHijos:rec.reclamosHijos||[],
     proyectoVinculadoId:rec.proyectoVinculadoId||null,
@@ -1299,7 +1351,7 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs, area})
     const estadoAvanceEfectivo = (opts && opts.estadoAvanceOverride) || f.estadoAvance;
     setSaveErr("");
     // Block completada without resolution description
-    if(f.estadoAvance==="completada" && !f.descripcionResolucion.trim()) {
+    if(f.estadoAvanceEfectivo==="completada" && !f.descripcionResolucion.trim()) {
       setSaveErr("Para marcar como completada debés describir qué se hizo en la tab Resolución.");
       setTab("resolucion");
       return;
@@ -1315,7 +1367,7 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs, area})
         if(!f.fechaCierre && !rec.fechaOriginalCierre) { setSaveErr("La fecha de cierre es obligatoria."); return; }
       }
       // Block save if fechaCierre is in the past without updated date (unless completada)
-      if(f.estadoAvance !== "completada") {
+      if(estadoAvanceEfectivo !== "completada" || !puedeCompletarRetroactivo(rec)) {
         const fechaEfectiva = f.fechaCierreActualizada || f.fechaCierre || rec.fechaOriginalCierre;
         const hoyNormalizado = new Date(); hoyNormalizado.setHours(0,0,0,0);
         if(fechaEfectiva && pld(fechaEfectiva) < hoyNormalizado && !f.fechaCierreActualizada && !f.motivoActualizacion?.trim()) {
@@ -1335,7 +1387,7 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs, area})
     const diasDesdeCreacion = rec.createdAt ? (pld(f.fechaCierre||"") - new Date(rec.createdAt)) / 86400000 : 0;
     const esSinResolucion = f.estadoAvance === "sin_resolucion";
     const esDemoraLarga = !!(f.fechaCierre && diasDesdeCreacion > 21);
-    const requiereJustificacion = (esSinResolucion || esDemoraLarga) && !isVinculado && !isConsolidando;
+    const requiereJustificacion = (esSinResolucion || esDemoraLarga) && !isVinculado && !isConsolidando && !(estadoAvanceEfectivo==="completada" && puedeCompletarRetroactivo(rec));
     if(requiereJustificacion && !f.justificacionDemora?.trim()) {
       setSaveErr(esSinResolucion
         ? "Debés explicar el motivo por el cual no se puede resolver en este momento."
@@ -1433,6 +1485,17 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs, area})
         await sendEmail({to:ejCurrent.mail, cc, subject:`[Asturiano] Tarea asignada — ${rec.numero}: ${rec.sector}`, htmlBody:ejHtml, body:ejBodyPlain});
       }
     }
+    const ejsQuitados = (rec.ejecutores_lista||[]).filter(ej =>
+      ej.mail && ej.mail!=="tercero" && !ej.mail.includes("externo") &&
+      !(f.ejecutores_lista||[]).find(x=>x.mail===ej.mail)
+    );
+    for (const ejOut of ejsQuitados) {
+      await sendEmail({
+        to: ejOut.mail,
+        subject: "[Asturiano] Tarea desasignada — "+rec.numero+": "+rec.sector,
+        body: "Hola "+(ejOut.nombre||ejOut.mail)+",\n\nYa no estás asignado a la tarea "+rec.numero+" ("+rec.sector+" — "+rec.sub+").\n\nSi la tenías agendada, podés eliminar el evento de tu calendario. Dejó de aparecer en tu vista de Mis Tareas.\n\n— Sistema de Reclamos — Asturiano"
+      });
+    }
     const fechaCierreConfirmada = f.fechaCierre ? f.fechaCierre : rec.fechaCierreConfirmada||null;
     // Upload new adjuntosResolucion that still have base64 data
     let adjuntosResolucion = f.adjuntosResolucion || [];
@@ -1468,6 +1531,12 @@ let savedRec = {...rec,...f,adjuntosResolucion,comentarios,nuevoComentario:undef
       reabierta: rec.reabierta || false,
       fechaCierreConfirmada,fechaInicioOriginal,fechaOriginalCierre,ejecutorMailOriginal,fechaAsignacion,
       updatedAt:new Date().toISOString()};
+      if(estadoAvanceEfectivo==="completada" && !rec.fechaCompletada) {
+        const progr = rec.fechaCierreActualizada||rec.fechaCierreConfirmada||rec.fechaCierre||"";
+        savedRec = {...savedRec,
+          fechaCompletada: new Date().toISOString(),
+          fechaEjecucion: f.fechaEjecucion || progr || hoy()};
+}
     await onSave(savedRec);
     // Consolidación manual: autopopular datos del padre en cada hijo nuevo
     const hijosAnteriores = new Set(rec.reclamosHijos||[]);
@@ -1513,11 +1582,10 @@ let savedRec = {...rec,...f,adjuntosResolucion,comentarios,nuevoComentario:undef
       }
     }
     // ── REPROGRAMACIÓN DE FECHAS ──────────────────────────────────────────
-    // Detectar si hubo cambio de fecha o de hora por parte del responsable
     {
       const appUrl = window.location.href.split("?")[0];
       const fechaInicioAnterior = rec.fechaInicioActualizada || rec.fechaInicioEsperado || rec.fechaInicioOriginal || "";
-      const fechaCierreAnterior = rec.fechaCierreActualizada || rec.fechaCierre || rec.fechaOriginalCierre || "";
+      const fechaCierreAnterior = rec.fechaCierreActualizada || rec.fechaCierreConfirmada || rec.fechaCierre || rec.fechaOriginalCierre || "";
       const horaInicioAnterior  = rec.horaInicio || "";
       const horaFinAnterior     = rec.horaFin || "";
 
@@ -1529,60 +1597,66 @@ let savedRec = {...rec,...f,adjuntosResolucion,comentarios,nuevoComentario:undef
       const cambioDeFecha = (fechaInicioNueva && fechaInicioNueva !== fechaInicioAnterior) ||
                             (fechaCierreNueva && fechaCierreNueva !== fechaCierreAnterior);
       const cambioDeHora  = (horaInicioNueva !== horaInicioAnterior) || (horaFinNueva !== horaFinAnterior);
-      const hayEjecutorInterno = !!(savedRec.ejecutorMail && !savedRec.ejecutorMail.includes("externo"));
-      const yaHabiaFechas = !!(fechaInicioAnterior && fechaCierreAnterior);
+      const ejMail = savedRec.ejecutorMail || "";
+      const hayEjecutorInterno = !!(ejMail && ejMail !== "tercero" && !ejMail.includes("externo"));
+      const esReprogramacion = !!fechaCierreAnterior && cambioDeFecha;
 
-      // Solo actuar si había fechas previas (es reprogramación, no asignación inicial)
-      if(yaHabiaFechas && hayEjecutorInterno && (cambioDeFecha || cambioDeHora)) {
+      // 1. Solicitante (y sub-tickets consolidados) — independiente del ejecutor
+      if (esReprogramacion) {
+        const cuerpoSol = function(nom, num, sec) {
+          return "Hola "+nom+",\n\nTe informamos que la fecha estimada de resolución de tu solicitud "+num+" ("+sec+") fue actualizada.\n\n"+
+            "Fecha anterior: "+fd(fechaCierreAnterior)+"\nNueva fecha estimada: "+fd(fechaCierreNueva)+"\n"+
+            (f.motivoActualizacion ? "Motivo: "+f.motivoActualizacion+"\n" : "")+
+            "\nPodés seguir el estado en:\n"+appUrl+"?seguimiento="+num+"\n\n— Equipo de Intendencia Asturiano";
+        };
+        if (rec.email) {
+          await sendEmail({to:rec.email,
+            subject:"[Asturiano] Actualización de fecha — "+rec.numero,
+            body:cuerpoSol(rec.nombre, rec.numero, rec.sector)});
+        }
+        for (const num of (savedRec.reclamosHijos||[])) {
+          const hijo = (recs||[]).find(function(x){ return x.numero === num; });
+          if (hijo && hijo.email) {
+            await sendEmail({to:hijo.email,
+              subject:"[Asturiano] Actualización de fecha — "+hijo.numero,
+              body:cuerpoSol(hijo.nombre, hijo.numero, hijo.sector)});
+          }
+        }
+      }
 
-        // 1. Resetear confirmación del ejecutor → debe reconfirmar
+      // 2. Registro + reseteo de confirmación + aviso al ejecutor
+      if (fechaCierreAnterior && (cambioDeFecha || cambioDeHora)) {
+        const nota = "Fechas reprogramadas."+(hayEjecutorInterno?" Ejecutor debe reconfirmar.":"")+(f.motivoActualizacion?" Motivo: "+f.motivoActualizacion:"");
         const ejListaReset = (savedRec.ejecutores_lista||[]).map(ej => ({
-          ...ej, confirmado: false, rechazado: false, fechaConfirmacion: null
+          ...ej, confirmado:false, rechazado:false, fechaConfirmacion:null
         }));
         savedRec = {
           ...savedRec,
-          ejecutorConfirmado: false,
-          ejecutorRechazado: false,
-          fechaConfirmacion: null,
-          ejecutores_lista: ejListaReset,
-          comentarios: [...(savedRec.comentarios||[]), {
-            texto: `Fechas reprogramadas. Ejecutor debe reconfirmar.${f.motivoActualizacion?" Motivo: "+f.motivoActualizacion:""}`,
-            fecha: new Date().toISOString(), autor: "Sistema"
-          }]
+          ejecutorConfirmado: hayEjecutorInterno ? false : savedRec.ejecutorConfirmado,
+          ejecutorRechazado:  hayEjecutorInterno ? false : savedRec.ejecutorRechazado,
+          fechaConfirmacion:  hayEjecutorInterno ? null  : savedRec.fechaConfirmacion,
+          ejecutores_lista:   hayEjecutorInterno ? ejListaReset : savedRec.ejecutores_lista,
+          comentarios: [...(savedRec.comentarios||[]), {texto:nota, fecha:new Date().toISOString(), autor:"Sistema"}]
         };
         await sbUpsert(savedRec);
 
-        // 2. Notificar al solicitante SOLO si cambió la fecha (no si solo cambió hora)
-        if(cambioDeFecha && rec.email) {
-          await sendEmail({
-            to: rec.email,
-            subject: `[Asturiano] Tu solicitud fue reprogramada — ${rec.numero}`,
-            body: `Hola ${rec.nombre},\n\nTu solicitud fue reprogramada.\n\nSector: ${rec.sector}\nProblema: ${rec.sub}\n\nNueva fecha inicio: ${fd(fechaInicioNueva)||"—"}\nNueva fecha cierre: ${fd(fechaCierreNueva)}\n${f.motivoActualizacion?"Motivo: "+f.motivoActualizacion+"\n":""}\nPodés seguir el estado en:\n${appUrl}?seguimiento=${rec.numero}\n\n— Equipo de Intendencia Asturiano`
-          });
-        }
-
-        // 3. Notificar al/los ejecutor/es con ICS adjunto (siempre, fecha u hora)
-        const ejList = (savedRec.ejecutores_lista||[]).filter(ej=>ej.mail&&!ej.mail.includes("externo"));
-        const ejMails = ejList.length
-          ? ejList.map(ej=>ej.mail)
-          : (savedRec.ejecutorMail && !savedRec.ejecutorMail.includes("externo") ? [savedRec.ejecutorMail] : []);
-        const catRespMails = (getCatCfg(rec.cat).responsables||[]).map(x=>x.mail).filter(Boolean);
-        const confirmarUrl = `${appUrl}?confirmar=${rec.id}`;
-        const rechazarUrl  = `${appUrl}?rechazar=${rec.id}`;
-
-        for(const ejMail of ejMails) {
-          const ejNombre = (ejList.find(e=>e.mail===ejMail)?.nombre) || savedRec.ejecutorNombre || ejMail;
-          const yaAgendado = savedRec.calendarioAgendado;
-          const accionCalendario = yaAgendado
-            ? "Si ya tenías esta tarea agendada, eliminá el evento anterior y agendá la nueva fecha cuando confirmes."
-            : "Vas a poder agregar el nuevo evento a tu calendario cuando confirmes la tarea.";
-
-          await sendEmail({
-            to: ejMail,
-            cc: catRespMails.filter(m=>m!==ejMail),
-            subject: `[Asturiano] ⚠️ Tarea reprogramada — ${rec.numero}: ${rec.sector}`,
-            body: `Hola ${ejNombre},\n\nLa tarea ${rec.numero} fue reprogramada y necesitás reconfirmarla.\n\nSector: ${rec.sector}\nProblema: ${rec.sub}\nDescripción: ${rec.desc}\n\nNueva fecha inicio: ${fd(fechaInicioNueva)||"—"}\nNueva fecha cierre: ${fd(fechaCierreNueva)}${horaInicioNueva?"\nHorario: "+horaInicioNueva+(horaFinNueva?" a "+horaFinNueva:""):""}\n${f.motivoActualizacion?"Motivo: "+f.motivoActualizacion+"\n":""}\n${accionCalendario}\n\n✅ CONFIRMAR: ${confirmarUrl}&mail=${encodeURIComponent(ejMail)}\n❌ RECHAZAR: ${rechazarUrl}&mail=${encodeURIComponent(ejMail)}\n\n— Sistema de Reclamos — Asturiano`
-          });
+        if (hayEjecutorInterno) {
+          const ejList = (savedRec.ejecutores_lista||[]).filter(function(ej){ return ej.mail && ej.mail!=="tercero" && !ej.mail.includes("externo"); });
+          const ejMails = ejList.length ? ejList.map(function(ej){ return ej.mail; }) : [ejMail];
+          const catRespMails = (getCatCfg(rec.cat).responsables||[]).map(function(x){ return x.mail; }).filter(Boolean);
+          const confirmarUrl = appUrl+"?confirmar="+rec.id;
+          const rechazarUrl  = appUrl+"?rechazar="+rec.id;
+          for (const m of ejMails) {
+            const ejNombre = (ejList.find(function(e){ return e.mail===m; })||{}).nombre || savedRec.ejecutorNombre || m;
+            await sendEmail({
+              to: m,
+              cc: catRespMails.filter(function(x){ return x!==m; }),
+              subject: "[Asturiano] ⚠️ Tarea reprogramada — "+rec.numero+": "+rec.sector,
+              body: "Hola "+ejNombre+",\n\nLa tarea "+rec.numero+" fue reprogramada y necesitás reconfirmarla.\n\nSector: "+rec.sector+"\nProblema: "+rec.sub+"\nDescripción: "+rec.desc+"\n\nNueva fecha inicio: "+(fd(fechaInicioNueva)||"—")+"\nNueva fecha cierre: "+fd(fechaCierreNueva)+(horaInicioNueva?"\nHorario: "+horaInicioNueva+(horaFinNueva?" a "+horaFinNueva:""):"")+"\n"+
+                (f.motivoActualizacion?"Motivo: "+f.motivoActualizacion+"\n":"")+
+                "\nSi ya tenías esta tarea agendada, eliminá el evento anterior y volvé a agendarla al confirmar.\n\n✅ CONFIRMAR: "+confirmarUrl+"&mail="+encodeURIComponent(m)+"\n❌ RECHAZAR: "+rechazarUrl+"&mail="+encodeURIComponent(m)+"\n\n— Sistema de Reclamos — Asturiano"
+            });
+          }
         }
       }
     }
@@ -1945,6 +2019,11 @@ Resolución: ${descripcion||"—"}`});
                   h('input',{type:"date",value:f.fechaCierreActualizada||"",onChange:e=>set("fechaCierreActualizada",e.target.value),min:f.fechaInicioActualizada||hoy(),style:{width:"100%",padding:"9px 12px",borderRadius:8,border:"1.5px solid #fed7aa",fontSize:13,outline:"none",boxSizing:"border-box"}}))),
               h('label',{style:{display:"block",fontSize:10,fontWeight:600,color:"#374151",marginBottom:4,textTransform:"uppercase"}},"Motivo del nuevo plazo *"),
               h('textarea',{value:f.motivoActualizacion||"",onChange:e=>set("motivoActualizacion",e.target.value),rows:2,placeholder:"Explicá qué se va a hacer diferente esta vez...",style:{width:"100%",padding:"9px 12px",borderRadius:8,border:"1.5px solid #fed7aa",fontSize:13,outline:"none",boxSizing:"border-box",resize:"vertical"}})),
+            rec.esRecurrente && h('div',{style:{marginBottom:14}},
+              h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"¿Qué día se hizo?"),
+              h('input',{type:"date",value:f.fechaEjecucion||"",onChange:e=>set("fechaEjecucion",e.target.value),
+                min:rec.fechaInicioEsperado||rec.fechaInicioOriginal||"",max:hoy(),style:aS()}),
+              h('div',{style:{marginTop:4,fontSize:11,color:"#94a3b8"}},"Vacío = fecha planificada. No modifica las fechas de la solicitud.")),
             h('button',{onClick:async()=>{
               if(!f.descripcionResolucion?.trim()){setSaveErr("La descripción de lo realizado es obligatoria para completar.");return;}
               if(!confirm("¿Marcar como completado y enviar al directivo para validación?")) return;
@@ -2282,7 +2361,8 @@ function Kanban({recs, onEdit}) {
           !items.length && h('div',{style:{textAlign:"center",padding:20,color:"#cbd5e1",fontSize:13,background:"#f8fafc",borderRadius:10,border:"1.5px dashed #e2e8f0"}},"Sin solicitudes"),
           ...items.map(r=>{
             const cat=CATS[r.cat]; const pri=PRIS.find(p=>p.id===(r.criticidad||r.pri)); const t=getTiming(r);
-            return h('div',{key:r.id,onClick:()=>onEdit(r),style:{background:"white",borderRadius:12,padding:12,boxShadow:"0 1px 4px rgba(0,0,0,0.08)",borderLeft:`4px solid ${pri?.color||"#94a3b8"}`,cursor:"pointer"}},
+            const rep=getReprogramacion(r);
+            return h('div',{key:r.id,onClick:()=>onEdit(r),style:{background:"white",borderRadius:12,padding:12,boxShadow:"0 1px 4px rgba(0,0,0,0.08)",borderLeft:`4px solid ${pri?.color||"#94a3b8"}`,cursor:"pointer",outline:rep?"1.5px solid #fcd34d":"none",outlineOffset:"-1.5px"}},
               h('div',{style:{display:"flex",justifyContent:"space-between",marginBottom:5}},
                 h('span',{style:{fontFamily:"monospace",fontSize:11,fontWeight:700,color:"#3b82f6"}},r.numero),
                 t && h(Badge,{color:t.color,bg:t.bg,label:t.label,sm:true})),
@@ -2292,7 +2372,11 @@ function Kanban({recs, onEdit}) {
               r.ejecutorRechazado ? h('div',{style:{marginTop:6,fontSize:11,color:"#dc2626",fontWeight:600}},"❌ Rechazada — acción requerida")
               : r.ejecutorNombre ? h('div',{style:{marginTop:6,fontSize:11,color:"#64748b"}},"👤 "+r.ejecutorNombre+(r.ejecutorConfirmado?" ✅":r.ejecutorMail?" ⏳":""))
               : null,
-              h('div',{style:{marginTop:5,fontSize:11,color:"#cbd5e1"}},"Cierre: "+fd(r.fechaCierre)));
+              h('div',{style:{marginTop:5,fontSize:11,color:"#cbd5e1",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}},
+                h('span',null,"Cierre: "+fd(r.fechaCierreActualizada||r.fechaCierreConfirmada||r.fechaCierre)),
+                rep && h('span',{title:"Original: "+fd(rep.orig)+(r.motivoActualizacion?" — "+r.motivoActualizacion:""),
+                  style:{padding:"1px 6px",borderRadius:5,fontSize:10,fontWeight:700,color:"#b45309",border:"1.5px solid #fcd34d"}},
+                  "↻ "+(rep.dias>0?"+":"")+rep.dias+"d"+(rep.veces>1?" ×"+rep.veces:""))));
           })));
     }));
 }
@@ -3431,7 +3515,12 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
     total:recs.length,
     noIniciadas:recs.filter(r=>r.estadoAvance==="bajo_analisis").length,
     enCurso:recs.filter(r=>r.estadoAvance==="iniciada").length,
-    demoradas:recs.filter(r=>r.estadoAvance==="demorada"||(!["completada","consolidada","sin_resolucion","vinculado_proyecto","esperando_validacion_responsable","esperando_validacion_directivo"].includes(r.estadoAvance)&&r.fechaCierre&&pld(r.fechaCierre)<new Date())).length,
+    demoradas:recs.filter(function(r){
+      if(["completada","consolidada","sin_resolucion","vinculado_proyecto","esperando_validacion_responsable","esperando_validacion_directivo"].includes(r.estadoAvance)) return false;
+      const c = r.fechaCierreActualizada||r.fechaCierreConfirmada||r.fechaCierre;
+      if(!c) return r.estadoAvance==="demorada";
+      return pld(c) < new Date();
+    }).length,
     completadas:recs.filter(r=>r.estadoAvance==="completada").length,
   };
 
@@ -3626,9 +3715,10 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
             const est=getEstadoEjecucion(r) || ESTADOS.find(e=>e.id===r.estadoAvance); const t=getTiming(r);
             const esVinculado = r.estadoAvance==="vinculado_proyecto";
             const esRecurrente = !!r.esRecurrente;
+            const rep = getReprogramacion(r);
             const rowBg = esVinculado?"#f8f7ff":esRecurrente?"#faf5ff":"white";
             return h('tr',{key:r.id,style:{background:rowBg,boxShadow:"0 1px 3px rgba(0,0,0,0.06)",opacity:esVinculado?0.82:1}},
-              h('td',{style:{padding:"6px 4px",borderRadius:"10px 0 0 10px"}},
+              h('td',{style:{padding:"6px 4px",borderRadius:"10px 0 0 10px",borderLeft:rep?"3px solid #f59e0b":"3px solid transparent"}},
                 h('span',{style:{fontFamily:"monospace",fontSize:11,fontWeight:700,color:esVinculado?"#7c3aed":esRecurrente?"#8b5cf6":"#3b82f6"}},r.numero),
                 h('div',{style:{fontSize:10,color:"#94a3b8",marginTop:1}},fd(r.createdAt)),
                 esVinculado && h('div',{style:{fontSize:10,color:"#7c3aed",fontWeight:600,marginTop:1,whiteSpace:"nowrap"}},
@@ -3737,7 +3827,22 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
                 if(!ee) return h('span',{style:{color:"#cbd5e1",fontSize:11}},"—");
                 return h('span',{style:{display:"inline-block",padding:"3px 8px",borderRadius:6,fontSize:11,fontWeight:600,color:ee.color,background:ee.bg,whiteSpace:"nowrap"}},ee.label);
               })()),
-              h('td',{style:{padding:"6px 4px",fontSize:11,color:"#64748b",whiteSpace:"nowrap"}},fd(r.fechaCierreConfirmada||r.fechaCierre)),
+              h('td',{style:{padding:"6px 4px",fontSize:11,color:"#64748b",whiteSpace:"nowrap"}},(() => {
+                const brecha = getBrechaCarga(r);
+                const linea = rep
+                  ? h('div',null,
+                      h('div',{style:{fontWeight:600,color:"#1e293b"}},fd(rep.actual)),
+                      h('span',{title:"Fecha original: "+fd(rep.orig)+(rep.veces>1?" — reprogramada "+rep.veces+" veces":"")+(r.motivoActualizacion?"\nMotivo: "+r.motivoActualizacion:""),
+                        style:{display:"inline-block",marginTop:3,padding:"1px 6px",borderRadius:5,fontSize:10,
+                          fontWeight:700,color:"#b45309",background:"transparent",border:"1.5px solid #fcd34d",cursor:"help"}},
+                        "↻ Reprog. "+(rep.dias>0?"+":"")+rep.dias+"d"+(rep.veces>1?" ×"+rep.veces:"")))
+                  : h('div',{style:{fontWeight:600,color:"#1e293b"}},fd(r.fechaCierreActualizada||r.fechaCierreConfirmada||r.fechaCierre));
+                if(!brecha) return linea;
+                return h('div',null, linea,
+                  h('div',{title:"Se hizo el "+fd(brecha.ejecucion)+" y se cargó el "+fd(brecha.carga),
+                    style:{marginTop:3,fontSize:10,color:"#64748b",cursor:"help"}},
+                    "Hecha "+fd(brecha.ejecucion)+" · cargada +"+brecha.dias+"d"));
+              })()),
               h('td',{style:{padding:"6px 4px",minWidth:70}},(() => {
                 const cal = r.calificacion;
                 if(!cal) return h('span',{style:{color:"#cbd5e1"}},"—");
@@ -3844,6 +3949,12 @@ function CompletarView({recId, recs, setRecs, loaded}) {
   const [sending,setSending] = useState(false);
   const fileRef = useRef();
   const [fotos,setFotos] = useState([]);
+  const [fechaEj,setFechaEj] = useState("");
+  useEffect(function(){
+    if(!rec || fechaEj) return;
+    var prog = rec.fechaCierreActualizada || rec.fechaCierreConfirmada || rec.fechaCierre || rec.fechaInicioEsperado || "";
+    setFechaEj(prog && prog < hoy() ? prog : hoy());
+  },[rec]);
 
   if(!loaded) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#1a3a6b,#0f2347)",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:18}},"Cargando...");
   if(!rec) return h('div',{style:{minHeight:"100vh",background:"linear-gradient(135deg,#1a3a6b,#0f2347)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
@@ -3868,9 +3979,12 @@ function CompletarView({recId, recs, setRecs, loaded}) {
     const msgCat={infraestructura:"nuestro equipo de obras e infraestructura revisó y resolvió el inconveniente",mantenimiento:"nuestro equipo de mantenimiento atendió y solucionó el problema",limpieza:"nuestro equipo de limpieza atendió la situación",equipamiento:"el equipamiento fue revisado y el problema fue solucionado",preparacion:"el espacio fue preparado correctamente",servicios:"nuestro equipo de atención al socio gestionó tu consulta",cuotas:"nuestro equipo administrativo revisó y resolvió tu consulta"}[rec.cat]||"nuestro equipo atendió y resolvió el inconveniente";
     const updated={...rec,estadoAvance: rec.esRecurrente ? "completada" : "esperando_validacion_responsable",
       descripcionResolucion:desc,adjuntosResolucion,
+      fechaEjecucion: (rec.esRecurrente && fechaEj) ? fechaEj : hoy(),
+      fechaCompletada: new Date().toISOString(),
       fechaEnvioValidacion: rec.esRecurrente ? null : new Date().toISOString(),
       updatedAt:new Date().toISOString(),
-      comentarios:[...(rec.comentarios||[]),{texto:`Ejecutor marcó como completada. Resolución: ${desc}`,fecha:new Date().toISOString(),autor:rec.ejecutorNombre||"Ejecutor"}]};
+      comentarios:[...(rec.comentarios||[]),{texto:`Ejecutor marcó como completada.${rec.esRecurrente&&fechaEj&&fechaEj!==hoy()?" Realizada el "+fd(fechaEj)+".":""} Resolución: ${desc}`,fecha:new Date().toISOString(),autor:rec.ejecutorNombre||"Ejecutor"}]};
+      
     await sbUpsert(updated);
     setRecs(prev=>prev.map(r=>r.id===rec.id?updated:r));
 
@@ -3924,6 +4038,13 @@ function CompletarView({recId, recs, setRecs, loaded}) {
         h('div',{style:{marginBottom:14}},
           h('label',{style:{display:"block",fontSize:12,fontWeight:600,color:err?"#dc2626":"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},err?"¿Qué se hizo? (obligatorio)":"¿Qué se hizo?"),
           h('textarea',{value:desc,onChange:e=>{setDesc(e.target.value);setErr(false);},rows:5,placeholder:"Describí brevemente qué hiciste para resolver el problema...",style:{width:"100%",padding:"11px 14px",borderRadius:8,border:err?"2px solid #ef4444":"1.5px solid #e2e8f0",fontSize:14,resize:"vertical",outline:"none",boxSizing:"border-box"}})),
+        rec.esRecurrente && h('div',{style:{marginBottom:14}},
+          h('label',{style:{display:"block",fontSize:12,fontWeight:600,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},"¿Qué día se hizo?"),
+          h('input',{type:"date",value:fechaEj,onChange:e=>setFechaEj(e.target.value),
+            min:rec.fechaInicioEsperado||rec.fechaInicioOriginal||"",max:hoy(),
+            style:{width:"100%",padding:"11px 14px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:14,outline:"none",boxSizing:"border-box"}}),
+          fechaEj && fechaEj !== hoy() && h('div',{style:{marginTop:6,fontSize:12,color:"#166534",background:"#f0fdf4",border:"1.5px solid #bbf7d0",borderRadius:8,padding:"8px 12px",lineHeight:1.5}},
+            "Queda registrada como realizada el "+fd(fechaEj)+". No se modifican las fechas de la solicitud.")),
         h('div',{style:{marginBottom:20}},
           h('label',{style:{display:"block",fontSize:12,fontWeight:600,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},"Foto / video (opcional)"),
           h('input',{ref:fileRef,type:"file",accept:"image/*,video/*",multiple:true,style:{display:"none"},onChange:e=>{Array.from(e.target.files).forEach(file=>{const r=new FileReader();r.onload=ev=>setFotos(p=>[...p,{nombre:file.name,tipo:file.type,data:ev.target.result}]);r.readAsDataURL(file);});e.target.value="";}}),
@@ -4596,8 +4717,9 @@ function DashboardPanel({recs}) {
 
   const demoradas = recsFilt.filter(r=>{
     if(["completada","consolidada","vinculado_proyecto"].includes(r.estadoAvance)) return false;
-    if(!r.fechaCierre) return false;
-    return new Date(r.fechaCierre)<ahora;
+    const c = r.fechaCierreActualizada||r.fechaCierreConfirmada||r.fechaCierre;
+    if(!c) return false;
+    return pld(c)<ahora;
   }).length;
 
   const sinAsignar = recsFilt.filter(r=>
@@ -5525,6 +5647,7 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
   var [fechaBase, setFechaBase] = useState(new Date());
   var [tareaSeleccionada, setTareaSeleccionada] = useState(null);
   var [procesando, setProcesando] = useState(null);
+  var esMobile = useEsMobile();
 
   var buscar = function() {
     var e = email.trim().toLowerCase();
@@ -5537,16 +5660,18 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
   var CRIT_DOT = {urgente:"🔴", alta:"🟠", media:"🟡", baja:"🟢"};
 
   var misTareas = emailBuscado ? recs.filter(function(r) {
-    if(!r.fechaInicioEsperado && !r.fechaCierre) return false;
+    var fv = fechasVigentes(r);
+    if(!fv.inicio && !fv.cierre) return false;
     if(r.estadoAvance==="consolidada") return false;
-    var enLista = (r.ejecutores_lista||[]).some(function(e){ return e.mail===emailBuscado; });
-    var esDirecto = (r.ejecutorMail||"").toLowerCase() === emailBuscado;
+    var nm = function(m){ return (m||"").toLowerCase().trim(); };
+    var enLista = (r.ejecutores_lista||[]).some(function(e){ return nm(e.mail)===emailBuscado; });
+    var esDirecto = nm(r.ejecutorMail) === emailBuscado;
     return enLista || esDirecto;
   }) : [];
 
   var getEstadoEj = function(r) {
     var lista = r.ejecutores_lista||[];
-    var ej = lista.find(function(e){ return e.mail===emailBuscado; });
+    var ej = lista.find(function(e){ return (e.mail||"").toLowerCase().trim()===emailBuscado; });
     if(ej) {
       if(ej.rechazado) return "rechazado";
       if(ej.confirmado) return "confirmado";
@@ -5578,7 +5703,7 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
     setProcesando(r.id);
     var ahora = new Date().toISOString();
     var ejListaUpd = (r.ejecutores_lista||[]).map(function(e){
-      return e.mail===emailBuscado ? Object.assign({},e,{confirmado:true,rechazado:false,fechaConfirmacion:ahora}) : e;
+      return (e.mail||"").toLowerCase().trim()===emailBuscado ? Object.assign({},e,{confirmado:true,rechazado:false,fechaConfirmacion:ahora}) : e;
     });
     if(ejListaUpd.length===0) ejListaUpd = [{mail:emailBuscado,nombre:r.ejecutorNombre||emailBuscado,confirmado:true,fechaConfirmacion:ahora}];
     var updated = Object.assign({},r,{
@@ -5597,7 +5722,7 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
     setProcesando(r.id);
     var ahora = new Date().toISOString();
     var ejListaUpd = (r.ejecutores_lista||[]).map(function(e){
-      return e.mail===emailBuscado ? Object.assign({},e,{rechazado:true,confirmado:false,motivoRechazo:motivo}) : e;
+      return (e.mail||"").toLowerCase().trim()===emailBuscado ? Object.assign({},e,{rechazado:true,confirmado:false,motivoRechazo:motivo}) : e;
     });
     if(ejListaUpd.length===0) ejListaUpd = [{mail:emailBuscado,nombre:r.ejecutorNombre||emailBuscado,rechazado:true,motivoRechazo:motivo}];
     var allRej = ejListaUpd.every(function(e){return e.rechazado;});
@@ -5620,8 +5745,9 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
   };
 
   var calcularSpan = function(r, dias) {
-    var inicio = r.fechaInicioEsperado||r.fechaCierre;
-    var cierre = r.fechaCierre||r.fechaInicioEsperado;
+    var fv = fechasVigentes(r);
+    var inicio = fv.inicio||fv.cierre;
+    var cierre = fv.cierre||fv.inicio;
     var colStart=-1; var colEnd=-1;
     dias.forEach(function(d,i){
       if(!d) return;
@@ -5650,34 +5776,41 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
     var items = [];
     filas.forEach(function(fila, filaIdx){
       fila.forEach(function(t){
-        var est=getEstadoEj(t.r);
-        var crit=t.r.criticidad||t.r.pri||"media";
-        var bg=est==="confirmado"?"#22c55e":"#ef4444";
-        var bgLight=est==="confirmado"?"#f0fdf4":"#fef2f2";
-        if(mode==="semana") {
-          items.push(h('div',{key:t.r.id,
-            onClick:function(){setTareaSeleccionada(t.r);},
-            style:{gridColumn:(t.colStart+1)+"/"+(t.colEnd+2),
-              gridRow:(filaIdx+1)+"/"+(filaIdx+2),
-              background:bgLight,border:"1.5px solid "+bg,borderLeft:"4px solid "+bg,
-              borderRadius:6,padding:"5px 8px",cursor:"pointer",margin:"3px 2px",
-              overflow:"hidden",zIndex:1,alignSelf:"start"}},
+        var est = getEstadoEj(t.r);
+        var crit = t.r.criticidad||t.r.pri||"media";
+        var bg = est==="confirmado" ? "#22c55e" : "#ef4444";
+        var bgLight = est==="confirmado" ? "#f0fdf4" : "#fef2f2";
+        var base = {
+          gridColumn:(t.colStart+1)+"/"+(t.colEnd+2),
+          gridRow:(filaIdx+1)+"/"+(filaIdx+2),
+          background:bgLight,
+          cursor:"pointer",
+          overflow:"hidden",
+          zIndex:1
+        };
+        var abrir = function(){ setTareaSeleccionada(t.r); };
+
+        if(mode==="semana" && !esMobile) {
+          items.push(h('div',{key:t.r.id, onClick:abrir,
+            style:Object.assign({}, base, {border:"1.5px solid "+bg, borderLeft:"4px solid "+bg,
+              borderRadius:6, padding:"5px 8px", margin:"3px 2px", alignSelf:"start"})},
             h('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:4,marginBottom:2}},
-              h('span',{style:{fontFamily:"monospace",fontSize:10,fontWeight:700,color:"#3b82f6",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},t.r.numero),
-              h('span',{style:{fontSize:10,fontWeight:700,color:CRIT_COLOR[crit],whiteSpace:"nowrap"}},CRIT_DOT[crit])),
-            h('div',{style:{fontSize:11,fontWeight:600,color:"#1e293b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},t.r.sector),
-            h('div',{style:{fontSize:10,color:"#64748b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}},t.r.desc||"")));
+              h('span',{style:{fontFamily:"monospace",fontSize:10,fontWeight:700,color:"#3b82f6",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}, t.r.numero),
+              h('span',{style:{fontSize:10,fontWeight:700,color:CRIT_COLOR[crit],whiteSpace:"nowrap"}}, CRIT_DOT[crit])
+            ),
+            h('div',{style:{fontSize:11,fontWeight:600,color:"#1e293b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}, t.r.sector),
+            h('div',{style:{fontSize:10,color:"#64748b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}, t.r.desc||"")
+          ));
         } else {
-          items.push(h('div',{key:t.r.id,
-            onClick:function(){setTareaSeleccionada(t.r);},
-            style:{gridColumn:(t.colStart+1)+"/"+(t.colEnd+2),
-              gridRow:(filaIdx+1)+"/"+(filaIdx+2),
-              background:bgLight,border:"1.5px solid "+bg,borderLeft:"4px solid "+bg,
-              borderRadius:4,padding:"2px 6px",cursor:"pointer",margin:"2px",
-              overflow:"hidden",zIndex:1,alignSelf:"center"}},
-            h('div',{style:{display:"flex",alignItems:"center",gap:4,overflow:"hidden"}},
-              h('span',{style:{fontSize:9,whiteSpace:"nowrap"}},CRIT_DOT[crit]),
-              h('span',{style:{fontSize:10,fontWeight:600,color:"#1e293b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},t.r.sector))));
+          items.push(h('div',{key:t.r.id, onClick:abrir,
+            style:Object.assign({}, base, {border:"1px solid "+bg, borderLeft:"3px solid "+bg,
+              borderRadius:4, padding:"3px 4px", margin:"2px 1px",
+              alignSelf: mode==="semana" ? "start" : "center"})},
+            h('div',{style:{display:"flex",alignItems:"center",gap:3,overflow:"hidden"}},
+              h('span',{style:{fontSize:9,flexShrink:0}}, CRIT_DOT[crit]),
+              h('span',{style:{fontSize:10,fontWeight:600,color:"#1e293b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}, t.r.sector)
+            )
+          ));
         }
       });
     });
@@ -5767,10 +5900,10 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
 
     var headerDias = dias.map(function(d,i){
       var esHoy = d.getTime()===hoy.getTime();
-      return h('div',{key:i,style:{textAlign:"center",padding:"6px 4px",borderRadius:6,
+      return h('div',{key:i,style:{textAlign:"center",padding:esMobile?"4px 1px":"6px 4px",borderRadius:6,
         background:esHoy?"#eff6ff":"transparent"}},
-        h('div',{style:{fontSize:10,fontWeight:700,color:esHoy?"#3b82f6":"#94a3b8",textTransform:"uppercase"}},DIAS_LABEL[i]),
-        h('div',{style:{fontSize:20,fontWeight:esHoy?800:500,color:esHoy?"#3b82f6":"#374151"}},d.getDate()));
+        h('div',{style:{fontSize:esMobile?9:10,fontWeight:700,color:esHoy?"#3b82f6":"#94a3b8",textTransform:"uppercase"}},DIAS_LABEL[i]),
+        h('div',{style:{fontSize:esMobile?15:20,fontWeight:esHoy?800:500,color:esHoy?"#3b82f6":"#374151"}},d.getDate()));
     });
 
     var fondos = dias.map(function(d,i){
@@ -5788,10 +5921,10 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
         h('button',{onClick:anterior,style:{background:"none",border:"1.5px solid #e2e8f0",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:16,color:"#374151"}},"‹"),
         h('div',{style:{fontSize:16,fontWeight:700,color:"#1a3a6b"}},dStr(dias[0])+" — "+dStr(dias[6])),
         h('button',{onClick:siguiente,style:{background:"none",border:"1.5px solid #e2e8f0",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:16,color:"#374151"}},"›")),
-      h('div',{style:{overflowX:"auto"}},
-        h('div',{style:{minWidth:560}},
-          React.createElement.apply(React, ['div',{style:{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:4}}].concat(headerDias)),
-          React.createElement.apply(React, ['div',{style:{position:"relative",display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,minHeight:(numFilas*52+8)+"px"}}].concat(fondos.concat(tareas))))));
+      h('div',{style:{overflowX:esMobile?"visible":"auto"}},
+        h('div',{style:{minWidth:esMobile?0:560}},
+          React.createElement.apply(React, ['div',{style:{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:esMobile?1:2,marginBottom:4}}].concat(headerDias)),
+          React.createElement.apply(React, ['div',{style:{position:"relative",display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:esMobile?1:2,minHeight:((numFilas*(esMobile?26:52))+8)+"px"}}].concat(fondos.concat(tareas))))));
   };
 
   function ModalTarea({r, onClose}) {
@@ -5866,9 +5999,9 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
             h('div',null,h('div',{style:{fontSize:10,color:"#94a3b8",fontWeight:600,marginBottom:2}},"TIPO"),
               h('div',{style:{fontSize:13}},(cat&&cat.icon||"")+" "+(cat&&cat.label||r.cat))),
             h('div',null,h('div',{style:{fontSize:10,color:"#94a3b8",fontWeight:600,marginBottom:2}},"INICIO"),
-              h('div',{style:{fontSize:13,fontWeight:600}},fd(r.fechaInicioEsperado||r.fechaCierre))),
+              h('div',{style:{fontSize:13,fontWeight:600}},fd(fechasVigentes(r).inicio))),
             h('div',null,h('div',{style:{fontSize:10,color:"#94a3b8",fontWeight:600,marginBottom:2}},"CIERRE"),
-              h('div',{style:{fontSize:13,fontWeight:600}},fd(r.fechaCierre)))),
+              h('div',{style:{fontSize:13,fontWeight:600}},fd(fechasVigentes(r).cierre)))),
           h('div',{style:{marginBottom:16}},
             h('div',{style:{fontSize:10,color:"#94a3b8",fontWeight:600,marginBottom:4,textTransform:"uppercase"}},"Descripción"),
             h('div',{style:{fontSize:14,color:"#475569",lineHeight:1.6}},r.desc||"—")),
@@ -5943,7 +6076,7 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
             style:{padding:"11px 22px",background:"#3b82f6",color:"white",border:"none",
               borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:600,whiteSpace:"nowrap"}},
             "Buscar"))),
-      emailBuscado && loaded && misTareas.length>0 && h('div',{style:{background:"white",borderRadius:16,padding:"18px 16px"}},
+      emailBuscado && loaded && misTareas.length>0 && h('div',{style:{background:"white",borderRadius:16,padding:esMobile?"14px 8px":"18px 16px"}},
         h('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:8}},
           h('div',{style:{display:"flex",gap:6,alignItems:"center"}},
             h('div',{style:{display:"flex",background:"#f1f5f9",borderRadius:8,padding:2}},
@@ -6190,15 +6323,7 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
       }
     };
     // Notify user when fecha cierre confirmed changes
-    if(rec.email && prevRec && rec.fechaCierreConfirmada && prevRec.fechaCierreConfirmada && rec.fechaCierreConfirmada!==prevRec.fechaCierreConfirmada) {
-      await sendEmail({to:rec.email,
-        subject:`[Asturiano]  Actualización de fecha — ${rec.numero}`,
-        body:`Hola ${rec.nombre},\n\nTe informamos que la fecha estimada de resolución de tu solicitud ${rec.numero} (${rec.sector}) fue actualizada.\n\nNueva fecha estimada: ${fd(rec.fechaCierreConfirmada)}\n${rec.motivoActualizacion?"Motivo: "+rec.motivoActualizacion+"\n":""}\nPodés seguir el estado en:\n${appUrl}?seguimiento=${rec.numero}\n\n— Equipo de Intendencia Asturiano`});
-      await notifHijos(
-        `[Asturiano]  Actualización de fecha — {numero}`,
-        hijo=>`Hola ${hijo.nombre},\n\nTe informamos que la fecha estimada de resolución de tu solicitud ${hijo.numero} (${hijo.sector}) fue actualizada.\n\nNueva fecha estimada: ${fd(rec.fechaCierreConfirmada)}\n${rec.motivoActualizacion?"Motivo: "+rec.motivoActualizacion+"\n":""}\nPodés seguir el estado en:\n${appUrl}?seguimiento=${hijo.numero}\n\n— Equipo de Intendencia Asturiano`
-      );
-    }
+    
     const seguimientoUrl = appUrl+"?seguimiento="+rec.numero;
     // Notificar al usuario cuando intendencia confirma fecha de resolución por primera vez
     if(rec.email && rec.fechaCierreConfirmada && prevRec && !prevRec.fechaCierreConfirmada){
