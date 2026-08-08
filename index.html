@@ -6331,14 +6331,14 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
       const _esSinResolucion = rec.estadoAvance === "sin_resolucion";
       const _esDemoraLarga = _diasDesdeCreacion > 21;
       const _mailBody = (_esSinResolucion || _esDemoraLarga)
-        ? `Hola ${rec.nombre},\n\nTu solicitud fue registrada pero requiere más tiempo del habitual para su resolución.\n\nNúmero: ${rec.numero}\nSector: ${rec.sector}\nFecha tentativa de resolución: ${fd(rec.fechaCierreConfirmada)}\n\nMotivo: ${rec.justificacionDemora||"—"}\n\nPodés seguir el estado en tiempo real:\n${seguimientoUrl}\n\nTe avisaremos cuando esté resuelto.\n\n— Equipo de Intendencia Asturiano`
-        : `Hola ${rec.nombre},\n\nTu solicitud fue asignada y está siendo atendida por nuestro equipo.\n\nNúmero: ${rec.numero}\nSector: ${rec.sector}\nFecha tentativa de resolución: ${fd(rec.fechaCierreConfirmada)}\n\nSeguí el estado en tiempo real:\n${seguimientoUrl}\n\nTe avisaremos cuando esté resuelto.\n\n— Equipo de Intendencia Asturiano`;
+        ? `Hola ${rec.nombre},\n\nTu solicitud fue registrada pero requiere más tiempo del habitual para su resolución.\n\nNúmero: ${rec.numero}\nSector: ${rec.sector}\nDescripción: ${rec.desc}\nFecha tentativa de resolución: ${fd(rec.fechaCierreConfirmada)}\n\nMotivo: ${rec.justificacionDemora||"—"}\n\nPodés seguir el estado en tiempo real:\n${seguimientoUrl}\n\nTe avisaremos cuando esté resuelto.\n\n— Equipo de Intendencia Asturiano`
+        : `Hola ${rec.nombre},\n\nTu solicitud fue asignada y está siendo atendida por nuestro equipo.\n\nNúmero: ${rec.numero}\nSector: ${rec.sector}\nDescripción: ${rec.desc}\nFecha tentativa de resolución: ${fd(rec.fechaCierreConfirmada)}\n\nSeguí el estado en tiempo real:\n${seguimientoUrl}\n\nTe avisaremos cuando esté resuelto.\n\n— Equipo de Intendencia Asturiano`;
       await sendEmail({to:rec.email,
         subject:`[Asturiano] Tu solicitud está siendo atendida — ${rec.numero}`,
         body: _mailBody});
       await notifHijos(
         `[Asturiano] Tu solicitud está siendo atendida — {numero}`,
-        hijo=>`Hola ${hijo.nombre},\n\nTu solicitud ${hijo.numero} (${hijo.sector}) está siendo atendida por nuestro equipo junto con otra solicitud sobre el mismo problema.\n\nFecha tentativa de resolución: ${fd(rec.fechaCierreConfirmada)}\n\nSeguí el estado:\n${appUrl}?seguimiento=${hijo.numero}\n\n— Equipo de Intendencia Asturiano`
+        hijo=>`Hola ${hijo.nombre},\n\nTu solicitud ${hijo.numero} (${hijo.sector}) está siendo atendida por nuestro equipo junto con otra solicitud sobre el mismo problema.\n\nDescripción: ${hijo.desc}\nFecha tentativa de resolución: ${fd(rec.fechaCierreConfirmada)}\n\nSeguí el estado:\n${appUrl}?seguimiento=${hijo.numero}\n\n— Equipo de Intendencia Asturiano`
       );
     }
     // Resolution email is handled by notifResolucionAuto in EditModal save
@@ -6346,7 +6346,7 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
     if(rec.email && rec.estadoAvance === "sin_resolucion" && prevRec && prevRec.estadoAvance !== "sin_resolucion" && rec.justificacionDemora?.trim()) {
       await sendEmail({to:rec.email,
         subject:`[Asturiano] Tu solicitud está registrada — ${rec.numero}`,
-        body:`Hola ${rec.nombre},\n\nTu solicitud fue registrada pero requiere más tiempo del habitual para su resolución.\n\nNúmero: ${rec.numero}\nSector: ${rec.sector}\n\nMotivo: ${rec.justificacionDemora}\n\nPodés seguir el estado en tiempo real:\n${seguimientoUrl}\n\nTe avisaremos cuando haya novedades.\n\n— Equipo de Intendencia Asturiano`});
+        body:`Hola ${rec.nombre},\n\nTu solicitud fue registrada pero requiere más tiempo del habitual para su resolución.\n\nNúmero: ${rec.numero}\nSector: ${rec.sector}\nDescripción: ${rec.desc}\n\nMotivo: ${rec.justificacionDemora}\n\nPodés seguir el estado en tiempo real:\n${seguimientoUrl}\n\nTe avisaremos cuando haya novedades.\n\n— Equipo de Intendencia Asturiano`});
     }
   };
 
