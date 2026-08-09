@@ -3200,17 +3200,25 @@ function FrancosTab(props) {
 
   // ── Matcheo nombre → mail (por lista de ejecutores de la app) ──
   // ── Matcheo nombre → mail (por lista de ejecutores de la app, sin distinguir tildes/mayúsculas) ──
+  // ── Matcheo nombre → mail (por palabras sueltas, sin importar tildes/mayúsculas/orden) ──
+  // "GUSTAVO ROMERO" matchea con "Romero Gustavo", "ENCINA" matchea con "Dami Encina", etc.
+  const tokensDe = (s) => normalizarTxt(s).split(/\s+/).filter(Boolean);
   const matchMail = (nombreRaw) => {
-    const n = normalizarTxt(nombreRaw);
-    if (!n) return null;
-    const exact = (ejecutores||[]).find(e=>normalizarTxt(e.nombre)===n);
+    const nTokens = tokensDe(nombreRaw);
+    if (!nTokens.length) return null;
+    // match exacto de string completo primero
+    const nFull = nTokens.join(" ");
+    const exact = (ejecutores||[]).find(e=>tokensDe(e.nombre).join(" ")===nFull);
     if (exact) return exact.mail;
-    // match parcial: el nombre de la planilla está contenido en el nombre del ejecutor o viceversa
-    const parcial = (ejecutores||[]).find(e=>{
-      const en = normalizarTxt(e.nombre);
-      return en && (en.includes(n) || n.includes(en));
+    // match por palabras: todas las palabras del nombre más corto deben aparecer
+    // (exactas o como prefijo, ej. "Maxi"→"Maximiliano") en el nombre más largo
+    const candidato = (ejecutores||[]).find(e=>{
+      const eTokens = tokensDe(e.nombre);
+      if (!eTokens.length) return false;
+      const [cortos, largos] = nTokens.length<=eTokens.length ? [nTokens,eTokens] : [eTokens,nTokens];
+      return cortos.every(ct => largos.some(lt => lt===ct || lt.startsWith(ct) || ct.startsWith(lt)));
     });
-    return parcial ? parcial.mail : null;
+    return candidato ? candidato.mail : null;
   };
 
   // ── Parser genérico de la matriz "planilla de turnos" (pegada tal cual del Google Sheet) ──
