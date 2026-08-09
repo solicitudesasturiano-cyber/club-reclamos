@@ -2877,6 +2877,30 @@ function proximaOcurrenciaFrontend(rec, hoy) {
   return null;
 }
 
+// Devuelve las próximas N ocurrencias (para la vista previa de asignación)
+function proximasOcurrenciasN(rec, hoy, cantidad) {
+  const inicio = pld(rec.fechaInicio);
+  inicio.setHours(0,0,0,0);
+  const patron = rec.patron;
+  const DIAS_SEM = (rec.diasSemana||[]);
+  const fechaFinLimite = rec.fechaFin ? pld(rec.fechaFin) : null;
+  const resultados = [];
+  for (let d = 0; d <= 400 && resultados.length < cantidad; d++) {
+    const fecha = new Date(hoy.getTime() + d * 86400000);
+    fecha.setHours(0,0,0,0);
+    if (fecha < inicio) continue;
+    if (fechaFinLimite && fecha > fechaFinLimite) break;
+    let esOcurrencia = false;
+    if (patron === "diario") esOcurrencia = true;
+    else if (patron === "semanal") esOcurrencia = DIAS_SEM.includes((fecha.getDay()+6)%7);
+    else if (patron === "quincenal") esOcurrencia = Math.round((fecha-inicio)/86400000)%14===0;
+    else if (patron === "mensual") esOcurrencia = fecha.getDate()===(rec.diaMes||1);
+    else if (patron === "personalizado") esOcurrencia = Math.round((fecha-inicio)/86400000)%(rec.intervaloDias||7)===0;
+    if (esOcurrencia) resultados.push(fecha);
+  }
+  return resultados;
+}
+
 async function crearTicketDesdeRecurrencia(rec, fechaOcurrencia, francosMes) {
   try {
     const fechaStr = fechaOcurrencia.toISOString().split('T')[0];
@@ -3515,6 +3539,37 @@ function RecurrenciaModal(props) {   var recInit = props.rec; var onSave = props
   const removeExclusion = function(i) { set("periodosExclusion", (f.periodosExclusion||[]).filter(function(_,idx){ return idx!==i; })); };
   const updateExclusion = function(i,k,v) { set("periodosExclusion", (f.periodosExclusion||[]).map(function(p,idx){ return idx===i ? Object.assign({},p,{[k]:v}) : p; })); };
 
+  const [preview, setPreview] = useState(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  const verVistaPrevia = async () => {
+    if(!f.fechaInicio) { alert("Cargá la fecha de primera ocurrencia antes de ver la vista previa."); return; }
+    setPreviewLoading(true);
+    const hoyD = new Date(); hoyD.setHours(0,0,0,0);
+    const fechas = proximasOcurrenciasN(f, hoyD, 10);
+    const prioridad = f.prioridadEjecutores||[];
+    const cantidadReq = f.cantidadRequerida||1;
+    const francosCache = {};
+    const filas = [];
+    for (const fecha of fechas) {
+      const fechaStr = fecha.toISOString().split('T')[0];
+      const mesId = fechaStr.slice(0,7);
+      if (!francosCache[mesId]) francosCache[mesId] = await sbGetFrancosMes(mesId);
+      const francosMes = francosCache[mesId];
+      let asignados = []; let faltan = 0;
+      if (f.tipoEjecutor==="tercero") {
+        asignados = f.empresaNombre ? [{nombre:f.empresaNombre}] : [];
+      } else if (prioridad.length) {
+        const disponibles = prioridad.filter(ej=>!(francosMes[ej.mail]||[]).includes(fechaStr));
+        asignados = disponibles.slice(0, cantidadReq);
+        faltan = cantidadReq - asignados.length;
+      }
+      filas.push({fecha:fechaStr, diaSemana:fecha.toLocaleDateString("es-AR",{weekday:"long"}), asignados, faltan});
+    }
+    setPreview(filas);
+    setPreviewLoading(false);
+  };
+
   const save = async () => {
     if(!f.nombre.trim()) return alert("El nombre es obligatorio");
     if(!f.cat) return alert("La categoría es obligatoria");
@@ -3710,6 +3765,19 @@ function RecurrenciaModal(props) {   var recInit = props.rec; var onSave = props
           h('div',null,
             h('label',{style:labelStyle},"Fecha de fin (opcional)"),
             h('input',{type:"date",value:f.fechaFin||"",onChange:e=>set("fechaFin",e.target.value),style:inputStyle}))),
+
+        // Vista previa de asignación
+        h('div',{style:sectionStyle},
+          h('button',{onClick:verVistaPrevia,disabled:previewLoading,
+            style:{padding:"9px 16px",background:"#f8fafc",color:"#1a3a6b",border:"1.5px solid #e2e8f0",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:700}},
+            previewLoading?"Calculando...":"👁️ Vista previa — próximas 10 fechas"),
+          preview && h('div',{style:{marginTop:10,display:"flex",flexDirection:"column",gap:6}},
+            preview.length===0
+              ? h('div',{style:{fontSize:12,color:"#94a3b8"}},"No hay próximas ocurrencias con esta configuración (revisá fecha de inicio / fin y patrón).")
+              : preview.map((p,i)=>h('div',{key:i,style:{display:"flex",alignItems:"center",gap:10,background:p.faltan>0?"#fff7ed":"#f8fafc",border:p.faltan>0?"1.5px solid #fed7aa":"1px solid #f1f5f9",borderRadius:8,padding:"7px 12px",fontSize:12}},
+                h('span',{style:{width:120,flexShrink:0,fontWeight:600,color:"#1e293b",textTransform:"capitalize"}},p.diaSemana+" "+p.fecha.slice(8,10)+"/"+p.fecha.slice(5,7)),
+                h('span',{style:{flex:1,color:p.asignados.length?"#374151":"#94a3b8"}}, p.asignados.length ? p.asignados.map(a=>a.nombre).join(", ") : "Sin ejecutor disponible"),
+                p.faltan>0 && h('span',{style:{color:"#c2410c",fontWeight:700,fontSize:11,whiteSpace:"nowrap"}},"⚠️ faltan "+p.faltan))))),
 
         // Períodos de exclusión
         h('div',{style:{borderTop:"2px solid #f1f5f9",marginBottom:20,marginTop:4}}),
