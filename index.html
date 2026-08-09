@@ -3599,24 +3599,17 @@ function RecurrenciaModal(props) {   var recInit = props.rec; var onSave = props
 
         // Ejecutor — toggle interno / tercero
         h('div',{style:sectionStyle},
-          h('label',{style:labelStyle},"Ejecutor responsable (opcional)"),
+          h('label',{style:labelStyle},"Ejecutor (opcional)"),
           h('div',{style:{display:"flex",gap:8,marginBottom:10}},
             ...[["interno","👷 Empleado del club"],["tercero","🏢 Proveedor externo"]].map(function(tipArr){ var tipo=tipArr[0]; var lbl=tipArr[1]; return (
               h('button',{key:tipo,onClick:()=>{
                 set("tipoEjecutor",tipo);
-                if(tipo==="tercero"){set("ejecutorMail","tercero@externo");set("ejecutorNombre",f.empresaNombre||"");}
+                if(tipo==="tercero"){set("ejecutorMail","tercero@externo");set("ejecutorNombre",f.empresaNombre||"");set("prioridadEjecutores",[]);}
                 else{set("ejecutorMail","");set("ejecutorNombre","");set("empresaNombre","");set("empresaTelefono","");}
               },style:{flex:1,padding:"7px",borderRadius:8,border:f.tipoEjecutor===tipo?"2px solid #3b82f6":"2px solid #e2e8f0",
                 background:f.tipoEjecutor===tipo?"#eff6ff":"white",
                 color:f.tipoEjecutor===tipo?"#1d4ed8":"#64748b",cursor:"pointer",fontSize:12,fontWeight:600}},lbl)); }),
-          f.tipoEjecutor!=="tercero"
-            ? h('select',{value:f.ejecutorMail,onChange:e=>{
-                const ej=ejecutores.find(x=>x.mail===e.target.value);
-                setF(function(p){ return Object.assign({},p,{ejecutorMail:e.target.value,ejecutorNombre:(ej&&ej.nombre)||""}); });
-              },style:inputStyle},
-                h('option',{value:""},"Sin ejecutor asignado"),
-                ...(ejecutores||[]).map(e=>h('option',{key:e.mail,value:e.mail},e.nombre||e.mail)))
-            : h('div',{style:{display:"flex",flexDirection:"column",gap:8}},
+          f.tipoEjecutor==="tercero" && h('div',{style:{display:"flex",flexDirection:"column",gap:8}},
                 h('input',{value:f.empresaNombre||"",onChange:e=>{
                   set("empresaNombre",e.target.value);
                   set("ejecutorNombre",e.target.value);
@@ -3627,11 +3620,11 @@ function RecurrenciaModal(props) {   var recInit = props.rec; var onSave = props
                 f.empresaNombre && h('div',{style:{fontSize:11,color:"#16a34a",fontWeight:600,marginTop:2}},
                   "✓ Proveedor: "+f.empresaNombre))),
 
-        // Prioridad de ejecutores (para franco) — solo aplica a ejecutores internos
+        // Prioridad de ejecutores (para franco) — único lugar para asignar ejecutores internos
         f.tipoEjecutor!=="tercero" && h('div',{style:sectionStyle},
           h('label',{style:labelStyle},"Prioridad de ejecutores (respeta francos)"),
           h('div',{style:{fontSize:11,color:"#94a3b8",marginBottom:8}},
-            "Si el que sigue en la lista está de franco ese día, el sistema pasa al siguiente. Dejá vacío para usar solo el ejecutor de arriba, sin chequear francos."),
+            "Si el que sigue en la lista está de franco ese día, el sistema pasa al siguiente. Con un solo ejecutor cargado funciona como asignación fija."),
           h('div',{style:{display:"grid",gridTemplateColumns:"1fr auto",gap:8,alignItems:"center",marginBottom:8}},
             h('div',null,
               h('label',{style:Object.assign({},labelStyle,{marginBottom:2})},"Cantidad de ejecutores requeridos"),
@@ -3639,7 +3632,7 @@ function RecurrenciaModal(props) {   var recInit = props.rec; var onSave = props
                 onChange:e=>set("cantidadRequerida",Math.max(1,Number(e.target.value)||1)),
                 style:Object.assign({},inputStyle,{width:80})}))),
           (f.prioridadEjecutores||[]).length===0
-            ? h('div',{style:{fontSize:12,color:"#94a3b8",marginBottom:8}},"Sin lista de prioridad configurada")
+            ? h('div',{style:{fontSize:12,color:"#94a3b8",marginBottom:8}},"Sin ejecutores asignados")
             : h('div',{style:{display:"flex",flexDirection:"column",gap:6,marginBottom:8}},
                 ...(f.prioridadEjecutores||[]).map((ej,i)=>
                   h('div',{key:ej.mail+i,style:{display:"flex",alignItems:"center",gap:8,background:"#f8fafc",borderRadius:8,padding:"6px 10px"}},
