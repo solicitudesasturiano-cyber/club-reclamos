@@ -3155,6 +3155,9 @@ function FrancosTab(props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [pegado, setPegado] = useState("");
+  const [workbook, setWorkbook] = useState(null);
+  const [sheetNames, setSheetNames] = useState([]);
+  const [sheetSel, setSheetSel] = useState("");
 
   const cargar = async (m) => {
     setLoading(true);
@@ -3199,54 +3202,53 @@ function FrancosTab(props) {
   const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
   const DIAS_SEM = ["lunes","martes","miercoles","miércoles","jueves","viernes","sabado","sábado","domingo"];
   const schedRe = /\d\d?\s*a\s*\d\d?/i;
+  const normalizarTxt = (s) => (s||"").toString().trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
 
-  const parseMatrizSheet = (texto, mesNombre, anio) => {
+  const filasDesdeTexto = (texto) => {
     const delim = texto.indexOf("\t")>-1 ? "\t" : (texto.indexOf(";")>-1 && texto.indexOf(",")===-1 ? ";" : ",");
-    const lineas = texto.split(/\r?\n/);
-    const filas = lineas.map(l=>l.split(delim).map(c=>c.trim()));
-    const mesNorm = mesNombre.trim().toLowerCase();
-    const mesIdx = MESES.indexOf(mesNorm);
+    return texto.split(/\r?\n/).map(l=>l.split(delim).map(c=>c.trim()));
+  };
+
+  const procesarMatriz = (filas, mesNombre, anio) => {
+    const mesNorm = normalizarTxt(mesNombre);
+    const mesIdx = MESES.indexOf(mesNombre.trim().toLowerCase());
     if (mesIdx<0) { setError("Mes inválido."); return null; }
 
-    // 1) buscar la fila que contiene el nombre del mes en alguna celda
     let filaCat = -1;
     for (let i=0;i<filas.length;i++){
-      if (filas[i].some(c=>c.trim().toLowerCase()===mesNorm)) { filaCat = i; break; }
+      if (filas[i].some(c=>normalizarTxt(c)===mesNorm)) { filaCat = i; break; }
     }
-    if (filaCat<0) { setError(`No encontré "${mesNombre}" en el texto pegado. Verificá que copiaste el bloque completo del mes.`); return null; }
+    if (filaCat<0) { setError(`No encontré "${mesNombre}" en los datos. Verificá que sea el mes/solapa correcto.`); return null; }
 
-    // 2) la fila siguiente es la de nombres de empleados
     const filaNombres = filas[filaCat+1] || [];
     if (!filaNombres.length) { setError("No encontré la fila de nombres debajo del mes."); return null; }
 
-    // Columnas de empleados: todo lo que NO sea vacío, NO sea un año de 4 dígitos (columna día/placeholder)
     const empCols = [];
     filaNombres.forEach((val,i)=>{
-      const v = (val||"").trim();
-      if (i<2) return; // primeras 2 columnas: nombre de día / número de día
+      const v = (val||"").toString().trim();
+      if (i<2) return;
       if (!v) return;
-      if (/^\d{4}$/.test(v)) return; // "2026" placeholder de columna de día duplicada
+      if (/^\d{4}$/.test(v)) return;
       if (/mes|merged/i.test(v)) return;
       empCols.push({idx:i, nombre:v});
     });
     if (!empCols.length) { setError("No pude identificar columnas de empleados en la fila de nombres."); return null; }
 
-    // 3) buscar inicio de filas de días: primera fila (después de nombres) cuyo col0 sea un día de semana
     let i = filaCat+2;
-    while (i<filas.length && !DIAS_SEM.includes((filas[i][0]||"").trim().toLowerCase())) i++;
+    while (i<filas.length && !DIAS_SEM.includes(normalizarTxt(filas[i][0]))) i++;
 
-    const francosOut = {}; // mail -> Set(fechas)  (o nombre si no matchea, para mostrar en noMatch)
+    const francosOut = {};
     const noMatch = new Set();
     let filasLeidas = 0;
-    while (i<filas.length && DIAS_SEM.includes((filas[i][0]||"").trim().toLowerCase())) {
+    while (i<filas.length && DIAS_SEM.includes(normalizarTxt(filas[i][0]))) {
       const fila = filas[i];
-      const diaNum = parseInt((fila[1]||"").trim(),10);
+      const diaNum = parseInt((fila[1]||"").toString().trim(),10);
       if (!isNaN(diaNum)) {
         const fecha = `${anio}-${String(mesIdx+1).padStart(2,"0")}-${String(diaNum).padStart(2,"0")}`;
         empCols.forEach(({idx,nombre})=>{
-          const val = (fila[idx]||"").trim();
+          const val = (fila[idx]||"").toString().trim();
           if (!val) return;
-          if (schedRe.test(val)) return; // tiene horario -> trabaja
+          if (schedRe.test(val)) return;
           const mail = matchMail(nombre);
           if (mail) {
             francosOut[mail] = francosOut[mail] || new Set();
@@ -3269,6 +3271,9 @@ function FrancosTab(props) {
     return {rows, noMatch: Array.from(noMatch).map(n=>({nombre:n}))};
   };
 
+  const parseMatrizSheet = (texto, mesNombre, anio) => procesarMatriz(filasDesdeTexto(texto), mesNombre, anio);
+
+  const parseMatrizSheet = (texto, mesNombre, anio) => procesarMatriz(filasDesdeTexto(texto), mesNombre, anio);
   const procesarPegado = () => {
     setError(""); setParsedPreview(null);
     if (!pegado.trim()) { setError("Pegá primero el contenido de la hoja."); return; }
@@ -3305,18 +3310,24 @@ function FrancosTab(props) {
   };
 
   const handleFile = (file) => {
-    setError(""); setParsedPreview(null);
+    setError(""); setParsedPreview(null); setWorkbook(null); setSheetNames([]); setSheetSel("");
     const ext = (file.name.split(".").pop()||"").toLowerCase();
+    const [anio, mesNum] = mes.split("-");
+    const mesNombre = MESES[Number(mesNum)-1];
     if (ext==="csv") {
       const reader = new FileReader();
       reader.onload = e => {
-        const text = e.target.result;
-        const delim = text.indexOf(";")>-1 && text.indexOf(",")===-1 ? ";" : ",";
-        const lines = text.split(/\r?\n/).filter(l=>l.trim()!=="");
-        if (!lines.length) { setError("Archivo vacío."); return; }
-        const headers = lines[0].split(delim).map(s=>s.trim());
-        const rows = lines.slice(1).map(l=>l.split(delim).map(s=>s.trim()));
-        procesarFilasArchivo(headers, rows);
+        const filas = filasDesdeTexto(e.target.result);
+        const headerRow = filas[0]||[];
+        const norm = s => String(s||"").trim().toLowerCase();
+        const esFormatoSimple = headerRow.some(h=>["nombre","empleado","ejecutor"].includes(norm(h))) &&
+                                 headerRow.some(h=>["fecha","dia","día","franco"].includes(norm(h)));
+        if (esFormatoSimple) {
+          procesarFilasArchivo(headerRow, filas.slice(1));
+        } else {
+          const res = procesarMatriz(filas, mesNombre, anio);
+          if (res) setParsedPreview(res);
+        }
       };
       reader.readAsText(file);
     } else if (ext==="xlsx" || ext==="xls") {
@@ -3330,19 +3341,37 @@ function FrancosTab(props) {
       loadSheetJS().then(()=>{
         const reader = new FileReader();
         reader.onload = e => {
-          const wb = window.XLSX.read(new Uint8Array(e.target.result), {type:"array", cellDates:true});
-          const ws = wb.Sheets[wb.SheetNames[0]];
-          const rows = window.XLSX.utils.sheet_to_json(ws, {header:1, raw:false, dateNF:'yyyy-mm-dd'});
-          const rowsRaw = window.XLSX.utils.sheet_to_json(ws, {header:1});
-          if (!rows.length) { setError("Archivo vacío."); return; }
-          const headers = rows[0];
-          procesarFilasArchivo(headers, rowsRaw.slice(1));
+          const wb = window.XLSX.read(new Uint8Array(e.target.result), {type:"array"});
+          setWorkbook(wb);
+          setSheetNames(wb.SheetNames);
+          const mesNormBuscado = normalizarTxt(mesNombre);
+          const sheetMatch = wb.SheetNames.find(n=>normalizarTxt(n).includes(mesNormBuscado));
+          const sheetName = sheetMatch || wb.SheetNames[0];
+          setSheetSel(sheetName);
+          procesarSheet(wb, sheetName, mesNombre, anio);
+          if (!sheetMatch) {
+            setError(`No encontré una solapa llamada "${mesNombre}". Te dejé "${sheetName}" seleccionada — elegí la correcta en el desplegable de abajo.`);
+          }
         };
         reader.readAsArrayBuffer(file);
       });
     } else {
       setError("Formato no soportado. Usá .csv, .xlsx o .xls.");
     }
+  };
+
+  const procesarSheet = (wb, sheetName, mesNombre, anio) => {
+    const ws = wb.Sheets[sheetName];
+    const filas = window.XLSX.utils.sheet_to_json(ws, {header:1, raw:false, defval:""});
+    const res = procesarMatriz(filas, mesNombre, anio);
+    if (res) { setParsedPreview(res); setError(""); }
+  };
+
+  const cambiarSolapa = (sheetName) => {
+    setSheetSel(sheetName);
+    const [anio, mesNum] = mes.split("-");
+    const mesNombre = MESES[Number(mesNum)-1];
+    procesarSheet(workbook, sheetName, mesNombre, anio);
   };
 
   const confirmarImport = async () => {
@@ -3408,8 +3437,12 @@ function FrancosTab(props) {
           error && h('div',{style:{color:"#dc2626",fontSize:12,marginTop:8,fontWeight:600}},error))
       : h('div',{style:{marginBottom:16,padding:14,background:"#f8fafc",borderRadius:10,border:"1.5px dashed #cbd5e1"}},
           h('div',{style:{fontSize:12,color:"#64748b",marginBottom:8}},
-            "Subí un Excel o CSV con columnas ",h('strong',null,"Nombre"),", ",h('strong',null,"Mail")," (al menos una de las dos) y ",h('strong',null,"Fecha")," (una fila por día de franco)."),
+            "Subí el Excel de turnos completo (con las solapas por mes) o un CSV/Excel simple con columnas ",h('strong',null,"Nombre"),", ",h('strong',null,"Mail")," y ",h('strong',null,"Fecha"),". Para el Excel de turnos, uso la solapa que coincida con el mes elegido arriba."),
           h('input',{type:"file",accept:".csv,.xlsx,.xls",onChange:e=>{if(e.target.files[0])handleFile(e.target.files[0]);}}),
+          sheetNames.length>1 && h('div',{style:{marginTop:10}},
+            h('label',{style:{fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4}},"Solapa a usar"),
+            h('select',{value:sheetSel,onChange:e=>cambiarSolapa(e.target.value),style:inputStyle},
+              ...sheetNames.map(n=>h('option',{key:n,value:n},n)))),
           error && h('div',{style:{color:"#dc2626",fontSize:12,marginTop:8,fontWeight:600}},error)),
 
     parsedPreview && h('div',{style:{marginBottom:16,padding:14,background:"#f0fdf4",borderRadius:10,border:"1.5px solid #bbf7d0"}},
