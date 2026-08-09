@@ -1328,6 +1328,40 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs, area})
   const [saveErr,setSaveErr] = useState("");
   const [sending,setSending] = useState(false);
   const [showRechazoResp,setShowRechazoResp] = useState(false);
+  const [francosCache,setFrancosCache] = useState({}); // {"YYYY-MM": {mail:[fechas]}}
+
+  useEffect(()=>{
+    const desde = f.fechaInicioActualizada||f.fechaInicioEsperado;
+    const hasta = f.fechaCierreActualizada||f.fechaCierre;
+    if(!desde || !hasta) return;
+    const d0 = pld(desde), d1 = pld(hasta);
+    if(isNaN(d0)||isNaN(d1)||d1<d0) return;
+    const meses = new Set();
+    for(let d=new Date(d0); d<=d1; d.setMonth(d.getMonth()+1)){ meses.add(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`); }
+    meses.add(`${d1.getFullYear()}-${String(d1.getMonth()+1).padStart(2,"0")}`);
+    (async()=>{
+      const nuevos = {};
+      for(const m of meses){ if(!francosCache[m]) nuevos[m] = await sbGetFrancosMes(m); }
+      if(Object.keys(nuevos).length) setFrancosCache(prev=>Object.assign({},prev,nuevos));
+    })();
+  },[f.fechaInicioEsperado, f.fechaCierre, f.fechaInicioActualizada, f.fechaCierreActualizada]);
+
+  const pctFrancoEnRango = (mail) => {
+    const desde = f.fechaInicioActualizada||f.fechaInicioEsperado;
+    const hasta = f.fechaCierreActualizada||f.fechaCierre;
+    if(!mail || !desde || !hasta) return 0;
+    const d0 = pld(desde), d1 = pld(hasta);
+    if(isNaN(d0)||isNaN(d1)||d1<d0) return 0;
+    const totalDias = Math.round((d1-d0)/86400000)+1;
+    let francos = 0;
+    for(let i=0;i<totalDias;i++){
+      const dt = new Date(d0.getTime()+i*86400000);
+      const key = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,"0")}-${String(dt.getDate()).padStart(2,"0")}`;
+      const mes = key.slice(0,7);
+      if(((francosCache[mes]||{})[mail]||[]).includes(key)) francos++;
+    }
+    return totalDias ? francos/totalDias : 0;
+  };
   const [motivoRechazoResp,setMotivoRechazoResp] = useState("");
   const [sendingValidacionResp,setSendingValidacionResp] = useState(false);
   const [proyectosReales,setProyectosReales] = useState([]);
@@ -1919,7 +1953,10 @@ Resolución: ${descripcion||"—"}`});
           h('div',{style:{marginBottom:12}},
             h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},"Ejecutores asignados"),
             h('div',{style:{display:"flex",flexDirection:"column",gap:6,marginBottom:8}},
-              ...(f.ejecutores_lista||[]).map((ej,i)=>h('div',{key:i,style:{display:"flex",alignItems:"center",gap:8,background:"#f8fafc",borderRadius:8,padding:"8px 12px",fontSize:13}},
+              ...(f.ejecutores_lista||[]).map((ej,i)=>{
+                const pctFranco = pctFrancoEnRango(ej.mail);
+                return h('div',{key:i,style:{display:"flex",flexDirection:"column",gap:4,background:"#f8fafc",borderRadius:8,padding:"8px 12px",fontSize:13}},
+                h('div',{style:{display:"flex",alignItems:"center",gap:8}},
                 h('div',{style:{flex:1}},
                   h('div',{style:{fontWeight:600,color:"#1e293b"}},ej.nombre),
                   h('div',{style:{fontSize:12,color:"#64748b"}},ej.mail||ej.telefono||""),
@@ -1928,8 +1965,11 @@ Resolución: ${descripcion||"—"}`});
                     : ej.confirmado
                       ? h('span',{style:{display:"inline-block",marginTop:3,padding:"2px 8px",background:"#f0fdf4",color:"#15803d",borderRadius:6,fontSize:10,fontWeight:700}},"Confirmó "+fdt(ej.fechaConfirmacion))
                       : h('span',{style:{display:"inline-block",marginTop:3,padding:"2px 8px",background:"#fff7ed",color:"#f97316",borderRadius:6,fontSize:10,fontWeight:700}},"Sin respuesta")),
-                h('button',{onClick:()=>{const l=[...(f.ejecutores_lista||[])];l.splice(i,1);set("ejecutores_lista",l);if(l.length===0){set("ejecutorMail","");set("ejecutorNombre","");}else{set("ejecutorMail",l[0].mail&&l[0].mail!=="tercero@externo"?l[0].mail:"");set("ejecutorNombre",l.map(e=>e.nombre).join(", "));}},style:{background:"none",border:"none",cursor:"pointer",color:"#ef4444",fontSize:14}},"✕")))),
-            // Toggle interno vs tercero
+                h('button',{onClick:()=>{const l=[...(f.ejecutores_lista||[])];l.splice(i,1);set("ejecutores_lista",l);if(l.length===0){set("ejecutorMail","");set("ejecutorNombre","");}else{set("ejecutorMail",l[0].mail&&l[0].mail!=="tercero@externo"?l[0].mail:"");set("ejecutorNombre",l.map(e=>e.nombre).join(", "));}},style:{background:"none",border:"none",cursor:"pointer",color:"#ef4444",fontSize:14}},"✕")),
+                pctFranco>0.6 && h('div',{style:{background:"#fff7ed",border:"1.5px solid #fed7aa",borderRadius:6,padding:"5px 9px",fontSize:11,color:"#92400e",fontWeight:600}},
+                  "⚠️ "+ej.nombre+" está de franco "+Math.round(pctFranco*100)+"% de los días del rango asignado — puede poner en riesgo la resolución en fecha."));
+              })),
+              // Toggle interno vs tercero
             h('div',{style:{display:"flex",gap:8,marginBottom:14}},
               ...[["interno","👷 Empleado del club"],["tercero","🏢 Proveedor externo"]].map(([tipo,lbl])=>
                 h('button',{key:tipo,onClick:()=>{set("tipoEjecutor",tipo);if(tipo==="tercero"){set("ejecutorMail","tercero@externo");set("ejecutorNombre",f.empresaNombre||"");}else{set("ejecutorMail","");set("ejecutorNombre","");set("empresaNombre","");set("empresaTelefono","");}},
@@ -2768,6 +2808,28 @@ async function sbDeleteRecurrencia(id) {
   } catch(e) { console.error("sbDeleteRecurrencia:", e); }
 }
 
+async function sbGetFrancosMes(mesId) {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/francos?id=eq.${mesId}&select=*`, {
+      headers: {"apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`}
+    });
+    const rows = await r.json();
+    return (rows && rows[0] && rows[0].data) || {};
+  } catch(e) { console.error("sbGetFrancosMes:", e); return {}; }
+}
+async function sbUpsertFrancosMes(mesId, data) {
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/francos`, {
+      method: "POST",
+      headers: {"apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`,
+        "Content-Type": "application/json", "Prefer": "resolution=merge-duplicates,return=minimal"},
+      body: JSON.stringify({id: mesId, data})
+    });
+  } catch(e) { console.error("sbUpsertFrancosMes:", e); }
+}
+
+const PRIORIDAD_LABEL = (i) => ["Principal","Secundario","Terciario","Cuaternario","Quinario","Sexto","Séptimo","Octavo"][i] || (i+1)+"º";
+
 const RECURRENCIA_EMPTY = {
   nombre:"", cat:"", sectorGrande:"", sector:"", subEspacio:"", sectorOtro:"", subEspacioOtro:"",
   turno:"", horaInicio:"", horaFin:"",
@@ -2776,6 +2838,7 @@ const RECURRENCIA_EMPTY = {
   ejecutorMail:"", ejecutorNombre:"",
   empresaNombre:"", empresaTelefono:"",
   comentario:"",
+  cantidadRequerida:1, prioridadEjecutores:[],
   patron:"semanal", // "diario"|"semanal"|"quincenal"|"mensual"|"personalizado"
   intervaloDias:7, diasSemana:[], diaMes:1,
   fechaInicio:"", leadTimeDias:2,
@@ -2814,9 +2877,34 @@ function proximaOcurrenciaFrontend(rec, hoy) {
   return null;
 }
 
-async function crearTicketDesdeRecurrencia(rec, fechaOcurrencia) {
+// Devuelve las próximas N ocurrencias (para la vista previa de asignación)
+function proximasOcurrenciasN(rec, hoy, cantidad) {
+  const inicio = pld(rec.fechaInicio);
+  inicio.setHours(0,0,0,0);
+  const patron = rec.patron;
+  const DIAS_SEM = (rec.diasSemana||[]);
+  const fechaFinLimite = rec.fechaFin ? pld(rec.fechaFin) : null;
+  const resultados = [];
+  for (let d = 0; d <= 400 && resultados.length < cantidad; d++) {
+    const fecha = new Date(hoy.getTime() + d * 86400000);
+    fecha.setHours(0,0,0,0);
+    if (fecha < inicio) continue;
+    if (fechaFinLimite && fecha > fechaFinLimite) break;
+    let esOcurrencia = false;
+    if (patron === "diario") esOcurrencia = true;
+    else if (patron === "semanal") esOcurrencia = DIAS_SEM.includes((fecha.getDay()+6)%7);
+    else if (patron === "quincenal") esOcurrencia = Math.round((fecha-inicio)/86400000)%14===0;
+    else if (patron === "mensual") esOcurrencia = fecha.getDate()===(rec.diaMes||1);
+    else if (patron === "personalizado") esOcurrencia = Math.round((fecha-inicio)/86400000)%(rec.intervaloDias||7)===0;
+    if (esOcurrencia) resultados.push(fecha);
+  }
+  return resultados;
+}
+
+async function crearTicketDesdeRecurrencia(rec, fechaOcurrencia, francosMes) {
   try {
     const fechaStr = fechaOcurrencia.toISOString().split('T')[0];
+    francosMes = francosMes || {};
     const allRecs = await sbGetAll_reclamos();
     const PREFIX = {infraestructura:"I",mantenimiento:"M",limpieza:"L",preparacion:"P",servicios:"S",cuotas:"C"};
     const prefix = PREFIX[rec.cat]||"X";
@@ -2829,6 +2917,27 @@ async function crearTicketDesdeRecurrencia(rec, fechaOcurrencia) {
     const yr = String(new Date().getFullYear()).slice(-2);
     const numero = `${prefix}-${yr}-REC-${seq}`;
     const ticketId = Date.now();
+
+    const prioridad = rec.prioridadEjecutores||[];
+    const cantidadReq = rec.cantidadRequerida||1;
+    let asignados = [];
+    let faltantes = 0;
+    let deFranco = [];
+    if (prioridad.length) {
+      prioridad.forEach(ej=>{
+        const estaDeFranco = (francosMes[ej.mail]||[]).includes(fechaStr);
+        if (estaDeFranco) deFranco.push(ej);
+      });
+      const disponibles = prioridad.filter(ej=>!(francosMes[ej.mail]||[]).includes(fechaStr));
+      asignados = disponibles.slice(0, cantidadReq);
+      faltantes = cantidadReq - asignados.length;
+    } else if (rec.ejecutorMail) {
+      asignados = [{nombre:rec.ejecutorNombre||rec.ejecutorMail, mail:rec.ejecutorMail}];
+    }
+
+    const ejecutoresListaTicket = asignados.map(ej=>({nombre:ej.nombre, mail:ej.mail, confirmado:false, rechazado:false, fechaConfirmacion:null}));
+    const primerAsignado = asignados[0]||null;
+
     const ticket = {
       id: ticketId, numero, tipo:"empleado", nombre:"Sistema (Recurrencia)",
       celular:"", email:"", sector:rec.sector, cat:rec.cat,
@@ -2836,7 +2945,9 @@ async function crearTicketDesdeRecurrencia(rec, fechaOcurrencia) {
       desc: rec.nombre+(rec.comentario?"\n\nInstrucciones: "+rec.comentario:""),
       ubicacion:"", estadoAvance:"bajo_analisis",
       createdAt:new Date().toISOString(), updatedAt:new Date().toISOString(),
-      ejecutorMail:rec.ejecutorMail||"", ejecutorNombre:rec.ejecutorNombre||"",
+      ejecutorMail: primerAsignado ? primerAsignado.mail : (rec.ejecutorMail||""),
+      ejecutorNombre: primerAsignado ? primerAsignado.nombre : (rec.ejecutorNombre||""),
+      ejecutores_lista: ejecutoresListaTicket,
       ejecutorConfirmado:false, ejecutorRechazado:false,
       nuevoComentario:rec.comentario||"",
       fechaInicioEsperado:fechaStr, fechaCierre:fechaStr,
@@ -2854,16 +2965,19 @@ async function crearTicketDesdeRecurrencia(rec, fechaOcurrencia) {
       body:JSON.stringify({id:ticketId, data:ticket})
     });
 
-    // Si tiene ejecutor → enviar mail de asignación vía GAS
-    if (rec.ejecutorMail && !rec.ejecutorMail.includes('@externo')) {
-      const appUrl = window.location.href.split("?")[0];
+    const appUrl = window.location.href.split("?")[0];
+    const catCfgLocal = getCatCfg(rec.cat);
+    const respMails = (catCfgLocal.responsables||[]).map(r=>r.mail).filter(Boolean);
+
+    for (const ej of asignados) {
+      if (!ej.mail || ej.mail.includes('@externo')) continue;
       const htmlEj = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
         <div style="background:#0f172a;padding:20px 24px;border-radius:12px 12px 0 0">
           <div style="color:#93c5fd;font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-bottom:4px">Sistema de Reclamos</div>
           <div style="color:white;font-size:18px;font-weight:700">Tarea recurrente asignada</div>
         </div>
         <div style="background:white;padding:24px;border-radius:0 0 12px 12px;border:1px solid #e2e8f0">
-          <p style="color:#475569;font-size:15px;margin-top:0">Hola <strong>${rec.ejecutorNombre||rec.ejecutorMail}</strong>, se te asigno la siguiente tarea:</p>
+          <p style="color:#475569;font-size:15px;margin-top:0">Hola <strong>${ej.nombre||ej.mail}</strong>, se te asigno la siguiente tarea:</p>
           <table style="width:100%;font-size:14px;margin-bottom:16px">
             <tr><td style="padding:4px 0;color:#64748b;width:120px">Numero:</td><td style="font-weight:700;font-family:monospace;color:#8b5cf6">${numero}</td></tr>
             <tr><td style="padding:4px 0;color:#64748b">Sector:</td><td style="font-weight:600">${rec.sector}</td></tr>
@@ -2880,14 +2994,21 @@ async function crearTicketDesdeRecurrencia(rec, fechaOcurrencia) {
           </div>
         </div>
       </div>`;
-      const catCfgLocal = getCatCfg(rec.cat);
-      const respMail = (catCfgLocal.responsables||[])[0]?.mail||"";
       await sendEmail({
-        to: [rec.ejecutorMail],
-        cc: [respMail].filter(Boolean),
+        to: [ej.mail],
+        cc: respMails,
         subject: `[Asturiano] Tarea recurrente asignada — ${numero}: ${rec.sector}`,
         htmlBody: htmlEj,
-        body: `Hola ${rec.ejecutorNombre||rec.ejecutorMail},\n\nSe te asigno la tarea: ${rec.nombre}\nSector: ${rec.sector}\nFecha: ${fechaStr}\n\nVer: ${appUrl}?ver=${ticketId}\nConfirmar: ${appUrl}?confirmar=${ticketId}\nRechazar: ${appUrl}?rechazar=${ticketId}`
+        body: `Hola ${ej.nombre||ej.mail},\n\nSe te asigno la tarea: ${rec.nombre}\nSector: ${rec.sector}\nFecha: ${fechaStr}\n\nVer: ${appUrl}?ver=${ticketId}\nConfirmar: ${appUrl}?confirmar=${ticketId}\nRechazar: ${appUrl}?rechazar=${ticketId}`
+      });
+    }
+
+    if (prioridad.length && faltantes > 0 && respMails.length) {
+      const sinNadie = asignados.length===0;
+      await sendEmail({
+        to: respMails,
+        subject: `[Asturiano] ⚠️ URGENTE — ${sinNadie?"Sin ejecutores disponibles":"Faltan ejecutores"} para tarea recurrente — ${numero}`,
+        body: `La tarea recurrente "${rec.nombre}" (${numero}) requiere ${cantidadReq} ejecutor${cantidadReq!==1?"es":""} para el ${fechaStr}, pero ${sinNadie?"no hay ninguno disponible":`solo se pudo${asignados.length!==1?"n":""} asignar ${asignados.length}`} (todos los de la lista de prioridad están de franco ese día).\n\nSector: ${rec.sector}\nDe franco ese día: ${deFranco.map(e=>e.nombre||e.mail).join(", ")||"—"}\nAsignados: ${asignados.map(e=>e.nombre||e.mail).join(", ")||"—"}\n\nEl ticket se generó igual. Revisar y reasignar manualmente si hace falta:\n${appUrl}?ver=${ticketId}`
       });
     }
 
@@ -2948,10 +3069,13 @@ function RecurrenciasTab(props) {   var area = props.area; var ejecutores = prop
             updatedAt: new Date().toISOString()
           });
           await sbUpsert(updatedTicket);
-        } else if (diasFaltantes <= (rec.leadTimeDias||0) && !ticketPendiente) {
+       } else if (diasFaltantes <= (rec.leadTimeDias||0) && !ticketPendiente) {
           // No hay ticket pendiente y ya estamos en ventana → crear uno nuevo
-          await crearTicketDesdeRecurrencia(rec, fechaOcurrencia);
+          const mesId = fechaOcurrencia.toISOString().slice(0,7);
+          const francosMes = await sbGetFrancosMes(mesId);
+          await crearTicketDesdeRecurrencia(rec, fechaOcurrencia, francosMes);
         }
+        
       }
     }
     await cargar();
@@ -3008,7 +3132,9 @@ function RecurrenciasTab(props) {   var area = props.area; var ejecutores = prop
                       : rec.patron==="semanal" && rec.diasSemana&&rec.diasSemana.length ? `Semanal: ${(rec.diasSemana||[]).map(d=>DIAS_SEMANA[d]).join(", ")}`
                       : PATRON_LABEL[rec.patron]||rec.patron),
                     h('span',null,"Lead: ",rec.leadTimeDias," día"+(rec.leadTimeDias!==1?"s":"")),
-                    rec.ejecutorNombre && h('span',null,"Ejecutor: ",rec.ejecutorNombre),
+                    (rec.prioridadEjecutores||[]).length
+                      ? h('span',null,"Prioridad ("+(rec.cantidadRequerida||1)+"): ",(rec.prioridadEjecutores||[]).map(e=>e.nombre||e.mail).join(" → "))
+                      : rec.ejecutorNombre && h('span',null,"Ejecutor: ",rec.ejecutorNombre),
                     h('span',{style:{color:"#94a3b8"}},ticketsGenerados," ticket"+(ticketsGenerados!==1?"s":"")+" generado"+(ticketsGenerados!==1?"s":"")))),
                 h('div',{style:{display:"flex",gap:6}},
                   h('button',{onClick:()=>toggleActiva(rec),
@@ -3040,6 +3166,363 @@ function RecurrenciasTab(props) {   var area = props.area; var ejecutores = prop
           h('button',{onClick:()=>setConfirmDel(null),style:{flex:1,padding:"10px",background:"#f1f5f9",color:"#374151",border:"none",borderRadius:8,cursor:"pointer"}},"Cancelar")))));
 }
 
+
+function FrancosTab(props) {
+  var ejecutoresProp = props.ejecutores;
+  const hoy = new Date();
+  const mesActual = hoy.toISOString().slice(0,7);
+  const [mes, setMes] = useState(mesActual);
+  const [data, setData] = useState({}); // {mail: [fechas]}
+  const [loading, setLoading] = useState(true);
+  const [modo, setModo] = useState("sheet"); // "sheet" | "archivo"
+  const [parsedPreview, setParsedPreview] = useState(null); // {rows:[{nombre,mail,fecha}], noMatch:[...]}
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [pegado, setPegado] = useState("");
+  const [workbook, setWorkbook] = useState(null);
+  const [sheetNames, setSheetNames] = useState([]);
+  const [sheetSel, setSheetSel] = useState("");
+  const [ejecutores, setEjecutores] = useState(ejecutoresProp||[]);
+
+  // Traer la lista de ejecutores combinada (Intendencia + Administración) directo de Supabase,
+  // sin depender de lo que ya tuviera cargado el panel al momento de entrar a esta pestaña.
+  useEffect(()=>{
+    (async()=>{
+      const [c1,c2] = await Promise.all([sbGetConfigById(1), sbGetConfigById(2)]);
+      const combinados = [];
+      const vistos = new Set();
+      [c1,c2].forEach(cfg=>{
+        (cfg && cfg.ejecutores || []).forEach(e=>{
+          if(e && e.mail && !vistos.has(e.mail)) { vistos.add(e.mail); combinados.push(e); }
+        });
+      });
+      if(combinados.length) setEjecutores(combinados);
+    })();
+  },[]);
+
+  const cargar = async (m) => {
+    setLoading(true);
+    const d = await sbGetFrancosMes(m);
+    setData(d||{});
+    setLoading(false);
+  };
+  useEffect(()=>{ cargar(mes); },[mes]);
+
+  const fmtFecha = (d) => {
+    const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,"0"), day=String(d.getDate()).padStart(2,"0");
+    return `${y}-${m}-${day}`;
+  };
+  const parseFechaFlexible = (v) => {
+    if (v instanceof Date && !isNaN(v)) return fmtFecha(v);
+    const s = String(v||"").trim();
+    let mch = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (mch) return `${mch[1]}-${String(mch[2]).padStart(2,"0")}-${String(mch[3]).padStart(2,"0")}`;
+    mch = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (mch) return `${mch[3]}-${String(mch[2]).padStart(2,"0")}-${String(mch[1]).padStart(2,"0")}`;
+    return null;
+  };
+
+  // ── Matcheo nombre → mail (por lista de ejecutores de la app) ──
+  // ── Matcheo nombre → mail (por lista de ejecutores de la app, sin distinguir tildes/mayúsculas) ──
+  // ── Matcheo nombre → mail (por palabras sueltas, sin importar tildes/mayúsculas/orden) ──
+  // "GUSTAVO ROMERO" matchea con "Romero Gustavo", "ENCINA" matchea con "Dami Encina", etc.
+  const tokensDe = (s) => normalizarTxt(s).split(/\s+/).filter(Boolean);
+  const matchMail = (nombreRaw) => {
+    const nTokens = tokensDe(nombreRaw);
+    if (!nTokens.length) return null;
+    // match exacto de string completo primero
+    const nFull = nTokens.join(" ");
+    const exact = (ejecutores||[]).find(e=>tokensDe(e.nombre).join(" ")===nFull);
+    if (exact) return exact.mail;
+    // match por palabras: todas las palabras del nombre más corto deben aparecer
+    // (exactas o como prefijo, ej. "Maxi"→"Maximiliano") en el nombre más largo
+    const candidato = (ejecutores||[]).find(e=>{
+      const eTokens = tokensDe(e.nombre);
+      if (!eTokens.length) return false;
+      const [cortos, largos] = nTokens.length<=eTokens.length ? [nTokens,eTokens] : [eTokens,nTokens];
+      return cortos.every(ct => largos.some(lt => lt===ct || lt.startsWith(ct) || ct.startsWith(lt)));
+    });
+    return candidato ? candidato.mail : null;
+  };
+
+  // ── Parser genérico de la matriz "planilla de turnos" (pegada tal cual del Google Sheet) ──
+  // Detecta el bloque del mes pedido, la fila de nombres (la que sigue a la fila con el mes),
+  // salta filas HORARIO/CODIGO si existen, y lee filas de días (LUNES..DOMINGO) hasta que se corten.
+  // Franco = cualquier celda con contenido que NO tenga un rango horario tipo "7 A 16".
+  const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+  const DIAS_SEM = ["lunes","martes","miercoles","miércoles","jueves","viernes","sabado","sábado","domingo"];
+  const schedRe = /\d\d?\s*a\s*\d\d?/i;
+  const normalizarTxt = (s) => (s||"").toString().trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+
+  const filasDesdeTexto = (texto) => {
+    const delim = texto.indexOf("\t")>-1 ? "\t" : (texto.indexOf(";")>-1 && texto.indexOf(",")===-1 ? ";" : ",");
+    return texto.split(/\r?\n/).map(l=>l.split(delim).map(c=>c.trim()));
+  };
+
+  const procesarMatriz = (filas, mesNombre, anio) => {
+    const mesNorm = normalizarTxt(mesNombre);
+    const mesIdx = MESES.indexOf(mesNombre.trim().toLowerCase());
+    if (mesIdx<0) { setError("Mes inválido."); return null; }
+
+    let filaCat = -1;
+    for (let i=0;i<filas.length;i++){
+      if (filas[i].some(c=>normalizarTxt(c)===mesNorm)) { filaCat = i; break; }
+    }
+    if (filaCat<0) { setError(`No encontré "${mesNombre}" en los datos. Verificá que sea el mes/solapa correcto.`); return null; }
+
+    const filaNombres = filas[filaCat+1] || [];
+    if (!filaNombres.length) { setError("No encontré la fila de nombres debajo del mes."); return null; }
+
+    const empCols = [];
+    filaNombres.forEach((val,i)=>{
+      const v = (val||"").toString().trim();
+      if (i<2) return;
+      if (!v) return;
+      if (/^\d{4}$/.test(v)) return;
+      if (/mes|merged/i.test(v)) return;
+      empCols.push({idx:i, nombre:v});
+    });
+    if (!empCols.length) { setError("No pude identificar columnas de empleados en la fila de nombres."); return null; }
+
+    let i = filaCat+2;
+    while (i<filas.length && !DIAS_SEM.includes(normalizarTxt(filas[i][0]))) i++;
+
+    const francosOut = {};
+    const noMatch = new Set();
+    let filasLeidas = 0;
+    while (i<filas.length && DIAS_SEM.includes(normalizarTxt(filas[i][0]))) {
+      const fila = filas[i];
+      const diaNum = parseInt((fila[1]||"").toString().trim(),10);
+      if (!isNaN(diaNum)) {
+        const fecha = `${anio}-${String(mesIdx+1).padStart(2,"0")}-${String(diaNum).padStart(2,"0")}`;
+        empCols.forEach(({idx,nombre})=>{
+          const val = (fila[idx]||"").toString().trim();
+          if (!val) return;
+          if (schedRe.test(val)) return;
+          const mail = matchMail(nombre);
+          if (mail) {
+            francosOut[mail] = francosOut[mail] || new Set();
+            francosOut[mail].add(fecha);
+          } else {
+            noMatch.add(nombre);
+          }
+        });
+        filasLeidas++;
+      }
+      i++;
+    }
+    if (!filasLeidas) { setError("No encontré filas de días para ese mes (LUNES a DOMINGO)."); return null; }
+
+    const rows = [];
+    Object.keys(francosOut).forEach(mail=>{
+      const nombre = ((ejecutores||[]).find(e=>e.mail===mail)||{}).nombre || mail;
+      francosOut[mail].forEach(fecha=> rows.push({nombre, mail, fecha}));
+    });
+    return {rows, noMatch: Array.from(noMatch).map(n=>({nombre:n}))};
+  };
+
+  
+
+  const parseMatrizSheet = (texto, mesNombre, anio) => procesarMatriz(filasDesdeTexto(texto), mesNombre, anio);
+  const procesarPegado = () => {
+    setError(""); setParsedPreview(null);
+    if (!pegado.trim()) { setError("Pegá primero el contenido de la hoja."); return; }
+    const [anio, mesNum] = mes.split("-");
+    const mesNombre = MESES[Number(mesNum)-1];
+    const res = parseMatrizSheet(pegado, mesNombre, anio);
+    if (res) setParsedPreview(res);
+  };
+
+  // ── Import por archivo CSV/XLSX con columnas Nombre/Mail/Fecha (alternativa simple) ──
+  const procesarFilasArchivo = (headers, rows) => {
+    const norm = s => String(s||"").trim().toLowerCase();
+    const idxMail = headers.findIndex(h=>["mail","email","correo"].includes(norm(h)));
+    const idxNombre = headers.findIndex(h=>["nombre","empleado","ejecutor"].includes(norm(h)));
+    const idxFecha = headers.findIndex(h=>["fecha","dia","día","franco"].includes(norm(h)));
+    if (idxFecha<0 || (idxMail<0 && idxNombre<0)) {
+      setError("No pude identificar las columnas. Usá encabezados: Nombre, Mail, Fecha.");
+      return;
+    }
+    const out = []; const noMatch = [];
+    rows.forEach(row=>{
+      if (!row || row.every(c=>c===""||c==null)) return;
+      const nombreRaw = idxNombre>=0 ? String(row[idxNombre]||"").trim() : "";
+      let mailRaw = idxMail>=0 ? String(row[idxMail]||"").trim().toLowerCase() : "";
+      const fechaRaw = parseFechaFlexible(row[idxFecha]);
+      if (!fechaRaw) return;
+      if (!mailRaw && nombreRaw) mailRaw = matchMail(nombreRaw)||"";
+      if (!mailRaw) { noMatch.push({nombre:nombreRaw, fecha:fechaRaw}); return; }
+      const nombreFinal = nombreRaw || ((ejecutores||[]).find(e=>e.mail===mailRaw)||{}).nombre || mailRaw;
+      out.push({nombre:nombreFinal, mail:mailRaw, fecha:fechaRaw});
+    });
+    setParsedPreview({rows:out, noMatch});
+    setError("");
+  };
+
+  const handleFile = (file) => {
+    setError(""); setParsedPreview(null); setWorkbook(null); setSheetNames([]); setSheetSel("");
+    const ext = (file.name.split(".").pop()||"").toLowerCase();
+    const [anio, mesNum] = mes.split("-");
+    const mesNombre = MESES[Number(mesNum)-1];
+    if (ext==="csv") {
+      const reader = new FileReader();
+      reader.onload = e => {
+        const filas = filasDesdeTexto(e.target.result);
+        const headerRow = filas[0]||[];
+        const norm = s => String(s||"").trim().toLowerCase();
+        const esFormatoSimple = headerRow.some(h=>["nombre","empleado","ejecutor"].includes(norm(h))) &&
+                                 headerRow.some(h=>["fecha","dia","día","franco"].includes(norm(h)));
+        if (esFormatoSimple) {
+          procesarFilasArchivo(headerRow, filas.slice(1));
+        } else {
+          const res = procesarMatriz(filas, mesNombre, anio);
+          if (res) setParsedPreview(res);
+        }
+      };
+      reader.readAsText(file);
+    } else if (ext==="xlsx" || ext==="xls") {
+      const loadSheetJS = () => new Promise(resolve=>{
+        if (window.XLSX) return resolve();
+        const s = document.createElement('script');
+        s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+        s.onload = resolve;
+        document.head.appendChild(s);
+      });
+      loadSheetJS().then(()=>{
+        const reader = new FileReader();
+        reader.onload = e => {
+          const wb = window.XLSX.read(new Uint8Array(e.target.result), {type:"array"});
+          setWorkbook(wb);
+          setSheetNames(wb.SheetNames);
+          const mesNormBuscado = normalizarTxt(mesNombre);
+          const sheetMatch = wb.SheetNames.find(n=>normalizarTxt(n).includes(mesNormBuscado));
+          const sheetName = sheetMatch || wb.SheetNames[0];
+          setSheetSel(sheetName);
+          procesarSheet(wb, sheetName, mesNombre, anio);
+          if (!sheetMatch) {
+            setError(`No encontré una solapa llamada "${mesNombre}". Te dejé "${sheetName}" seleccionada — elegí la correcta en el desplegable de abajo.`);
+          }
+        };
+        reader.readAsArrayBuffer(file);
+      });
+    } else {
+      setError("Formato no soportado. Usá .csv, .xlsx o .xls.");
+    }
+  };
+
+  const procesarSheet = (wb, sheetName, mesNombre, anio) => {
+    const ws = wb.Sheets[sheetName];
+    const filas = window.XLSX.utils.sheet_to_json(ws, {header:1, raw:false, defval:""});
+    const res = procesarMatriz(filas, mesNombre, anio);
+    if (res) { setParsedPreview(res); setError(""); }
+  };
+
+  const cambiarSolapa = (sheetName) => {
+    setSheetSel(sheetName);
+    const [anio, mesNum] = mes.split("-");
+    const mesNombre = MESES[Number(mesNum)-1];
+    procesarSheet(workbook, sheetName, mesNombre, anio);
+  };
+
+  const confirmarImport = async () => {
+    if (!parsedPreview || !parsedPreview.rows.length) return;
+    setSaving(true);
+    const porMes = {};
+    parsedPreview.rows.forEach(r=>{
+      const m = r.fecha.slice(0,7);
+      porMes[m] = porMes[m] || {};
+      porMes[m][r.mail] = porMes[m][r.mail] || [];
+      if (!porMes[m][r.mail].includes(r.fecha)) porMes[m][r.mail].push(r.fecha);
+    });
+    for (const m of Object.keys(porMes)) {
+      const existente = m===mes ? data : await sbGetFrancosMes(m);
+      const merged = Object.assign({}, existente);
+      Object.keys(porMes[m]).forEach(mail=>{
+        const set = new Set([...(merged[mail]||[]), ...porMes[m][mail]]);
+        merged[mail] = Array.from(set).sort();
+      });
+      await sbUpsertFrancosMes(m, merged);
+    }
+    setParsedPreview(null);
+    setPegado("");
+    await cargar(mes);
+    setSaving(false);
+  };
+
+  const quitarFranco = async (mail, fecha) => {
+    const merged = Object.assign({}, data);
+    merged[mail] = (merged[mail]||[]).filter(f=>f!==fecha);
+    if (!merged[mail].length) delete merged[mail];
+    await sbUpsertFrancosMes(mes, merged);
+    setData(merged);
+  };
+
+  const inputStyle = {width:"100%",padding:"8px 10px",border:"1.5px solid #e2e8f0",borderRadius:8,fontSize:13,outline:"none",boxSizing:"border-box"};
+
+  return h('div',{style:{padding:"20px 24px"}},
+    h('div',{style:{marginBottom:20}},
+      h('div',{style:{fontSize:18,fontWeight:700,color:"#1a3a6b"}},"Francos de ejecutores"),
+      h('div',{style:{fontSize:13,color:"#64748b",marginTop:2}},"Se usa para reasignar recurrencias y avisar si un ejecutor está de franco en el rango de una tarea")),
+
+    h('div',{style:{marginBottom:16}},
+      h('label',{style:{fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4}},"Mes"),
+      h('input',{type:"month",value:mes,onChange:e=>{setMes(e.target.value);setParsedPreview(null);setError("");},style:Object.assign({},inputStyle,{width:"auto"})})),
+
+    h('div',{style:{display:"flex",gap:8,marginBottom:16}},
+      h('button',{onClick:()=>{setModo("sheet");setParsedPreview(null);setError("");},
+        style:{padding:"8px 16px",borderRadius:8,border:modo==="sheet"?"2px solid #3b82f6":"2px solid #e2e8f0",background:modo==="sheet"?"#eff6ff":"white",color:modo==="sheet"?"#1d4ed8":"#64748b",cursor:"pointer",fontSize:13,fontWeight:600}},
+        "📋 Pegar de Google Sheets"),
+      h('button',{onClick:()=>{setModo("archivo");setParsedPreview(null);setError("");},
+        style:{padding:"8px 16px",borderRadius:8,border:modo==="archivo"?"2px solid #3b82f6":"2px solid #e2e8f0",background:modo==="archivo"?"#eff6ff":"white",color:modo==="archivo"?"#1d4ed8":"#64748b",cursor:"pointer",fontSize:13,fontWeight:600}},
+        "📁 Subir CSV/Excel")),
+
+    modo==="sheet"
+      ? h('div',{style:{marginBottom:16,padding:14,background:"#f8fafc",borderRadius:10,border:"1.5px dashed #cbd5e1"}},
+          h('div',{style:{fontSize:12,color:"#64748b",marginBottom:8}},
+            "Abrí la hoja de turnos en Google Sheets, seleccioná el bloque completo del mes elegido arriba (desde el encabezado con el nombre del mes hasta la última fila de días) y pegalo acá tal cual (Ctrl+C / Ctrl+V):"),
+          h('textarea',{value:pegado,onChange:e=>setPegado(e.target.value),rows:8,placeholder:"Pegá acá el bloque del mes...",
+            style:Object.assign({},inputStyle,{fontFamily:"monospace",fontSize:11,resize:"vertical"})}),
+          h('button',{onClick:procesarPegado,style:{marginTop:8,padding:"9px 18px",background:"#1a3a6b",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:700}},
+            "Procesar"),
+          error && h('div',{style:{color:"#dc2626",fontSize:12,marginTop:8,fontWeight:600}},error))
+      : h('div',{style:{marginBottom:16,padding:14,background:"#f8fafc",borderRadius:10,border:"1.5px dashed #cbd5e1"}},
+          h('div',{style:{fontSize:12,color:"#64748b",marginBottom:8}},
+            "Subí el Excel de turnos completo (con las solapas por mes) o un CSV/Excel simple con columnas ",h('strong',null,"Nombre"),", ",h('strong',null,"Mail")," y ",h('strong',null,"Fecha"),". Para el Excel de turnos, uso la solapa que coincida con el mes elegido arriba."),
+          h('input',{type:"file",accept:".csv,.xlsx,.xls",onChange:e=>{if(e.target.files[0])handleFile(e.target.files[0]);}}),
+          sheetNames.length>1 && h('div',{style:{marginTop:10}},
+            h('label',{style:{fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:0.5,display:"block",marginBottom:4}},"Solapa a usar"),
+            h('select',{value:sheetSel,onChange:e=>cambiarSolapa(e.target.value),style:inputStyle},
+              ...sheetNames.map(n=>h('option',{key:n,value:n},n)))),
+          error && h('div',{style:{color:"#dc2626",fontSize:12,marginTop:8,fontWeight:600}},error)),
+
+    parsedPreview && h('div',{style:{marginBottom:16,padding:14,background:"#f0fdf4",borderRadius:10,border:"1.5px solid #bbf7d0"}},
+      h('div',{style:{fontSize:12,color:"#16a34a",fontWeight:700,marginBottom:4}},
+        "✓ "+parsedPreview.rows.length+" franco"+(parsedPreview.rows.length!==1?"s":"")+" detectado"+(parsedPreview.rows.length!==1?"s":"")+" listos para guardar"),
+      parsedPreview.noMatch.length>0 && h('div',{style:{fontSize:12,color:"#c2410c",marginBottom:8}},
+        parsedPreview.noMatch.length+" nombre"+(parsedPreview.noMatch.length!==1?"s":"")+" sin poder identificar contra la lista de ejecutores (no se guardan): "+
+        Array.from(new Set(parsedPreview.noMatch.map(r=>r.nombre))).join(", ")),
+      h('button',{onClick:confirmarImport,disabled:saving,
+        style:{padding:"9px 18px",background:saving?"#94a3b8":"#16a34a",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:700}},
+        saving?"Guardando...":"Confirmar e importar")),
+
+    h('div',{style:{borderTop:"2px solid #f1f5f9",paddingTop:16,marginTop:8}},
+      h('div',{style:{fontSize:13,fontWeight:700,color:"#1a3a6b",marginBottom:10}},"Francos cargados — "+mes),
+      loading ? h('div',{style:{textAlign:"center",padding:20,color:"#94a3b8",fontSize:13}},"Cargando...")
+      : Object.keys(data).length===0
+        ? h('div',{style:{fontSize:12,color:"#94a3b8"}},"No hay francos cargados para este mes.")
+        : h('div',{style:{display:"flex",flexDirection:"column",gap:10}},
+            ...Object.keys(data).sort().map(mail=>{
+              const nombre = ((ejecutores||[]).find(e=>e.mail===mail)||{}).nombre || mail;
+              return h('div',{key:mail,style:{background:"#f8fafc",borderRadius:8,padding:"10px 12px"}},
+                h('div',{style:{fontSize:13,fontWeight:700,color:"#1e293b",marginBottom:6}},nombre),
+                h('div',{style:{display:"flex",flexWrap:"wrap",gap:6}},
+                  ...(data[mail]||[]).sort().map(fecha=>
+                    h('span',{key:fecha,style:{display:"flex",alignItems:"center",gap:4,background:"white",border:"1px solid #e2e8f0",borderRadius:6,padding:"3px 8px",fontSize:12}},
+                      fecha.slice(8,10)+"/"+fecha.slice(5,7),
+                      h('button',{onClick:()=>quitarFranco(mail,fecha),style:{background:"none",border:"none",color:"#ef4444",cursor:"pointer",fontSize:12,padding:0,marginLeft:2}},"×")))));
+            }))));
+}
+
 function RecurrenciaModal(props) {   var recInit = props.rec; var onSave = props.onSave; var onClose = props.onClose; var ejecutores = props.ejecutores; var cats = props.cats;
   var fInicial = Object.assign({tipoEjecutor:"interno", empresaNombre:"", empresaTelefono:""}, recInit);
   const [f, setF] = useState(fInicial);
@@ -3055,6 +3538,37 @@ function RecurrenciaModal(props) {   var recInit = props.rec; var onSave = props
   const addExclusion = function() { set("periodosExclusion", (f.periodosExclusion||[]).concat([{desde:"01-01",hasta:"01-31"}])); };
   const removeExclusion = function(i) { set("periodosExclusion", (f.periodosExclusion||[]).filter(function(_,idx){ return idx!==i; })); };
   const updateExclusion = function(i,k,v) { set("periodosExclusion", (f.periodosExclusion||[]).map(function(p,idx){ return idx===i ? Object.assign({},p,{[k]:v}) : p; })); };
+
+  const [preview, setPreview] = useState(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  const verVistaPrevia = async () => {
+    if(!f.fechaInicio) { alert("Cargá la fecha de primera ocurrencia antes de ver la vista previa."); return; }
+    setPreviewLoading(true);
+    const hoyD = new Date(); hoyD.setHours(0,0,0,0);
+    const fechas = proximasOcurrenciasN(f, hoyD, 10);
+    const prioridad = f.prioridadEjecutores||[];
+    const cantidadReq = f.cantidadRequerida||1;
+    const francosCache = {};
+    const filas = [];
+    for (const fecha of fechas) {
+      const fechaStr = fecha.toISOString().split('T')[0];
+      const mesId = fechaStr.slice(0,7);
+      if (!francosCache[mesId]) francosCache[mesId] = await sbGetFrancosMes(mesId);
+      const francosMes = francosCache[mesId];
+      let asignados = []; let faltan = 0;
+      if (f.tipoEjecutor==="tercero") {
+        asignados = f.empresaNombre ? [{nombre:f.empresaNombre}] : [];
+      } else if (prioridad.length) {
+        const disponibles = prioridad.filter(ej=>!(francosMes[ej.mail]||[]).includes(fechaStr));
+        asignados = disponibles.slice(0, cantidadReq);
+        faltan = cantidadReq - asignados.length;
+      }
+      filas.push({fecha:fechaStr, diaSemana:fecha.toLocaleDateString("es-AR",{weekday:"long"}), asignados, faltan});
+    }
+    setPreview(filas);
+    setPreviewLoading(false);
+  };
 
   const save = async () => {
     if(!f.nombre.trim()) return alert("El nombre es obligatorio");
@@ -3140,24 +3654,17 @@ function RecurrenciaModal(props) {   var recInit = props.rec; var onSave = props
 
         // Ejecutor — toggle interno / tercero
         h('div',{style:sectionStyle},
-          h('label',{style:labelStyle},"Ejecutor responsable (opcional)"),
+          h('label',{style:labelStyle},"Ejecutor (opcional)"),
           h('div',{style:{display:"flex",gap:8,marginBottom:10}},
             ...[["interno","👷 Empleado del club"],["tercero","🏢 Proveedor externo"]].map(function(tipArr){ var tipo=tipArr[0]; var lbl=tipArr[1]; return (
               h('button',{key:tipo,onClick:()=>{
                 set("tipoEjecutor",tipo);
-                if(tipo==="tercero"){set("ejecutorMail","tercero@externo");set("ejecutorNombre",f.empresaNombre||"");}
+                if(tipo==="tercero"){set("ejecutorMail","tercero@externo");set("ejecutorNombre",f.empresaNombre||"");set("prioridadEjecutores",[]);}
                 else{set("ejecutorMail","");set("ejecutorNombre","");set("empresaNombre","");set("empresaTelefono","");}
               },style:{flex:1,padding:"7px",borderRadius:8,border:f.tipoEjecutor===tipo?"2px solid #3b82f6":"2px solid #e2e8f0",
                 background:f.tipoEjecutor===tipo?"#eff6ff":"white",
                 color:f.tipoEjecutor===tipo?"#1d4ed8":"#64748b",cursor:"pointer",fontSize:12,fontWeight:600}},lbl)); }),
-          f.tipoEjecutor!=="tercero"
-            ? h('select',{value:f.ejecutorMail,onChange:e=>{
-                const ej=ejecutores.find(x=>x.mail===e.target.value);
-                setF(function(p){ return Object.assign({},p,{ejecutorMail:e.target.value,ejecutorNombre:(ej&&ej.nombre)||""}); });
-              },style:inputStyle},
-                h('option',{value:""},"Sin ejecutor asignado"),
-                ...(ejecutores||[]).map(e=>h('option',{key:e.mail,value:e.mail},e.nombre||e.mail)))
-            : h('div',{style:{display:"flex",flexDirection:"column",gap:8}},
+          f.tipoEjecutor==="tercero" && h('div',{style:{display:"flex",flexDirection:"column",gap:8}},
                 h('input',{value:f.empresaNombre||"",onChange:e=>{
                   set("empresaNombre",e.target.value);
                   set("ejecutorNombre",e.target.value);
@@ -3167,6 +3674,44 @@ function RecurrenciaModal(props) {   var recInit = props.rec; var onSave = props
                   placeholder:"Teléfono / contacto (opcional)",style:inputStyle}),
                 f.empresaNombre && h('div',{style:{fontSize:11,color:"#16a34a",fontWeight:600,marginTop:2}},
                   "✓ Proveedor: "+f.empresaNombre))),
+
+        // Prioridad de ejecutores (para franco) — único lugar para asignar ejecutores internos
+        f.tipoEjecutor!=="tercero" && h('div',{style:sectionStyle},
+          h('label',{style:labelStyle},"Prioridad de ejecutores (respeta francos)"),
+          h('div',{style:{fontSize:11,color:"#94a3b8",marginBottom:8}},
+            "Si el que sigue en la lista está de franco ese día, el sistema pasa al siguiente. Con un solo ejecutor cargado funciona como asignación fija."),
+          h('div',{style:{display:"grid",gridTemplateColumns:"1fr auto",gap:8,alignItems:"center",marginBottom:8}},
+            h('div',null,
+              h('label',{style:Object.assign({},labelStyle,{marginBottom:2})},"Cantidad de ejecutores requeridos"),
+              h('input',{type:"number",min:1,max:10,value:f.cantidadRequerida||1,
+                onChange:e=>set("cantidadRequerida",Math.max(1,Number(e.target.value)||1)),
+                style:Object.assign({},inputStyle,{width:80})}))),
+          (f.prioridadEjecutores||[]).length===0
+            ? h('div',{style:{fontSize:12,color:"#94a3b8",marginBottom:8}},"Sin ejecutores asignados")
+            : h('div',{style:{display:"flex",flexDirection:"column",gap:6,marginBottom:8}},
+                ...(f.prioridadEjecutores||[]).map((ej,i)=>
+                  h('div',{key:ej.mail+i,style:{display:"flex",alignItems:"center",gap:8,background:"#f8fafc",borderRadius:8,padding:"6px 10px"}},
+                    h('span',{style:{fontSize:11,fontWeight:700,color:"#8b5cf6",width:78}},PRIORIDAD_LABEL(i)),
+                    h('span',{style:{flex:1,fontSize:13}},ej.nombre||ej.mail),
+                    h('button',{disabled:i===0,onClick:()=>{
+                      const l=[...f.prioridadEjecutores]; const t=l[i-1]; l[i-1]=l[i]; l[i]=t; set("prioridadEjecutores",l);
+                    },style:{background:"none",border:"none",cursor:i===0?"default":"pointer",opacity:i===0?0.3:1,fontSize:14,padding:"0 4px"}},"↑"),
+                    h('button',{disabled:i===(f.prioridadEjecutores.length-1),onClick:()=>{
+                      const l=[...f.prioridadEjecutores]; const t=l[i+1]; l[i+1]=l[i]; l[i]=t; set("prioridadEjecutores",l);
+                    },style:{background:"none",border:"none",cursor:i===(f.prioridadEjecutores.length-1)?"default":"pointer",opacity:i===(f.prioridadEjecutores.length-1)?0.3:1,fontSize:14,padding:"0 4px"}},"↓"),
+                    h('button',{onClick:()=>{
+                      set("prioridadEjecutores",f.prioridadEjecutores.filter((_,idx)=>idx!==i));
+                    },style:{background:"none",border:"none",cursor:"pointer",color:"#ef4444",fontSize:14,padding:"0 4px"}},"✕")))),
+          h('select',{value:"",onChange:e=>{
+              if(!e.target.value) return;
+              const ej=ejecutores.find(x=>x.mail===e.target.value);
+              if(ej && !(f.prioridadEjecutores||[]).find(x=>x.mail===ej.mail)){
+                set("prioridadEjecutores",(f.prioridadEjecutores||[]).concat([{nombre:ej.nombre,mail:ej.mail}]));
+              }
+              e.target.value="";
+            },style:inputStyle},
+            h('option',{value:""},"+ Agregar ejecutor a la lista de prioridad..."),
+            ...(ejecutores||[]).filter(e=>!(f.prioridadEjecutores||[]).find(x=>x.mail===e.mail)).map(e=>h('option',{key:e.mail,value:e.mail},e.nombre||e.mail)))),
 
         // Instrucciones
         h('div',{style:sectionStyle},
@@ -3220,6 +3765,19 @@ function RecurrenciaModal(props) {   var recInit = props.rec; var onSave = props
           h('div',null,
             h('label',{style:labelStyle},"Fecha de fin (opcional)"),
             h('input',{type:"date",value:f.fechaFin||"",onChange:e=>set("fechaFin",e.target.value),style:inputStyle}))),
+
+        // Vista previa de asignación
+        h('div',{style:sectionStyle},
+          h('button',{onClick:verVistaPrevia,disabled:previewLoading,
+            style:{padding:"9px 16px",background:"#f8fafc",color:"#1a3a6b",border:"1.5px solid #e2e8f0",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:700}},
+            previewLoading?"Calculando...":"👁️ Vista previa — próximas 10 fechas"),
+          preview && h('div',{style:{marginTop:10,display:"flex",flexDirection:"column",gap:6}},
+            preview.length===0
+              ? h('div',{style:{fontSize:12,color:"#94a3b8"}},"No hay próximas ocurrencias con esta configuración (revisá fecha de inicio / fin y patrón).")
+              : preview.map((p,i)=>h('div',{key:i,style:{display:"flex",alignItems:"center",gap:10,background:p.faltan>0?"#fff7ed":"#f8fafc",border:p.faltan>0?"1.5px solid #fed7aa":"1px solid #f1f5f9",borderRadius:8,padding:"7px 12px",fontSize:12}},
+                h('span',{style:{width:120,flexShrink:0,fontWeight:600,color:"#1e293b",textTransform:"capitalize"}},p.diaSemana+" "+p.fecha.slice(8,10)+"/"+p.fecha.slice(5,7)),
+                h('span',{style:{flex:1,color:p.asignados.length?"#374151":"#94a3b8"}}, p.asignados.length ? p.asignados.map(a=>a.nombre).join(", ") : "Sin ejecutor disponible"),
+                p.faltan>0 && h('span',{style:{color:"#c2410c",fontWeight:700,fontSize:11,whiteSpace:"nowrap"}},"⚠️ faltan "+p.faltan))))),
 
         // Períodos de exclusión
         h('div',{style:{borderTop:"2px solid #f1f5f9",marginBottom:20,marginTop:4}}),
@@ -3644,7 +4202,7 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
         h('button',{onClick:()=>setShowCfg(true),style:{padding:"8px 14px",background:"rgba(255,255,255,0.1)",color:"white",border:"1px solid rgba(255,255,255,0.2)",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600}},"⚙️ Configuración"))),
     // Main tabs: Reclamos | Proyectos
     h('div',{className:"main-tabs",style:{display:"flex",gap:4,padding:"0 24px",background:"#1a3a6b",borderBottom:"2px solid rgba(255,255,255,0.1)"}},
-      ...[["reclamos","📋 Solicitudes"],["proyectos","🏗️ Proyectos"],["recurrencias","🔁 Recurrencias"]].map(([id,lbl])=>
+      ...[["reclamos","📋 Solicitudes"],["proyectos","🏗️ Proyectos"],["recurrencias","🔁 Recurrencias"],["francos","📅 Francos"]].map(([id,lbl])=>
         h('button',{key:id,onClick:()=>setMainTab(id),
           style:{padding:"10px 18px",border:"none",background:"none",cursor:"pointer",fontSize:13,fontWeight:mainTab===id?700:500,
             color:mainTab===id?"white":"rgba(255,255,255,0.5)",borderBottom:mainTab===id?"2px solid #3b82f6":"2px solid transparent",marginBottom:-2}},lbl))),
@@ -3870,6 +4428,7 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
     mainTab==="reclamos" && view==="kanban" && h(Kanban,{recs:filtrados,onEdit:setModal}),
     mainTab==="proyectos" && h(ProyectosTab,{recs,onUpdate,ejecutores,area:area}),
     mainTab==="recurrencias" && h(RecurrenciasTab,{area,ejecutores,recs}),
+    mainTab==="francos" && h(FrancosTab,{ejecutores}),
     modal && h(EditModal,{key:modal.id,rec:modal,onClose:()=>setModal(null),onSave:async u=>{await onUpdate(u,modal);},ejecutores,onUpdateHijo:async u=>{await onUpdate(u,u);},recs,area}),
     showCfg && h(PanelConfig,{onClose:()=>setShowCfg(false),onSaveEjecutores:ejs=>{setEjecutores(ejs);setShowCfg(false);},area}),
     modalDup && h(ModalConsolidacion,{
