@@ -3144,7 +3144,7 @@ function RecurrenciasTab(props) {   var area = props.area; var ejecutores = prop
 
 
 function FrancosTab(props) {
-  var ejecutores = props.ejecutores;
+  var ejecutoresProp = props.ejecutores;
   const hoy = new Date();
   const mesActual = hoy.toISOString().slice(0,7);
   const [mes, setMes] = useState(mesActual);
@@ -3158,6 +3158,23 @@ function FrancosTab(props) {
   const [workbook, setWorkbook] = useState(null);
   const [sheetNames, setSheetNames] = useState([]);
   const [sheetSel, setSheetSel] = useState("");
+  const [ejecutores, setEjecutores] = useState(ejecutoresProp||[]);
+
+  // Traer la lista de ejecutores combinada (Intendencia + Administración) directo de Supabase,
+  // sin depender de lo que ya tuviera cargado el panel al momento de entrar a esta pestaña.
+  useEffect(()=>{
+    (async()=>{
+      const [c1,c2] = await Promise.all([sbGetConfigById(1), sbGetConfigById(2)]);
+      const combinados = [];
+      const vistos = new Set();
+      [c1,c2].forEach(cfg=>{
+        (cfg && cfg.ejecutores || []).forEach(e=>{
+          if(e && e.mail && !vistos.has(e.mail)) { vistos.add(e.mail); combinados.push(e); }
+        });
+      });
+      if(combinados.length) setEjecutores(combinados);
+    })();
+  },[]);
 
   const cargar = async (m) => {
     setLoading(true);
@@ -3182,14 +3199,15 @@ function FrancosTab(props) {
   };
 
   // ── Matcheo nombre → mail (por lista de ejecutores de la app) ──
+  // ── Matcheo nombre → mail (por lista de ejecutores de la app, sin distinguir tildes/mayúsculas) ──
   const matchMail = (nombreRaw) => {
-    const n = String(nombreRaw||"").trim().toLowerCase();
+    const n = normalizarTxt(nombreRaw);
     if (!n) return null;
-    const exact = (ejecutores||[]).find(e=>(e.nombre||"").trim().toLowerCase()===n);
+    const exact = (ejecutores||[]).find(e=>normalizarTxt(e.nombre)===n);
     if (exact) return exact.mail;
     // match parcial: el nombre de la planilla está contenido en el nombre del ejecutor o viceversa
     const parcial = (ejecutores||[]).find(e=>{
-      const en = (e.nombre||"").trim().toLowerCase();
+      const en = normalizarTxt(e.nombre);
       return en && (en.includes(n) || n.includes(en));
     });
     return parcial ? parcial.mail : null;
