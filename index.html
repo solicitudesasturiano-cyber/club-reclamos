@@ -332,15 +332,22 @@ const UBICACION_DATA = {
     "Cancha Sintético Vial":         {g:"exteriores", s:[]},
     "Canchas Sintético":             {g:"exteriores", s:["Cancha 11","Canchas 5","Otro"]},
     "Chiringuito":                   {g:"interiores", s:["Vestuarios Chiringuito","Baños Chiringuito","Otro"]},
-    "Estacionamiento":               {g:"exteriores", s:["Oficina Estacionamiento","Playón","Otro"]},
     "Golf":                          {g:"exteriores", s:[]},
     "Nuevo Bodegón Asturiano":       {g:"interiores", s:[]},
     "Pádel":                         {g:"exteriores", s:[]},
     "Palestra":                      {g:"exteriores", s:[]},
     "Tenis":                         {g:"exteriores", s:["Cabina Tenis","Cancha Rápida","Oficina Tenis","Polvo de Ladrillo","Otro"]},
     "Tinglado":                      {g:"exteriores", s:[]},
+    "Vestuario Hombres":             {g:"banos",      s:[]},
+    "Vestuario Mujeres":             {g:"banos",      s:[]},
+    "Baño Discapacitado (1)":        {g:"banos",      s:[]},
+    "Baño Discapacitados (2)":       {g:"banos",      s:[]},
     "Otro":                          {g:"interiores", s:[]}
   },
+  "Estacionamiento": {
+    "Estacionamiento":               {g:"exteriores", s:[]},
+    "Oficina Estacionamiento":       {g:"admin",      s:[]},
+    "Otro":                          {g:"exteriores", s:[]}
   "Sintético": {
     "Bodegón Astur Sintético":       {g:"interiores", s:[]},
     "Cancha 11 Sintético":           {g:"exteriores", s:[]},
@@ -350,7 +357,7 @@ const UBICACION_DATA = {
   }
 };
 
-const SECTOR_ICONS = {"Covadonga 1081":"🏛️","Polideportivo":"🏟️","Sintético":"🥅"};
+const SECTOR_ICONS = {"Covadonga 1081":"🏛️","Polideportivo":"🏟️","Sintético":"🥅", "Estacionamiento":"🅿️"};
 
 // Todos los espacios, sin duplicados, alfabético y con "Otro" al final
 const SECTORES_TODOS = Array.from(new Set(
