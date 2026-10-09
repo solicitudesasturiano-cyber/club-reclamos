@@ -94,6 +94,7 @@ export default {
         const expected = k && env[k];
         if (!expected || typeof body.password !== "string" || !safeEqual(body.password, expected)) {
           await new Promise(r => setTimeout(r, 800));
+          console.log("LOGIN FAIL area:", body.area, "secret existe:", !!expected, "largo secret:", expected ? expected.length : 0, "largo enviado:", (body.password||"").length);
           return json({ ok: false }, 401);
         }
         return json({ ok: true, token: await makeToken(env, body.area) });
