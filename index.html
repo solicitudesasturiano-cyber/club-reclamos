@@ -4162,10 +4162,7 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
 
     // Chequear proyectos: sin hitos y hitos vencidos
     const proyectosLS = ls.get("proyectos") || [];
-    const scriptUrl = (await sbGetConfigById(1))?.scriptUrl || SCRIPT_URL;
-    if(proyectosLS.length && scriptUrl) {
-      try { await callGas({type:"checkProyectos", proyectos: proyectosLS}); enviados++; } catch(e) { console.error("checkProyectos error:", e); }
-    }
+    try { await callGas({type:"checkProyectos", proyectos: proyectosLS}); enviados++; } catch(e) { console.error("checkProyectos error:", e); }
 
     alert(enviados>0?`✅ Se enviaron ${enviados} notificaciones.`:"ℹ️ Sin alertas pendientes en este momento.");
     setChecking(false);
@@ -6825,11 +6822,7 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
       if(ultimoCheck !== HOY) {
         const proyectosLS = ls.get("proyectos") || [];
         if(proyectosLS.length) {
-          const cfgP = await sbGetConfigById(1);
-          const scriptUrlP = cfgP?.scriptUrl || SCRIPT_URL;
-          if(scriptUrlP) {
-      try { await callGas({type:"checkProyectos", proyectos: proyectosLS}); enviados++; } catch(e) { console.error("checkProyectos error:", e); }
-          }
+          try { await callGas({type:"checkProyectos", proyectos: proyectosLS}); localStorage.setItem("proyectos_check_dia", HOY); } catch(e) { console.error("auto checkProyectos:", e); }
         }
       }
     })();
