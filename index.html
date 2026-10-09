@@ -9,8 +9,8 @@
 <link rel="manifest" href="data:application/json,{&quot;name&quot;:&quot;Asturiano Reclamos&quot;,&quot;short_name&quot;:&quot;Asturiano&quot;,&quot;display&quot;:&quot;standalone&quot;,&quot;orientation&quot;:&quot;any&quot;,&quot;start_url&quot;:&quot;/&quot;,&quot;background_color&quot;:&quot;#1a3a6b&quot;,&quot;theme_color&quot;:&quot;#1a3a6b&quot;}">  
 <title>Gestión de Reclamos — Club</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
-<script src="https://unpkg.com/react@18.2.0/umd/react.production.min.js" crossorigin></script>
-<script src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react@18.2.0/umd/react.production.min.js" integrity="sha384-tMH8h3BGESGckSAVGZ82T9n90ztNXxvdwvdM6UoR56cYcf+0iGXBliJ29D+wZ/x8" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js" integrity="sha384-bm7MnzvK++ykSwVJ2tynSE5TRdN+xL418osEVF2DE/L/gfWHj91J2Sphe582B1Bh" crossorigin="anonymous"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 html{overflow-y:auto}
@@ -259,14 +259,14 @@ function diasDesde(isoDate) {
   if (window._diasDesdeOverride) return window._diasDesdeOverride;
   return (new Date() - new Date(isoDate)) / 86400000;
 }
-const PASS_INTENDENCIA = "intendencia2026";
-const PASS_ADMINISTRACION = "administracion2026";
-const PASS_DASHBOARD = "metricas2026";
 const SUPABASE_URL   = "https://pltfqosqinzufvjpiddr.supabase.co";
 const SUPABASE_KEY   = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBsdGZxb3NxaW56dWZ2anBpZGRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1MjA4NDksImV4cCI6MjA5MTA5Njg0OX0.d-EMCtfVqi6LvtbEdTBvH_ZaXiFJD6oXukPvMpbobXQ";
 const SUPABASE_TABLE = "reclamos";
-const SCRIPT_URL     = "https://script.google.com/macros/s/AKfycbxm0SGfcMlAxkSIFm3HfSpZ_bDQnOOOQfa7VPf9xu0duk0mxLvhxQCwdaLzYkbc3e_h/exec";
-
+const SCRIPT_URL     = ""; // los mails salen por /api/mail (Worker)
+function apiToken() { try { return sessionStorage.getItem("apiToken") || ""; } catch(e) { return ""; } }
+function callGas(payload) {
+  return fetch("/api/gas", { method:"POST", headers:{"Content-Type":"application/json","Authorization":"Bearer "+apiToken()}, body:JSON.stringify(payload) });
+}
 // Genera link al panel con deep-link al área correcta
 function panelUrl(appUrl, area) {
   const a = area || "intendencia";
@@ -829,14 +829,12 @@ function buildValidacionHtml(rec, saludo, verUrl, tituloEtapa) {
 }
 
 async function sendEmail({to, cc, subject, body, htmlBody, icsData}) {
-  const cfg = ls.get("config") || {};
-  const url = cfg.scriptUrl || SCRIPT_URL;
   const toArr = (Array.isArray(to)?to:[to]).filter(Boolean);
   const ccArr = cc?(Array.isArray(cc)?cc:[cc]).filter(Boolean):[];
   try {
     const payload = {to:toArr,cc:ccArr,subject,body:body||"",htmlBody:htmlBody||null};
     if(icsData) payload.icsData = icsData;
-    const r = await fetch(url, {method:"POST", headers:{"Content-Type":"text/plain"}, body:JSON.stringify(payload)});
+        const r = await fetch("/api/mail", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload)});
     const d = await r.json();
     console.log("Email:", d);
     return d;
@@ -2177,7 +2175,7 @@ function PanelConfig({onClose, onSaveEjecutores, area}) {
   const [scriptPass,setScriptPass] = useState("");
   const [scriptUnlocked,setScriptUnlocked] = useState(false);
   const [scriptPassErr,setScriptPassErr] = useState(false);
-  const SCRIPT_PASS = "solicitudes2026";
+  
   // Cada área tiene su propio id en Supabase: 1=intendencia, 2=administracion
   const cfgId = area==="administracion" ? 2 : 1;
   const lsKey = "config_"+area;
@@ -2203,15 +2201,7 @@ function PanelConfig({onClose, onSaveEjecutores, area}) {
     await sbSetConfigById(cfgId, cfgConEjs);
     const scriptUrl = cfg.scriptUrl || SCRIPT_URL;
     if(scriptUrl) {
-      try {
-        await fetch(scriptUrl, {
-          method:"POST",
-          headers:{"Content-Type":"text/plain"},
-          body: JSON.stringify({type:"syncConfig", config:cfg, area})
-        });
-      } catch(e) { console.log("Config sync warning:", e); }
-    }
-    setSaved(true); setTimeout(()=>{setSaved(false);onClose();},1500);
+    try { await callGas({type:"syncConfig", config:cfg, area:area}); } catch(e) { console.log("Config sync warning:", e); }
   };
 
   const iS = () => ({width:"100%",padding:"9px 12px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:13,outline:"none",boxSizing:"border-box"});
@@ -2280,20 +2270,8 @@ function PanelConfig({onClose, onSaveEjecutores, area}) {
             "💡 Los plazos se cuentan desde la creación de la solicitud. Si una solicitud supera el tiempo asignado sin ser gestionado, figura como 'Fuera de plazo' en el mail diario al responsable.")),
 
         // TAB SISTEMA
-        tab==="sistema" && h('div',null,
-          h('div',{style:{marginBottom:16}},
-            h('div',{style:{fontSize:13,fontWeight:700,color:"#1a3a6b",marginBottom:4}},"🔗 Google Apps Script URL"),
-            h('div',{style:{fontSize:12,color:"#64748b",marginBottom:8}},"URL del script que envía los emails. Requiere contraseña de administrador."),
-            !scriptUnlocked
-              ? h('div',{style:{display:"flex",gap:8}},
-                  h('input',{type:"password",value:scriptPass,onChange:e=>{setScriptPass(e.target.value);setScriptPassErr(false);},placeholder:"Contraseña para editar",style:{...iS(),flex:1,border:scriptPassErr?"2px solid #ef4444":"1.5px solid #e2e8f0"}}),
-                  h('button',{onClick:()=>{if(scriptPass===SCRIPT_PASS){setScriptUnlocked(true);setScriptPassErr(false);}else{setScriptPassErr(true);}},style:{padding:"9px 16px",background:"#1a3a6b",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:600,whiteSpace:"nowrap"}},"Desbloquear"),
-                  scriptPassErr && h('div',{style:{fontSize:12,color:"#dc2626",marginTop:4}},"Contraseña incorrecta"))
-              : h('div',null,
-                  h('div',{style:{display:"flex",alignItems:"center",gap:6,marginBottom:6}},
-                    h('span',{style:{fontSize:12,color:"#22c55e",fontWeight:600}},"🔓 Desbloqueado"),
-                    h('button',{onClick:()=>{setScriptUnlocked(false);setScriptPass("");},style:{background:"none",border:"none",color:"#94a3b8",cursor:"pointer",fontSize:12}},"Bloquear")),
-                  h('input',{value:cfg.scriptUrl||"",onChange:e=>setCfg(c=>({...c,scriptUrl:e.target.value})),placeholder:"https://script.google.com/macros/s/.../exec",style:iS()})))),
+        tab==="sistema" && h('div',{style:{fontSize:13,color:"#64748b",lineHeight:1.6}},
+          "🔒 La conexión con el servicio de mails se administra en el servidor. Ya no se configura desde acá."),
 
         h('button',{onClick:save,style:{width:"100%",padding:"13px",background:saved?"#22c55e":"linear-gradient(135deg,#1a3a6b,#0f2347)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700,transition:"background 0.3s",marginTop:20}},saved?"✅ Guardado":"Guardar configuración"))));
 }
@@ -3392,7 +3370,8 @@ function FrancosTab(props) {
       const loadSheetJS = () => new Promise(resolve=>{
         if (window.XLSX) return resolve();
         const s = document.createElement('script');
-        s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+        s.src = "https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js";
+        s.integrity = "sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw"; s.crossOrigin = "anonymous";
         s.onload = resolve;
         document.head.appendChild(s);
       });
@@ -4185,11 +4164,7 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
     const proyectosLS = ls.get("proyectos") || [];
     const scriptUrl = (await sbGetConfigById(1))?.scriptUrl || SCRIPT_URL;
     if(proyectosLS.length && scriptUrl) {
-      try {
-        await fetch(scriptUrl, {method:"POST", headers:{"Content-Type":"text/plain"},
-          body: JSON.stringify({type:"checkProyectos", proyectos: proyectosLS})});
-        enviados++;
-      } catch(e) { console.error("checkProyectos error:", e); }
+      try { await callGas({type:"checkProyectos", proyectos: proyectosLS}); enviados++; } catch(e) { console.error("checkProyectos error:", e); }
     }
 
     alert(enviados>0?`✅ Se enviaron ${enviados} notificaciones.`:"ℹ️ Sin alertas pendientes en este momento.");
@@ -4498,10 +4473,15 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
 // ── LOGIN ──────────────────────────────────────────────────────────────────
 function Login({onLogin, area}) {
   const [p,setP] = useState(""); const [err,setErr] = useState(false); const [showPwd,setShowPwd] = useState(false);
-  const pass = area==="intendencia" ? PASS_INTENDENCIA : area==="administracion" ? PASS_ADMINISTRACION : PASS_DASHBOARD;
   const areaLabel = area==="intendencia" ? "Intendencia" : "Administración";
   const areaIcon = area==="intendencia" ? "🔧" : "📊";
-  const go = () => { if(p===pass){onLogin();}else{setErr(true);setTimeout(()=>setErr(false),2000);} };
+  const go = async function() {
+    try {
+      const r = await fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({area:area,password:p})});
+      if (r.ok) { const d = await r.json(); sessionStorage.setItem("apiToken", d.token); onLogin(); return; }
+    } catch(e) {}
+    setErr(true); setTimeout(function(){ setErr(false); },2000);
+  };
   return h('div',{style:{minHeight:"100vh",background:"#1a3a6b",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
     h('div',{style:{background:"white",borderRadius:20,padding:36,maxWidth:380,width:"100%",textAlign:"center"}},
       h('div',{style:{fontSize:40,marginBottom:12}},areaIcon),
@@ -5233,7 +5213,8 @@ function DashboardPanel({recs}) {
   useEffect(()=>{
     if(window.Chart){setChartsReady(true);return;}
     const s=document.createElement('script');
-    s.src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js";
+    s.src="https://unpkg.com/chart.js@4.4.1/dist/chart.umd.js";
+    s.integrity="sha384-dug+JxfBvklEQdJ4AYuBBAIScUz0bVN73xpy273gcAwHjb3qI0fXmuYNaNfdyYJG"; s.crossOrigin="anonymous";
     s.onload=()=>setChartsReady(true);
     document.head.appendChild(s);
   },[]);
@@ -6847,11 +6828,7 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
           const cfgP = await sbGetConfigById(1);
           const scriptUrlP = cfgP?.scriptUrl || SCRIPT_URL;
           if(scriptUrlP) {
-            try {
-              await fetch(scriptUrlP, {method:"POST", headers:{"Content-Type":"text/plain"},
-                body: JSON.stringify({type:"checkProyectos", proyectos: proyectosLS})});
-              localStorage.setItem("proyectos_check_dia", HOY);
-            } catch(e) { console.error("auto checkProyectos:", e); }
+      try { await callGas({type:"checkProyectos", proyectos: proyectosLS}); enviados++; } catch(e) { console.error("checkProyectos error:", e); }
           }
         }
       }
