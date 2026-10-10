@@ -6,11 +6,11 @@
 <meta name="screen-orientation" content="any">
 <meta name="x5-orientation" content="landscape|portrait">
 <meta name="full-screen" content="yes">
-<link rel="manifest" href="data:application/json,{&quot;name&quot;:&quot;Asturiano Reclamos&quot;,&quot;short_name&quot;:&quot;Asturiano&quot;,&quot;display&quot;:&quot;standalone&quot;,&quot;orientation&quot;:&quot;any&quot;,&quot;start_url&quot;:&quot;/&quot;,&quot;background_color&quot;:&quot;#1a3a6b&quot;,&quot;theme_color&quot;:&quot;#1a3a6b&quot;}">  
+<link rel="manifest" href="data:application/json,{&quot;name&quot;:&quot;Asturiano Reclamos&quot;,&quot;short_name&quot;:&quot;Asturiano&quot;,&quot;display&quot;:&quot;standalone&quot;,&quot;orientation&quot;:&quot;any&quot;,&quot;start_url&quot;:&quot;/&quot;,&quot;background_color&quot;:&quot;%231a3a6b&quot;,&quot;theme_color&quot;:&quot;%231a3a6b&quot;}">  
 <title>Gestión de Reclamos — Club</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
-<script src="https://unpkg.com/react@18.2.0/umd/react.production.min.js" crossorigin></script>
-<script src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react@18.2.0/umd/react.production.min.js" integrity="sha384-tMH8h3BGESGckSAVGZ82T9n90ztNXxvdwvdM6UoR56cYcf+0iGXBliJ29D+wZ/x8" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js" integrity="sha384-bm7MnzvK++ykSwVJ2tynSE5TRdN+xL418osEVF2DE/L/gfWHj91J2Sphe582B1Bh" crossorigin="anonymous"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 html{overflow-y:auto}
@@ -259,14 +259,14 @@ function diasDesde(isoDate) {
   if (window._diasDesdeOverride) return window._diasDesdeOverride;
   return (new Date() - new Date(isoDate)) / 86400000;
 }
-const PASS_INTENDENCIA = "intendencia2026";
-const PASS_ADMINISTRACION = "administracion2026";
-const PASS_DASHBOARD = "metricas2026";
 const SUPABASE_URL   = "https://pltfqosqinzufvjpiddr.supabase.co";
 const SUPABASE_KEY   = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBsdGZxb3NxaW56dWZ2anBpZGRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1MjA4NDksImV4cCI6MjA5MTA5Njg0OX0.d-EMCtfVqi6LvtbEdTBvH_ZaXiFJD6oXukPvMpbobXQ";
 const SUPABASE_TABLE = "reclamos";
-const SCRIPT_URL     = "https://script.google.com/macros/s/AKfycbxm0SGfcMlAxkSIFm3HfSpZ_bDQnOOOQfa7VPf9xu0duk0mxLvhxQCwdaLzYkbc3e_h/exec";
-
+const SCRIPT_URL     = ""; // los mails salen por /api/mail (Worker)
+function apiToken() { try { return sessionStorage.getItem("apiToken") || ""; } catch(e) { return ""; } }
+function callGas(payload) {
+  return fetch("/api/gas", { method:"POST", headers:{"Content-Type":"application/json","Authorization":"Bearer "+apiToken()}, body:JSON.stringify(payload) });
+}
 // Genera link al panel con deep-link al área correcta
 function panelUrl(appUrl, area) {
   const a = area || "intendencia";
@@ -439,7 +439,13 @@ const CATS = {
   servicios:{id:"servicios",label:"Servicios & Atención",icon:"🤝",resp:{nombre:"— Por configurar —",mail:""}},
   cuotas:{id:"cuotas",label:"Cuotas & Aranceles",icon:"💳",resp:{nombre:"— Por configurar —",mail:""}},
 };
-
+const TIPOS_GASTO = [
+  {id:"obra", label:"Obra / reparación"},
+  {id:"insumos", label:"Compra de insumos"},
+  {id:"servicio", label:"Servicio contratado"},
+  {id:"otro", label:"Otro"}
+];
+function adjConUrl(list){ return (list||[]).filter(function(a){ return a && a.url; }); }
 const PRIS = [
   {id:"urgente",label:"Urgente",color:"#ef4444",dias:1},
   {id:"alta",label:"Alta",color:"#f97316",dias:3},
@@ -829,14 +835,12 @@ function buildValidacionHtml(rec, saludo, verUrl, tituloEtapa) {
 }
 
 async function sendEmail({to, cc, subject, body, htmlBody, icsData}) {
-  const cfg = ls.get("config") || {};
-  const url = cfg.scriptUrl || SCRIPT_URL;
   const toArr = (Array.isArray(to)?to:[to]).filter(Boolean);
   const ccArr = cc?(Array.isArray(cc)?cc:[cc]).filter(Boolean):[];
   try {
     const payload = {to:toArr,cc:ccArr,subject,body:body||"",htmlBody:htmlBody||null};
     if(icsData) payload.icsData = icsData;
-    const r = await fetch(url, {method:"POST", headers:{"Content-Type":"text/plain"}, body:JSON.stringify(payload)});
+        const r = await fetch("/api/mail", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload)});
     const d = await r.json();
     console.log("Email:", d);
     return d;
@@ -1317,7 +1321,7 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs, area})
     ejecutorMail:rec.ejecutorMail||"", ejecutorNombre:rec.ejecutorNombre||"",
     tipoEjecutor:rec.tipoEjecutor||"interno", empresaNombre:rec.empresaNombre||"", empresaTelefono:rec.empresaTelefono||"",
     ejecutores_lista:rec.ejecutores_lista||[],
-    presupuesto:rec.presupuesto||"", presupuestoDetalle:rec.presupuestoDetalle||"",
+    presupuesto:rec.presupuesto||"", presupuestoDetalle:rec.presupuestoDetalle||"", tipoGasto:rec.tipoGasto||"", fotosPresupuesto:rec.fotosPresupuesto||[], usarFotosSolicitud:!!rec.usarFotosSolicitud,
     descripcionResolucion:rec.descripcionResolucion||"", evidenciaUrl:rec.evidenciaUrl||"",
     nuevoComentario:"",
     // Campos de actualización de fecha (cuando ya fue asignado)
@@ -1398,6 +1402,19 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs, area})
       setTab("resolucion");
       return;
     }
+
+    if(String(f.presupuesto||"").trim() && !f.tipoGasto) {
+      setSaveErr("Elegí el tipo de gasto del presupuesto.");
+      setTab("gestion");
+      return;
+    }
+    if(String(f.presupuesto||"").trim() && f.tipoGasto==="obra"
+       && !(f.usarFotosSolicitud && adjConUrl(rec.adjuntos).length) && !(f.fotosPresupuesto||[]).length) {
+      setSaveErr("Es una obra/reparación: para justificar el presupuesto, subí una foto o video del problema (o usá las de la solicitud).");
+      setTab("gestion");
+      return;
+    }
+
     // Skip executor/date validation when linked to a project OR when consolidating
     const isVinculado = f.estadoAvance==="vinculado_proyecto" || f.proyectoVinculadoId;
     const isConsolidando = (f.reclamosHijos||[]).length > 0 || (rec.reclamosHijos||[]).length > 0 || f.estadoAvance==="consolidada";
@@ -1539,6 +1556,8 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs, area})
       });
     }
     const fechaCierreConfirmada = f.fechaCierre ? f.fechaCierre : rec.fechaCierreConfirmada||null;
+    let fotosPresupuesto = f.fotosPresupuesto || [];
+    if (fotosPresupuesto.some(function(a){ return a.data; })) fotosPresupuesto = await uploadAdjuntos(fotosPresupuesto, rec.id, "presupuesto");
     // Upload new adjuntosResolucion that still have base64 data
     let adjuntosResolucion = f.adjuntosResolucion || [];
     const newAdjuntos = adjuntosResolucion.filter(a=>a.data);
@@ -1573,6 +1592,8 @@ let savedRec = {...rec,...f,adjuntosResolucion,comentarios,nuevoComentario:undef
       reabierta: rec.reabierta || false,
       fechaCierreConfirmada,fechaInicioOriginal,fechaOriginalCierre,ejecutorMailOriginal,fechaAsignacion,
       updatedAt:new Date().toISOString()};
+      if(String(savedRec.presupuesto||"").trim() && !savedRec.presupuestoFecha) savedRec.presupuestoFecha = new Date().toISOString();
+      savedRec.fotosPresupuesto = fotosPresupuesto;
       if(estadoAvanceEfectivo==="completada" && !rec.fechaCompletada) {
         const progr = rec.fechaCierreActualizada||rec.fechaCierreConfirmada||rec.fechaCierre||"";
         savedRec = {...savedRec,
@@ -1949,6 +1970,25 @@ Resolución: ${descripcion||"—"}`});
               h('div',null,h('label',{style:{display:"block",fontSize:10,fontWeight:600,color:"#374151",marginBottom:4,textTransform:"uppercase"}},"Hora fin"),
                 h('input',{type:"time",value:f.horaFin||"",onChange:e=>set("horaFin",e.target.value),style:aS()})))),
           h('div',{style:{marginBottom:14}},h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Presupuesto ($)"),h('input',{value:f.presupuesto,onChange:e=>set("presupuesto",e.target.value),placeholder:"0",type:"number",style:aS()})),
+           h('div',{style:{marginBottom:14}},h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Tipo de gasto"+(String(f.presupuesto||"").trim()?" *":"")),
+            h('select',{value:f.tipoGasto||"",onChange:function(e){set("tipoGasto",e.target.value);},style:aS()},
+              h('option',{value:""},"— Elegir —"),
+              TIPOS_GASTO.map(function(t){ return h('option',{key:t.id,value:t.id},t.label); }))),
+          f.tipoGasto==="obra" && String(f.presupuesto||"").trim() && h('div',{style:{marginBottom:14,background:"#fff7ed",border:"1.5px solid #fed7aa",borderRadius:10,padding:12}},
+            h('div',{style:{fontSize:11,fontWeight:700,color:"#9a3412",textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}},"📷 Foto o video del problema (obligatorio)"),
+            adjConUrl(rec.adjuntos).length>0 && h('label',{style:{display:"flex",alignItems:"center",gap:8,fontSize:13,color:"#374151",marginBottom:8,cursor:"pointer"}},
+              h('input',{type:"checkbox",checked:!!f.usarFotosSolicitud,onChange:function(e){set("usarFotosSolicitud",e.target.checked);}}),
+              "Usar las fotos/videos que se cargaron con la solicitud ("+adjConUrl(rec.adjuntos).length+")"),
+            h('input',{type:"file",accept:"image/*,video/*",multiple:true,style:{fontSize:12,marginBottom:6},onChange:function(e){
+              Array.from(e.target.files).forEach(function(file){ var r=new FileReader(); r.onload=function(ev){ setF(function(p){ return Object.assign({},p,{fotosPresupuesto:(p.fotosPresupuesto||[]).concat([{nombre:file.name,tipo:file.type,data:ev.target.result}])}); }); }; r.readAsDataURL(file); });
+              e.target.value="";
+            }}),
+            (f.fotosPresupuesto||[]).length>0 && h('div',{style:{display:"flex",gap:6,flexWrap:"wrap"}},
+              (f.fotosPresupuesto||[]).map(function(a,i){
+                return h('div',{key:i,style:{display:"flex",alignItems:"center",gap:6,background:"#ffffff",border:"1px solid #fed7aa",borderRadius:8,padding:"4px 8px",fontSize:12}},
+                  a.url ? h('a',{href:a.url,target:"_blank",style:{color:"#9a3412"}},a.nombre||"archivo") : (a.nombre||"archivo"),
+                  h('button',{type:"button",onClick:function(){ setF(function(p){ return Object.assign({},p,{fotosPresupuesto:(p.fotosPresupuesto||[]).filter(function(_,idx){ return idx!==i; })}); }); },style:{background:"none",border:"none",cursor:"pointer",color:"#ef4444",fontSize:13,padding:0}},"✕"));
+              }))),
           h('div',{style:{marginBottom:14}},h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Detalle del presupuesto"),h('textarea',{value:f.presupuestoDetalle,onChange:e=>set("presupuestoDetalle",e.target.value),rows:2,placeholder:"Conceptos...",style:{...aS(),resize:"vertical"}}))),
 
         // TAB ASIGNACIÓN
@@ -2177,7 +2217,7 @@ function PanelConfig({onClose, onSaveEjecutores, area}) {
   const [scriptPass,setScriptPass] = useState("");
   const [scriptUnlocked,setScriptUnlocked] = useState(false);
   const [scriptPassErr,setScriptPassErr] = useState(false);
-  const SCRIPT_PASS = "solicitudes2026";
+  
   // Cada área tiene su propio id en Supabase: 1=intendencia, 2=administracion
   const cfgId = area==="administracion" ? 2 : 1;
   const lsKey = "config_"+area;
@@ -2203,15 +2243,10 @@ function PanelConfig({onClose, onSaveEjecutores, area}) {
     await sbSetConfigById(cfgId, cfgConEjs);
     const scriptUrl = cfg.scriptUrl || SCRIPT_URL;
     if(scriptUrl) {
-      try {
-        await fetch(scriptUrl, {
-          method:"POST",
-          headers:{"Content-Type":"text/plain"},
-          body: JSON.stringify({type:"syncConfig", config:cfg, area})
-        });
-      } catch(e) { console.log("Config sync warning:", e); }
+      try { await callGas({type:"syncConfig", config:cfg, area:area}); } catch(e) { console.log("Config sync warning:", e); }
     }
-    setSaved(true); setTimeout(()=>{setSaved(false);onClose();},1500);
+    setSaved(true);
+    setTimeout(()=>setSaved(false), 2000);
   };
 
   const iS = () => ({width:"100%",padding:"9px 12px",borderRadius:8,border:"1.5px solid #e2e8f0",fontSize:13,outline:"none",boxSizing:"border-box"});
@@ -2280,20 +2315,8 @@ function PanelConfig({onClose, onSaveEjecutores, area}) {
             "💡 Los plazos se cuentan desde la creación de la solicitud. Si una solicitud supera el tiempo asignado sin ser gestionado, figura como 'Fuera de plazo' en el mail diario al responsable.")),
 
         // TAB SISTEMA
-        tab==="sistema" && h('div',null,
-          h('div',{style:{marginBottom:16}},
-            h('div',{style:{fontSize:13,fontWeight:700,color:"#1a3a6b",marginBottom:4}},"🔗 Google Apps Script URL"),
-            h('div',{style:{fontSize:12,color:"#64748b",marginBottom:8}},"URL del script que envía los emails. Requiere contraseña de administrador."),
-            !scriptUnlocked
-              ? h('div',{style:{display:"flex",gap:8}},
-                  h('input',{type:"password",value:scriptPass,onChange:e=>{setScriptPass(e.target.value);setScriptPassErr(false);},placeholder:"Contraseña para editar",style:{...iS(),flex:1,border:scriptPassErr?"2px solid #ef4444":"1.5px solid #e2e8f0"}}),
-                  h('button',{onClick:()=>{if(scriptPass===SCRIPT_PASS){setScriptUnlocked(true);setScriptPassErr(false);}else{setScriptPassErr(true);}},style:{padding:"9px 16px",background:"#1a3a6b",color:"white",border:"none",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:600,whiteSpace:"nowrap"}},"Desbloquear"),
-                  scriptPassErr && h('div',{style:{fontSize:12,color:"#dc2626",marginTop:4}},"Contraseña incorrecta"))
-              : h('div',null,
-                  h('div',{style:{display:"flex",alignItems:"center",gap:6,marginBottom:6}},
-                    h('span',{style:{fontSize:12,color:"#22c55e",fontWeight:600}},"🔓 Desbloqueado"),
-                    h('button',{onClick:()=>{setScriptUnlocked(false);setScriptPass("");},style:{background:"none",border:"none",color:"#94a3b8",cursor:"pointer",fontSize:12}},"Bloquear")),
-                  h('input',{value:cfg.scriptUrl||"",onChange:e=>setCfg(c=>({...c,scriptUrl:e.target.value})),placeholder:"https://script.google.com/macros/s/.../exec",style:iS()})))),
+        tab==="sistema" && h('div',{style:{fontSize:13,color:"#64748b",lineHeight:1.6}},
+          "🔒 La conexión con el servicio de mails se administra en el servidor. Ya no se configura desde acá."),
 
         h('button',{onClick:save,style:{width:"100%",padding:"13px",background:saved?"#22c55e":"linear-gradient(135deg,#1a3a6b,#0f2347)",color:"white",border:"none",borderRadius:10,cursor:"pointer",fontSize:14,fontWeight:700,transition:"background 0.3s",marginTop:20}},saved?"✅ Guardado":"Guardar configuración"))));
 }
@@ -2440,7 +2463,8 @@ function TabComprasProyecto(props) {
   var total = compras.reduce(function(acc, c) { return acc + (Number(c.monto) || 0); }, 0);
 
   function addCompra() {
-    var nueva = {id: Date.now(), fecha: new Date().toISOString().slice(0,10), proveedor:"", descripcion:"", monto:"", comprobante:""};
+    var maxNro = compras.reduce(function(m, c, i){ return Math.max(m, c.nro || (i+1)); }, 0);
+    var nueva = {id: Date.now(), nro: maxNro + 1, fecha: new Date().toISOString().slice(0,10), proveedor:"", descripcion:"", monto:"", comprobante:"", tipoGasto:""};
     set("compras", compras.concat([nueva]));
   }
 
@@ -2475,6 +2499,13 @@ var listaEl = compras.length === 0
               h('div', {style:{marginBottom:8}},
                 h('label', {style:{fontSize:10,fontWeight:700,color:"#64748b",textTransform:"uppercase",display:"block",marginBottom:3}}, "Descripción"),
                 h('input', {value:c.descripcion, placeholder:"¿Qué se compró?", onChange:function(e){updateCompra(c.id,"descripcion",e.target.value);}, style:{width:"100%",padding:"7px 10px",borderRadius:7,border:"1.5px solid #e2e8f0",fontSize:13,outline:"none",boxSizing:"border-box"}})),
+              h('div', {style:{marginBottom:8}},
+                h('label', {style:{fontSize:10,fontWeight:700,color:"#64748b",textTransform:"uppercase",display:"block",marginBottom:3}}, "Tipo de gasto"),
+                h('select', {value:c.tipoGasto||"", onChange:function(e){updateCompra(c.id,"tipoGasto",e.target.value);}, style:{width:"100%",padding:"7px 10px",borderRadius:7,border:"1.5px solid #e2e8f0",fontSize:13,outline:"none",boxSizing:"border-box",background:"white"}},
+                  h('option', {value:""}, "— Elegir —"),
+                  TIPOS_GASTO.map(function(t){ return h('option', {key:t.id, value:t.id}, t.label); }))),
+              h('div', {style:{fontSize:11,color:"#7c3aed",fontWeight:600,marginBottom:8}},
+                "Código para pagos: PRY-"+String(f.id).slice(-5)+"-C"+(c.nro || (compras.indexOf(c)+1))),
               h('div', {style:{display:"flex",justifyContent:"space-between",alignItems:"center"}},
                 h('div', {style:{flex:1,marginRight:8}},
                   h('label', {style:{fontSize:10,fontWeight:700,color:"#64748b",textTransform:"uppercase",display:"block",marginBottom:3}}, "Nro. comprobante (opcional)"),
@@ -2856,7 +2887,7 @@ const RECURRENCIA_EMPTY = {
 
 async function sbGetAll_reclamos() {
   try {
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/"+SUPABASE_TABLE+"?select=data`, {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE}?select=data`, {
       headers: {"apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`}
     });
     const rows = await r.json();
@@ -2966,7 +2997,7 @@ async function crearTicketDesdeRecurrencia(rec, fechaOcurrencia, francosMes) {
       comentarios:[{texto:"Ticket generado automáticamente por recurrencia: "+rec.nombre,
         fecha:new Date().toISOString(),autor:"Sistema"}]
     };
-    await fetch(`${SUPABASE_URL}/rest/v1/"+SUPABASE_TABLE+"`, {
+    await fetch(`${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE}`, {
       method:"POST",
       headers:{"apikey":SUPABASE_KEY,"Authorization":`Bearer ${SUPABASE_KEY}`,
         "Content-Type":"application/json","Prefer":"return=minimal"},
@@ -3392,7 +3423,7 @@ function FrancosTab(props) {
       const loadSheetJS = () => new Promise(resolve=>{
         if (window.XLSX) return resolve();
         const s = document.createElement('script');
-        s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+        s.src = "https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js";
         s.onload = resolve;
         document.head.appendChild(s);
       });
@@ -4183,14 +4214,7 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
 
     // Chequear proyectos: sin hitos y hitos vencidos
     const proyectosLS = ls.get("proyectos") || [];
-    const scriptUrl = (await sbGetConfigById(1))?.scriptUrl || SCRIPT_URL;
-    if(proyectosLS.length && scriptUrl) {
-      try {
-        await fetch(scriptUrl, {method:"POST", headers:{"Content-Type":"text/plain"},
-          body: JSON.stringify({type:"checkProyectos", proyectos: proyectosLS})});
-        enviados++;
-      } catch(e) { console.error("checkProyectos error:", e); }
-    }
+    try { await callGas({type:"checkProyectos", proyectos: proyectosLS}); enviados++; } catch(e) { console.error("checkProyectos error:", e); }
 
     alert(enviados>0?`✅ Se enviaron ${enviados} notificaciones.`:"ℹ️ Sin alertas pendientes en este momento.");
     setChecking(false);
@@ -4498,10 +4522,15 @@ function PanelAdmin({recs, onUpdate, onRefresh, area}) {
 // ── LOGIN ──────────────────────────────────────────────────────────────────
 function Login({onLogin, area}) {
   const [p,setP] = useState(""); const [err,setErr] = useState(false); const [showPwd,setShowPwd] = useState(false);
-  const pass = area==="intendencia" ? PASS_INTENDENCIA : area==="administracion" ? PASS_ADMINISTRACION : PASS_DASHBOARD;
   const areaLabel = area==="intendencia" ? "Intendencia" : "Administración";
   const areaIcon = area==="intendencia" ? "🔧" : "📊";
-  const go = () => { if(p===pass){onLogin();}else{setErr(true);setTimeout(()=>setErr(false),2000);} };
+  const go = async function() {
+    try {
+      const r = await fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({area:area,password:p})});
+      if (r.ok) { const d = await r.json(); sessionStorage.setItem("apiToken", d.token); onLogin(); return; }
+    } catch(e) {}
+    setErr(true); setTimeout(function(){ setErr(false); },2000);
+  };
   return h('div',{style:{minHeight:"100vh",background:"#1a3a6b",display:"flex",alignItems:"center",justifyContent:"center",padding:20}},
     h('div',{style:{background:"white",borderRadius:20,padding:36,maxWidth:380,width:"100%",textAlign:"center"}},
       h('div',{style:{fontSize:40,marginBottom:12}},areaIcon),
@@ -4546,6 +4575,7 @@ function CompletarView({recId, recs, setRecs, loaded}) {
 
   const submit = async () => {
     if(!desc.trim()){setErr(true);return;}
+
     setSending(true);
     let adjuntosResolucion=[];
     if(fotos.length>0) adjuntosResolucion=await uploadAdjuntos(fotos,rec.id,"resolucion");
@@ -5233,7 +5263,7 @@ function DashboardPanel({recs}) {
   useEffect(()=>{
     if(window.Chart){setChartsReady(true);return;}
     const s=document.createElement('script');
-    s.src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js";
+    s.src="https://unpkg.com/chart.js@4.4.1/dist/chart.umd.js";
     s.onload=()=>setChartsReady(true);
     document.head.appendChild(s);
   },[]);
@@ -6844,15 +6874,7 @@ function MisTareasEjecutor({recs, setRecs, loaded}) {
       if(ultimoCheck !== HOY) {
         const proyectosLS = ls.get("proyectos") || [];
         if(proyectosLS.length) {
-          const cfgP = await sbGetConfigById(1);
-          const scriptUrlP = cfgP?.scriptUrl || SCRIPT_URL;
-          if(scriptUrlP) {
-            try {
-              await fetch(scriptUrlP, {method:"POST", headers:{"Content-Type":"text/plain"},
-                body: JSON.stringify({type:"checkProyectos", proyectos: proyectosLS})});
-              localStorage.setItem("proyectos_check_dia", HOY);
-            } catch(e) { console.error("auto checkProyectos:", e); }
-          }
+          try { await callGas({type:"checkProyectos", proyectos: proyectosLS}); localStorage.setItem("proyectos_check_dia", HOY); } catch(e) { console.error("auto checkProyectos:", e); }
         }
       }
     })();
