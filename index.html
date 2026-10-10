@@ -445,6 +445,7 @@ const TIPOS_GASTO = [
   {id:"servicio", label:"Servicio contratado"},
   {id:"otro", label:"Otro"}
 ];
+function adjConUrl(list){ return (list||[]).filter(function(a){ return a && a.url; }); }
 const PRIS = [
   {id:"urgente",label:"Urgente",color:"#ef4444",dias:1},
   {id:"alta",label:"Alta",color:"#f97316",dias:3},
@@ -1320,7 +1321,7 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs, area})
     ejecutorMail:rec.ejecutorMail||"", ejecutorNombre:rec.ejecutorNombre||"",
     tipoEjecutor:rec.tipoEjecutor||"interno", empresaNombre:rec.empresaNombre||"", empresaTelefono:rec.empresaTelefono||"",
     ejecutores_lista:rec.ejecutores_lista||[],
-    presupuesto:rec.presupuesto||"", presupuestoDetalle:rec.presupuestoDetalle||"", tipoGasto:rec.tipoGasto||"",
+    presupuesto:rec.presupuesto||"", presupuestoDetalle:rec.presupuestoDetalle||"", tipoGasto:rec.tipoGasto||"", fotosPresupuesto:rec.fotosPresupuesto||[], usarFotosSolicitud:!!rec.usarFotosSolicitud,
     descripcionResolucion:rec.descripcionResolucion||"", evidenciaUrl:rec.evidenciaUrl||"",
     nuevoComentario:"",
     // Campos de actualización de fecha (cuando ya fue asignado)
@@ -1402,17 +1403,18 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs, area})
       return;
     }
 
-        if(String(f.presupuesto||"").trim() && !f.tipoGasto) {
+    if(String(f.presupuesto||"").trim() && !f.tipoGasto) {
       setSaveErr("Elegí el tipo de gasto del presupuesto.");
       setTab("gestion");
       return;
     }
-    if(estadoAvanceEfectivo==="completada" && rec.estadoAvance!=="completada" && f.tipoGasto==="obra"
-       && !(f.adjuntosResolucion||[]).length && !String(f.evidenciaUrl||"").trim()) {
-      setSaveErr("Es una obra/reparación: subí al menos una foto o video del trabajo terminado en la tab Resolución.");
-      setTab("resolucion");
+    if(String(f.presupuesto||"").trim() && f.tipoGasto==="obra"
+       && !(f.usarFotosSolicitud && adjConUrl(rec.adjuntos).length) && !(f.fotosPresupuesto||[]).length) {
+      setSaveErr("Es una obra/reparación: para justificar el presupuesto, subí una foto o video del problema (o usá las de la solicitud).");
+      setTab("gestion");
       return;
     }
+
     // Skip executor/date validation when linked to a project OR when consolidating
     const isVinculado = f.estadoAvance==="vinculado_proyecto" || f.proyectoVinculadoId;
     const isConsolidando = (f.reclamosHijos||[]).length > 0 || (rec.reclamosHijos||[]).length > 0 || f.estadoAvance==="consolidada";
@@ -1554,6 +1556,8 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs, area})
       });
     }
     const fechaCierreConfirmada = f.fechaCierre ? f.fechaCierre : rec.fechaCierreConfirmada||null;
+    let fotosPresupuesto = f.fotosPresupuesto || [];
+    if (fotosPresupuesto.some(function(a){ return a.data; })) fotosPresupuesto = await uploadAdjuntos(fotosPresupuesto, rec.id, "presupuesto");
     // Upload new adjuntosResolucion that still have base64 data
     let adjuntosResolucion = f.adjuntosResolucion || [];
     const newAdjuntos = adjuntosResolucion.filter(a=>a.data);
@@ -1589,6 +1593,7 @@ let savedRec = {...rec,...f,adjuntosResolucion,comentarios,nuevoComentario:undef
       fechaCierreConfirmada,fechaInicioOriginal,fechaOriginalCierre,ejecutorMailOriginal,fechaAsignacion,
       updatedAt:new Date().toISOString()};
       if(String(savedRec.presupuesto||"").trim() && !savedRec.presupuestoFecha) savedRec.presupuestoFecha = new Date().toISOString();
+      savedRec.fotosPresupuesto = fotosPresupuesto;
       if(estadoAvanceEfectivo==="completada" && !rec.fechaCompletada) {
         const progr = rec.fechaCierreActualizada||rec.fechaCierreConfirmada||rec.fechaCierre||"";
         savedRec = {...savedRec,
@@ -1969,6 +1974,21 @@ Resolución: ${descripcion||"—"}`});
             h('select',{value:f.tipoGasto||"",onChange:function(e){set("tipoGasto",e.target.value);},style:aS()},
               h('option',{value:""},"— Elegir —"),
               TIPOS_GASTO.map(function(t){ return h('option',{key:t.id,value:t.id},t.label); }))),
+          f.tipoGasto==="obra" && String(f.presupuesto||"").trim() && h('div',{style:{marginBottom:14,background:"#fff7ed",border:"1.5px solid #fed7aa",borderRadius:10,padding:12}},
+            h('div',{style:{fontSize:11,fontWeight:700,color:"#9a3412",textTransform:"uppercase",letterSpacing:0.5,marginBottom:8}},"📷 Foto o video del problema (obligatorio)"),
+            adjConUrl(rec.adjuntos).length>0 && h('label',{style:{display:"flex",alignItems:"center",gap:8,fontSize:13,color:"#374151",marginBottom:8,cursor:"pointer"}},
+              h('input',{type:"checkbox",checked:!!f.usarFotosSolicitud,onChange:function(e){set("usarFotosSolicitud",e.target.checked);}}),
+              "Usar las fotos/videos que se cargaron con la solicitud ("+adjConUrl(rec.adjuntos).length+")"),
+            h('input',{type:"file",accept:"image/*,video/*",multiple:true,style:{fontSize:12,marginBottom:6},onChange:function(e){
+              Array.from(e.target.files).forEach(function(file){ var r=new FileReader(); r.onload=function(ev){ setF(function(p){ return Object.assign({},p,{fotosPresupuesto:(p.fotosPresupuesto||[]).concat([{nombre:file.name,tipo:file.type,data:ev.target.result}])}); }); }; r.readAsDataURL(file); });
+              e.target.value="";
+            }}),
+            (f.fotosPresupuesto||[]).length>0 && h('div',{style:{display:"flex",gap:6,flexWrap:"wrap"}},
+              (f.fotosPresupuesto||[]).map(function(a,i){
+                return h('div',{key:i,style:{display:"flex",alignItems:"center",gap:6,background:"#ffffff",border:"1px solid #fed7aa",borderRadius:8,padding:"4px 8px",fontSize:12}},
+                  a.url ? h('a',{href:a.url,target:"_blank",style:{color:"#9a3412"}},a.nombre||"archivo") : (a.nombre||"archivo"),
+                  h('button',{type:"button",onClick:function(){ setF(function(p){ return Object.assign({},p,{fotosPresupuesto:(p.fotosPresupuesto||[]).filter(function(_,idx){ return idx!==i; })}); }); },style:{background:"none",border:"none",cursor:"pointer",color:"#ef4444",fontSize:13,padding:0}},"✕"));
+              }))),
           h('div',{style:{marginBottom:14}},h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Detalle del presupuesto"),h('textarea',{value:f.presupuestoDetalle,onChange:e=>set("presupuestoDetalle",e.target.value),rows:2,placeholder:"Conceptos...",style:{...aS(),resize:"vertical"}}))),
 
         // TAB ASIGNACIÓN
@@ -4534,7 +4554,6 @@ function CompletarView({recId, recs, setRecs, loaded}) {
   const [sending,setSending] = useState(false);
   const fileRef = useRef();
   const [fotos,setFotos] = useState([]);
-  const [errFoto,setErrFoto] = useState(false);
   const [fechaEj,setFechaEj] = useState("");
   useEffect(function(){
     if(!rec || fechaEj) return;
@@ -4556,7 +4575,7 @@ function CompletarView({recId, recs, setRecs, loaded}) {
 
   const submit = async () => {
     if(!desc.trim()){setErr(true);return;}
-    if(rec.tipoGasto==="obra" && fotos.length===0 && !(rec.adjuntosResolucion||[]).length){ setErrFoto(true); return; }
+
     setSending(true);
     let adjuntosResolucion=[];
     if(fotos.length>0) adjuntosResolucion=await uploadAdjuntos(fotos,rec.id,"resolucion");
@@ -4634,8 +4653,6 @@ function CompletarView({recId, recs, setRecs, loaded}) {
             "Queda registrada como realizada el "+fd(fechaEj)+". No se modifican las fechas de la solicitud.")),
         h('div',{style:{marginBottom:20}},
           h('label',{style:{display:"block",fontSize:12,fontWeight:600,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},"Foto / video (opcional)"),
-                    rec.tipoGasto==="obra" && h('div',{style:{fontSize:12,fontWeight:600,marginBottom:6,color:(errFoto&&fotos.length===0)?"#dc2626":"#64748b"}},
-            (errFoto&&fotos.length===0) ? "⚠️ Es una obra/reparación: subí al menos una foto o video del trabajo terminado." : "📷 Obligatorio: foto o video del trabajo terminado."),
           h('input',{ref:fileRef,type:"file",accept:"image/*,video/*",multiple:true,style:{display:"none"},onChange:e=>{Array.from(e.target.files).forEach(file=>{const r=new FileReader();r.onload=ev=>setFotos(p=>[...p,{nombre:file.name,tipo:file.type,data:ev.target.result}]);r.readAsDataURL(file);});e.target.value="";}}),
           h('div',{style:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:fotos.length?8:0}},
             ...fotos.map((f,i)=>h('div',{key:i,style:{display:"flex",alignItems:"center",gap:6,background:"#f1f5f9",borderRadius:8,padding:"5px 10px",fontSize:12}},
