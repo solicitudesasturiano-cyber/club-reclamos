@@ -439,7 +439,12 @@ const CATS = {
   servicios:{id:"servicios",label:"Servicios & Atención",icon:"🤝",resp:{nombre:"— Por configurar —",mail:""}},
   cuotas:{id:"cuotas",label:"Cuotas & Aranceles",icon:"💳",resp:{nombre:"— Por configurar —",mail:""}},
 };
-
+const TIPOS_GASTO = [
+  {id:"obra", label:"Obra / reparación"},
+  {id:"insumos", label:"Compra de insumos"},
+  {id:"servicio", label:"Servicio contratado"},
+  {id:"otro", label:"Otro"}
+];
 const PRIS = [
   {id:"urgente",label:"Urgente",color:"#ef4444",dias:1},
   {id:"alta",label:"Alta",color:"#f97316",dias:3},
@@ -1315,7 +1320,7 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs, area})
     ejecutorMail:rec.ejecutorMail||"", ejecutorNombre:rec.ejecutorNombre||"",
     tipoEjecutor:rec.tipoEjecutor||"interno", empresaNombre:rec.empresaNombre||"", empresaTelefono:rec.empresaTelefono||"",
     ejecutores_lista:rec.ejecutores_lista||[],
-    presupuesto:rec.presupuesto||"", presupuestoDetalle:rec.presupuestoDetalle||"",
+    presupuesto:rec.presupuesto||"", presupuestoDetalle:rec.presupuestoDetalle||"", tipoGasto:rec.tipoGasto||"",
     descripcionResolucion:rec.descripcionResolucion||"", evidenciaUrl:rec.evidenciaUrl||"",
     nuevoComentario:"",
     // Campos de actualización de fecha (cuando ya fue asignado)
@@ -1393,6 +1398,18 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs, area})
     // Block completada without resolution description
     if(f.estadoAvanceEfectivo==="completada" && !f.descripcionResolucion.trim()) {
       setSaveErr("Para marcar como completada debés describir qué se hizo en la tab Resolución.");
+      setTab("resolucion");
+      return;
+    }
+
+        if(String(f.presupuesto||"").trim() && !f.tipoGasto) {
+      setSaveErr("Elegí el tipo de gasto del presupuesto.");
+      setTab("gestion");
+      return;
+    }
+    if(estadoAvanceEfectivo==="completada" && rec.estadoAvance!=="completada" && f.tipoGasto==="obra"
+       && !(f.adjuntosResolucion||[]).length && !String(f.evidenciaUrl||"").trim()) {
+      setSaveErr("Es una obra/reparación: subí al menos una foto o video del trabajo terminado en la tab Resolución.");
       setTab("resolucion");
       return;
     }
@@ -1571,6 +1588,7 @@ let savedRec = {...rec,...f,adjuntosResolucion,comentarios,nuevoComentario:undef
       reabierta: rec.reabierta || false,
       fechaCierreConfirmada,fechaInicioOriginal,fechaOriginalCierre,ejecutorMailOriginal,fechaAsignacion,
       updatedAt:new Date().toISOString()};
+      if(String(savedRec.presupuesto||"").trim() && !savedRec.presupuestoFecha) savedRec.presupuestoFecha = new Date().toISOString();
       if(estadoAvanceEfectivo==="completada" && !rec.fechaCompletada) {
         const progr = rec.fechaCierreActualizada||rec.fechaCierreConfirmada||rec.fechaCierre||"";
         savedRec = {...savedRec,
@@ -1947,6 +1965,10 @@ Resolución: ${descripcion||"—"}`});
               h('div',null,h('label',{style:{display:"block",fontSize:10,fontWeight:600,color:"#374151",marginBottom:4,textTransform:"uppercase"}},"Hora fin"),
                 h('input',{type:"time",value:f.horaFin||"",onChange:e=>set("horaFin",e.target.value),style:aS()})))),
           h('div',{style:{marginBottom:14}},h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Presupuesto ($)"),h('input',{value:f.presupuesto,onChange:e=>set("presupuesto",e.target.value),placeholder:"0",type:"number",style:aS()})),
+           h('div',{style:{marginBottom:14}},h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Tipo de gasto"+(String(f.presupuesto||"").trim()?" *":"")),
+            h('select',{value:f.tipoGasto||"",onChange:function(e){set("tipoGasto",e.target.value);},style:aS()},
+              h('option',{value:""},"— Elegir —"),
+              TIPOS_GASTO.map(function(t){ return h('option',{key:t.id,value:t.id},t.label); }))),
           h('div',{style:{marginBottom:14}},h('label',{style:{display:"block",fontSize:11,fontWeight:600,color:"#374151",marginBottom:5,textTransform:"uppercase",letterSpacing:0.5}},"Detalle del presupuesto"),h('textarea',{value:f.presupuestoDetalle,onChange:e=>set("presupuestoDetalle",e.target.value),rows:2,placeholder:"Conceptos...",style:{...aS(),resize:"vertical"}}))),
 
         // TAB ASIGNACIÓN
@@ -2421,7 +2443,8 @@ function TabComprasProyecto(props) {
   var total = compras.reduce(function(acc, c) { return acc + (Number(c.monto) || 0); }, 0);
 
   function addCompra() {
-    var nueva = {id: Date.now(), fecha: new Date().toISOString().slice(0,10), proveedor:"", descripcion:"", monto:"", comprobante:""};
+    var maxNro = compras.reduce(function(m, c, i){ return Math.max(m, c.nro || (i+1)); }, 0);
+    var nueva = {id: Date.now(), nro: maxNro + 1, fecha: new Date().toISOString().slice(0,10), proveedor:"", descripcion:"", monto:"", comprobante:"", tipoGasto:""};
     set("compras", compras.concat([nueva]));
   }
 
@@ -2456,6 +2479,13 @@ var listaEl = compras.length === 0
               h('div', {style:{marginBottom:8}},
                 h('label', {style:{fontSize:10,fontWeight:700,color:"#64748b",textTransform:"uppercase",display:"block",marginBottom:3}}, "Descripción"),
                 h('input', {value:c.descripcion, placeholder:"¿Qué se compró?", onChange:function(e){updateCompra(c.id,"descripcion",e.target.value);}, style:{width:"100%",padding:"7px 10px",borderRadius:7,border:"1.5px solid #e2e8f0",fontSize:13,outline:"none",boxSizing:"border-box"}})),
+              h('div', {style:{marginBottom:8}},
+                h('label', {style:{fontSize:10,fontWeight:700,color:"#64748b",textTransform:"uppercase",display:"block",marginBottom:3}}, "Tipo de gasto"),
+                h('select', {value:c.tipoGasto||"", onChange:function(e){updateCompra(c.id,"tipoGasto",e.target.value);}, style:{width:"100%",padding:"7px 10px",borderRadius:7,border:"1.5px solid #e2e8f0",fontSize:13,outline:"none",boxSizing:"border-box",background:"white"}},
+                  h('option', {value:""}, "— Elegir —"),
+                  TIPOS_GASTO.map(function(t){ return h('option', {key:t.id, value:t.id}, t.label); }))),
+              h('div', {style:{fontSize:11,color:"#7c3aed",fontWeight:600,marginBottom:8}},
+                "Código para pagos: PRY-"+String(f.id).slice(-5)+"-C"+(c.nro || (compras.indexOf(c)+1))),
               h('div', {style:{display:"flex",justifyContent:"space-between",alignItems:"center"}},
                 h('div', {style:{flex:1,marginRight:8}},
                   h('label', {style:{fontSize:10,fontWeight:700,color:"#64748b",textTransform:"uppercase",display:"block",marginBottom:3}}, "Nro. comprobante (opcional)"),
@@ -4504,6 +4534,7 @@ function CompletarView({recId, recs, setRecs, loaded}) {
   const [sending,setSending] = useState(false);
   const fileRef = useRef();
   const [fotos,setFotos] = useState([]);
+  const [errFoto,setErrFoto] = useState(false);
   const [fechaEj,setFechaEj] = useState("");
   useEffect(function(){
     if(!rec || fechaEj) return;
@@ -4525,6 +4556,7 @@ function CompletarView({recId, recs, setRecs, loaded}) {
 
   const submit = async () => {
     if(!desc.trim()){setErr(true);return;}
+    if(rec.tipoGasto==="obra" && fotos.length===0 && !(rec.adjuntosResolucion||[]).length){ setErrFoto(true); return; }
     setSending(true);
     let adjuntosResolucion=[];
     if(fotos.length>0) adjuntosResolucion=await uploadAdjuntos(fotos,rec.id,"resolucion");
@@ -4602,6 +4634,8 @@ function CompletarView({recId, recs, setRecs, loaded}) {
             "Queda registrada como realizada el "+fd(fechaEj)+". No se modifican las fechas de la solicitud.")),
         h('div',{style:{marginBottom:20}},
           h('label',{style:{display:"block",fontSize:12,fontWeight:600,color:"#374151",marginBottom:6,textTransform:"uppercase",letterSpacing:0.5}},"Foto / video (opcional)"),
+                    rec.tipoGasto==="obra" && h('div',{style:{fontSize:12,fontWeight:600,marginBottom:6,color:(errFoto&&fotos.length===0)?"#dc2626":"#64748b"}},
+            (errFoto&&fotos.length===0) ? "⚠️ Es una obra/reparación: subí al menos una foto o video del trabajo terminado." : "📷 Obligatorio: foto o video del trabajo terminado."),
           h('input',{ref:fileRef,type:"file",accept:"image/*,video/*",multiple:true,style:{display:"none"},onChange:e=>{Array.from(e.target.files).forEach(file=>{const r=new FileReader();r.onload=ev=>setFotos(p=>[...p,{nombre:file.name,tipo:file.type,data:ev.target.result}]);r.readAsDataURL(file);});e.target.value="";}}),
           h('div',{style:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:fotos.length?8:0}},
             ...fotos.map((f,i)=>h('div',{key:i,style:{display:"flex",alignItems:"center",gap:6,background:"#f1f5f9",borderRadius:8,padding:"5px 10px",fontSize:12}},
