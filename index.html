@@ -666,10 +666,17 @@ const SB_HEADERS = {
 
 async function sbGetAll() {
   try {
-    const r = await fetch(SUPABASE_URL+"/rest/v1/"+SUPABASE_TABLE+"?select=data&order=created_at.desc", {headers: SB_HEADERS});
-    const rows = await r.json();
-    console.log("sbGetAll:", rows.length, "rows");
-    return Array.isArray(rows) ? rows.map(r=>r.data).filter(d=>d&&d.id!==0) : [];
+    var todos = [], desde = 0, paso = 1000;
+    while (true) {
+      const r = await fetch(SUPABASE_URL+"/rest/v1/"+SUPABASE_TABLE+"?select=data&order=created_at.desc,id.desc&offset="+desde+"&limit="+paso, {headers: SB_HEADERS});
+      const rows = await r.json();
+      if (!Array.isArray(rows)) break;
+      rows.forEach(function(x){ if (x.data && x.data.id !== 0) todos.push(x.data); });
+      if (rows.length < paso) break;
+      desde += paso;
+    }
+    console.log("sbGetAll:", todos.length, "rows");
+    return todos;
   } catch(e) { console.error("sbGetAll error:", e); return []; }
 }
 
@@ -1378,10 +1385,9 @@ function EditModal({rec, onClose, onSave, ejecutores, onUpdateHijo, recs, area})
   const [sendingValidacionResp,setSendingValidacionResp] = useState(false);
   const [proyectosReales,setProyectosReales] = useState([]);
   useEffect(()=>{
-    fetch(SUPABASE_URL+"/rest/v1/"+SUPABASE_TABLE+"?select=data&order=created_at.desc", {headers: SB_HEADERS})
-      .then(r=>r.json())
+    sbGetAll()
       .then(rows=>{
-        const lista = (Array.isArray(rows)?rows:[]).map(r=>r.data).filter(p=>p && p._type==="proyecto" && !p._deleted && p.area===area);
+        const lista = rows.filter(p=>p && p._type==="proyecto" && !p._deleted && p.area===area);
         setProyectosReales(lista);
       });
   },[area]);
@@ -3865,10 +3871,9 @@ function ProyectosTab(props) {
   useEffect(function(){ cargar(); }, []);
 
   function cargar(){
-    fetch(SUPABASE_URL+"/rest/v1/"+SUPABASE_TABLE+"?select=data&order=created_at.desc", {headers: SB_HEADERS})
-      .then(function(r){ return r.json(); })
+    sbGetAll()
       .then(function(rows){
-        var lista = (Array.isArray(rows) ? rows.map(function(r){ return r.data; }) : [])
+        var lista = rows
           .filter(function(r){ return r && r._type === "proyecto" && !r._deleted && r.area === area; });
         setProyectos(lista);
       });
